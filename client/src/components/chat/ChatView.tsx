@@ -1,0 +1,46 @@
+import { useEffect, useRef } from 'react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { MessageBubble } from './MessageBubble';
+import { ChatInput } from './ChatInput';
+import { useChatStore } from '@/stores/chat-store';
+import { useServerStore } from '@/stores/server-store';
+
+interface ChatViewProps {
+  onSend: (text: string) => void;
+  onExtractPlan?: (content: string) => void;
+}
+
+export function ChatView({ onSend, onExtractPlan }: ChatViewProps) {
+  const activeServerId = useServerStore((s) => s.activeServerId);
+  const connectionStatus = useServerStore((s) => s.connectionStatus);
+  const messages = useChatStore((s) => activeServerId ? (s.messages[activeServerId] ?? []) : []);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  const isConnected = activeServerId ? connectionStatus[activeServerId] === 'connected' : false;
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  if (!activeServerId) {
+    return (
+      <div className="flex h-full items-center justify-center text-muted-foreground">
+        Select a server to start
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <ScrollArea className="flex-1 px-4">
+        <div className="mx-auto max-w-3xl py-4">
+          {messages.map((msg) => (
+            <MessageBubble key={msg.id} message={msg} onExtractPlan={onExtractPlan} />
+          ))}
+          <div ref={bottomRef} />
+        </div>
+      </ScrollArea>
+      <ChatInput onSend={onSend} disabled={!isConnected} />
+    </div>
+  );
+}
