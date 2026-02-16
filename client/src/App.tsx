@@ -13,7 +13,7 @@ function App() {
   const [serverDialogOpen, setServerDialogOpen] = useState(false);
   const setServers = useServerStore((s) => s.setServers);
   const activeServerId = useServerStore((s) => s.activeServerId);
-  const connectionStatus = useServerStore((s) => s.connectionStatus);
+  const activeServerStatus = useServerStore((s) => s.activeServerId ? s.connectionStatus[s.activeServerId] : undefined);
   const addMessage = useChatStore((s) => s.addMessage);
   const addPlan = usePlanStore((s) => s.addPlan);
   const setActivePlan = usePlanStore((s) => s.setActivePlan);
@@ -29,10 +29,10 @@ function App() {
 
   // Auto-connect when selecting a server
   useEffect(() => {
-    if (activeServerId && connectionStatus[activeServerId] !== 'connected' && connectionStatus[activeServerId] !== 'connecting') {
+    if (activeServerId && activeServerStatus !== 'connected' && activeServerStatus !== 'connecting') {
       connectToServer(activeServerId);
     }
-  }, [activeServerId, connectionStatus, connectToServer]);
+  }, [activeServerId, activeServerStatus, connectToServer]);
 
   const handleSend = useCallback((text: string) => {
     if (!activeServerId) return;

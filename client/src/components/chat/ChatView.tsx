@@ -2,8 +2,10 @@ import { useEffect, useRef } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
-import { useChatStore } from '@/stores/chat-store';
+import { useChatStore, type ChatMessage } from '@/stores/chat-store';
 import { useServerStore } from '@/stores/server-store';
+
+const EMPTY_MESSAGES: ChatMessage[] = [];
 
 interface ChatViewProps {
   onSend: (text: string) => void;
@@ -12,11 +14,9 @@ interface ChatViewProps {
 
 export function ChatView({ onSend, onExtractPlan }: ChatViewProps) {
   const activeServerId = useServerStore((s) => s.activeServerId);
-  const connectionStatus = useServerStore((s) => s.connectionStatus);
-  const messages = useChatStore((s) => activeServerId ? (s.messages[activeServerId] ?? []) : []);
+  const isConnected = useServerStore((s) => s.activeServerId ? s.connectionStatus[s.activeServerId] === 'connected' : false);
+  const messages = useChatStore((s) => activeServerId ? (s.messages[activeServerId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES);
   const bottomRef = useRef<HTMLDivElement>(null);
-
-  const isConnected = activeServerId ? connectionStatus[activeServerId] === 'connected' : false;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });

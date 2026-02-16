@@ -4,9 +4,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlanStepItem } from './PlanStepItem';
-import { usePlanStore } from '@/stores/plan-store';
+import { usePlanStore, type Plan } from '@/stores/plan-store';
 import { useServerStore } from '@/stores/server-store';
 import { parseMarkdownChecklist, stepsToMarkdown } from '@/lib/plan-parser';
+
+const EMPTY_PLANS: Plan[] = [];
 
 interface PlanPanelProps {
   onSendToChat: (text: string) => void;
@@ -14,7 +16,7 @@ interface PlanPanelProps {
 
 export function PlanPanel({ onSendToChat }: PlanPanelProps) {
   const activeServerId = useServerStore((s) => s.activeServerId);
-  const plans = usePlanStore((s) => activeServerId ? (s.plans[activeServerId] ?? []) : []);
+  const plans = usePlanStore((s) => activeServerId ? (s.plans[activeServerId] ?? EMPTY_PLANS) : EMPTY_PLANS);
   const activePlanId = usePlanStore((s) => s.activePlanId);
   const toggleStep = usePlanStore((s) => s.toggleStep);
   const updatePlan = usePlanStore((s) => s.updatePlan);
