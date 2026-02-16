@@ -1,9 +1,36 @@
+import { useState, useEffect } from 'react';
+import { AppShell } from '@/components/layout/AppShell';
+import { useServerStore } from '@/stores/server-store';
+import { useWebSocket } from '@/hooks/use-websocket';
+
 function App() {
+  const [serverDialogOpen, setServerDialogOpen] = useState(false);
+  const setServers = useServerStore((s) => s.setServers);
+
+  useWebSocket();
+
+  useEffect(() => {
+    fetch('/api/servers')
+      .then((r) => r.json())
+      .then(setServers)
+      .catch(console.error);
+  }, [setServers]);
+
   return (
-    <div className="flex h-screen items-center justify-center">
-      <h1 className="text-2xl font-bold">CodingEverywhere</h1>
-    </div>
-  )
+    <AppShell
+      chatView={
+        <div className="flex h-full items-center justify-center text-muted-foreground">
+          Select a server to start
+        </div>
+      }
+      planPanel={
+        <div className="flex h-full items-center justify-center text-muted-foreground p-4">
+          No active plan
+        </div>
+      }
+      onAddServer={() => setServerDialogOpen(true)}
+    />
+  );
 }
 
-export default App
+export default App;
