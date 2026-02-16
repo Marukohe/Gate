@@ -1,14 +1,24 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
+import { ChatView } from '@/components/chat/ChatView';
+import { PlanPanel } from '@/components/plan/PlanPanel';
 import { ServerDialog } from '@/components/server/ServerDialog';
 import { useServerStore } from '@/stores/server-store';
+import { useChatStore } from '@/stores/chat-store';
+import { usePlanStore } from '@/stores/plan-store';
 import { useWebSocket } from '@/hooks/use-websocket';
+import { parseMarkdownChecklist } from '@/lib/plan-parser';
 
 function App() {
   const [serverDialogOpen, setServerDialogOpen] = useState(false);
   const setServers = useServerStore((s) => s.setServers);
+  const activeServerId = useServerStore((s) => s.activeServerId);
+  const connectionStatus = useServerStore((s) => s.connectionStatus);
+  const addMessage = useChatStore((s) => s.addMessage);
+  const addPlan = usePlanStore((s) => s.addPlan);
+  const setActivePlan = usePlanStore((s) => s.setActivePlan);
 
-  useWebSocket();
+  const { connectToServer, sendInput } = useWebSocket();
 
   useEffect(() => {
     fetch('/api/servers')
@@ -17,19 +27,48 @@ function App() {
       .catch(console.error);
   }, [setServers]);
 
+  // Auto-connect when selecting a server
+  useEffect(() => {
+    if (activeServerId && connectionStatus[activeServerId] !== 'connected' && connectionStatus[activeServerId] !== 'connecting') {
+      connectToServer(activeServerId);
+    }
+  }, [activeServerId, connectionStatus, connectToServer]);
+
+  const handleSend = useCallback((text: string) => {
+    if (!activeServerId) return;
+
+    addMessage(activeServerId, {
+      id: crypto.randomUUID(),
+      type: 'user',
+      content: text,
+      timestamp: Date.now(),
+    });
+
+    sendInput(activeServerId, text);
+  }, [activeServerId, addMessage, sendInput]);
+
+  const handleExtractPlan = useCallback((content: string) => {
+    if (!activeServerId) return;
+    const { title, steps } = parseMarkdownChecklist(content);
+    const plan = {
+      id: crypto.randomUUID(),
+      sessionId: activeServerId,
+      title,
+      content,
+      steps,
+      status: 'active' as const,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    addPlan(activeServerId, plan);
+    setActivePlan(plan.id);
+  }, [activeServerId, addPlan, setActivePlan]);
+
   return (
     <>
       <AppShell
-        chatView={
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            Select a server to start
-          </div>
-        }
-        planPanel={
-          <div className="flex h-full items-center justify-center text-muted-foreground p-4">
-            No active plan
-          </div>
-        }
+        chatView={<ChatView onSend={handleSend} onExtractPlan={handleExtractPlan} />}
+        planPanel={<PlanPanel onSendToChat={handleSend} />}
         onAddServer={() => setServerDialogOpen(true)}
       />
       <ServerDialog open={serverDialogOpen} onOpenChange={setServerDialogOpen} />
