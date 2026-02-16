@@ -1,0 +1,16 @@
+{
+  "name": "codingeverywhere",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "npm run dev --workspace=server",
+    "dev:client": "npm run dev --workspace=client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
