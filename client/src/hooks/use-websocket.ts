@@ -5,11 +5,21 @@ import { useChatStore } from '../stores/chat-store';
 let ws: WebSocket | null = null;
 
 function getOrCreateWs(): WebSocket {
-  if (ws && ws.readyState === WebSocket.OPEN) return ws;
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+    return ws;
+  }
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
   return ws;
+}
+
+function sendWhenReady(socket: WebSocket, data: string): void {
+  if (socket.readyState === WebSocket.OPEN) {
+    socket.send(data);
+  } else {
+    socket.addEventListener('open', () => socket.send(data), { once: true });
+  }
 }
 
 export function useWebSocket() {
@@ -41,9 +51,12 @@ export function useWebSocket() {
       }
     };
 
+    socket.onerror = () => {
+      // Silently handle — onclose will trigger reconnect
+    };
+
     socket.onclose = () => {
       ws = null;
-      // Reconnect after 3 seconds
       setTimeout(() => {
         if (wsRef.current === socket) {
           wsRef.current = getOrCreateWs();
@@ -59,17 +72,17 @@ export function useWebSocket() {
   const connectToServer = useCallback((serverId: string, tmuxSession?: string) => {
     const socket = getOrCreateWs();
     setConnectionStatus(serverId, 'connecting');
-    socket.send(JSON.stringify({ type: 'connect', serverId, tmuxSession }));
+    sendWhenReady(socket, JSON.stringify({ type: 'connect', serverId, tmuxSession }));
   }, [setConnectionStatus]);
 
   const sendInput = useCallback((serverId: string, text: string) => {
     const socket = getOrCreateWs();
-    socket.send(JSON.stringify({ type: 'input', serverId, text }));
+    sendWhenReady(socket, JSON.stringify({ type: 'input', serverId, text }));
   }, []);
 
   const disconnectFromServer = useCallback((serverId: string) => {
     const socket = getOrCreateWs();
-    socket.send(JSON.stringify({ type: 'disconnect', serverId }));
+    sendWhenReady(socket, JSON.stringify({ type: 'disconnect', serverId }));
   }, []);
 
   return { connectToServer, sendInput, disconnectFromServer };
