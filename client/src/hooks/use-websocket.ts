@@ -3,86 +3,106 @@ import { useServerStore } from '../stores/server-store';
 import { useChatStore } from '../stores/chat-store';
 
 let ws: WebSocket | null = null;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let reconnectDelay = 1000;
+const MAX_RECONNECT_DELAY = 30000;
 
-function getOrCreateWs(): WebSocket {
+function resetBackoff() {
+  reconnectDelay = 1000;
+}
+
+function nextBackoff(): number {
+  const delay = reconnectDelay;
+  reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY);
+  return delay;
+}
+
+// Refs for store callbacks, updated each render so closures are never stale
+const storeRefs = {
+  addMessage: null as null | ReturnType<typeof useChatStore.getState>['addMessage'],
+  setConnectionStatus: null as null | ReturnType<typeof useServerStore.getState>['setConnectionStatus'],
+  setHistory: null as null | ReturnType<typeof useChatStore.getState>['setHistory'],
+};
+
+function setupSocket() {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-    return ws;
+    return;
   }
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-  return ws;
+  const socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+  ws = socket;
+
+  socket.onopen = () => {
+    resetBackoff();
+  };
+
+  socket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    switch (data.type) {
+      case 'message':
+        storeRefs.addMessage?.(data.serverId, {
+          id: crypto.randomUUID(),
+          ...data.message,
+        });
+        break;
+      case 'status':
+        storeRefs.setConnectionStatus?.(data.serverId, data.status);
+        break;
+      case 'history':
+        storeRefs.setHistory?.(data.serverId, data.messages);
+        break;
+    }
+  };
+
+  socket.onerror = () => {
+    // onclose will handle reconnect
+  };
+
+  socket.onclose = () => {
+    ws = null;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    const delay = nextBackoff();
+    reconnectTimer = setTimeout(setupSocket, delay);
+  };
 }
 
-function sendWhenReady(socket: WebSocket, data: string): void {
-  if (socket.readyState === WebSocket.OPEN) {
-    socket.send(data);
-  } else {
-    socket.addEventListener('open', () => socket.send(data), { once: true });
-  }
-}
+let initialized = false;
 
 export function useWebSocket() {
   const setConnectionStatus = useServerStore((s) => s.setConnectionStatus);
   const addMessage = useChatStore((s) => s.addMessage);
   const setHistory = useChatStore((s) => s.setHistory);
-  const wsRef = useRef<WebSocket | null>(null);
+
+  // Keep refs current so WebSocket handlers always use latest store functions
+  storeRefs.addMessage = addMessage;
+  storeRefs.setConnectionStatus = setConnectionStatus;
+  storeRefs.setHistory = setHistory;
 
   useEffect(() => {
-    const socket = getOrCreateWs();
-    wsRef.current = socket;
-
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-
-      switch (data.type) {
-        case 'message':
-          addMessage(data.serverId, {
-            id: crypto.randomUUID(),
-            ...data.message,
-          });
-          break;
-        case 'status':
-          setConnectionStatus(data.serverId, data.status);
-          break;
-        case 'history':
-          setHistory(data.serverId, data.messages);
-          break;
-      }
-    };
-
-    socket.onerror = () => {
-      // Silently handle — onclose will trigger reconnect
-    };
-
-    socket.onclose = () => {
-      ws = null;
-      setTimeout(() => {
-        if (wsRef.current === socket) {
-          wsRef.current = getOrCreateWs();
-        }
-      }, 3000);
-    };
+    if (initialized) return;
+    initialized = true;
+    setupSocket();
 
     return () => {
-      // Don't close on unmount — keep the connection alive
+      if (reconnectTimer) clearTimeout(reconnectTimer);
     };
-  }, [addMessage, setConnectionStatus, setHistory]);
+  }, []);
 
   const connectToServer = useCallback((serverId: string, tmuxSession?: string) => {
-    const socket = getOrCreateWs();
-    setConnectionStatus(serverId, 'connecting');
-    sendWhenReady(socket, JSON.stringify({ type: 'connect', serverId, tmuxSession }));
-  }, [setConnectionStatus]);
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    storeRefs.setConnectionStatus?.(serverId, 'connecting');
+    ws.send(JSON.stringify({ type: 'connect', serverId, tmuxSession }));
+  }, []);
 
   const sendInput = useCallback((serverId: string, text: string) => {
-    const socket = getOrCreateWs();
-    sendWhenReady(socket, JSON.stringify({ type: 'input', serverId, text }));
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'input', serverId, text }));
   }, []);
 
   const disconnectFromServer = useCallback((serverId: string) => {
-    const socket = getOrCreateWs();
-    sendWhenReady(socket, JSON.stringify({ type: 'disconnect', serverId }));
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'disconnect', serverId }));
   }, []);
 
   return { connectToServer, sendInput, disconnectFromServer };

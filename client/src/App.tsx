@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ChatView } from '@/components/chat/ChatView';
 import { PlanPanel } from '@/components/plan/PlanPanel';
@@ -22,16 +22,18 @@ function App() {
 
   useEffect(() => {
     fetch('/api/servers')
-      .then((r) => r.json())
+      .then((r) => r.ok ? r.json() : [])
       .then(setServers)
-      .catch(console.error);
+      .catch(() => {});
   }, [setServers]);
 
-  // Auto-connect when selecting a server
+  // Auto-connect only when first selecting a server (not on error/disconnect)
+  const prevActiveRef = useRef<string | null>(null);
   useEffect(() => {
-    if (activeServerId && activeServerStatus !== 'connected' && activeServerStatus !== 'connecting') {
+    if (activeServerId && activeServerId !== prevActiveRef.current && !activeServerStatus) {
       connectToServer(activeServerId);
     }
+    prevActiveRef.current = activeServerId;
   }, [activeServerId, activeServerStatus, connectToServer]);
 
   const handleSend = useCallback((text: string) => {
