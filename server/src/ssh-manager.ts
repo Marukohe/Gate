@@ -67,7 +67,7 @@ export class SSHManager extends EventEmitter {
     if (!conn) throw new Error(`No connection for server ${serverId}`);
 
     return new Promise((resolve, reject) => {
-      conn.client.shell({ term: 'xterm-256color' }, (err, channel) => {
+      conn.client.shell({ term: 'xterm-256color', cols: 200, rows: 50 }, (err, channel) => {
         if (err) return reject(err);
 
         conn.channel = channel;
@@ -82,19 +82,33 @@ export class SSHManager extends EventEmitter {
           this.emit('status', serverId, 'disconnected');
         });
 
-        // Try attach first, create if not exists
-        channel.write(`tmux attach -t ${sessionName} 2>/dev/null || tmux new -s ${sessionName}\n`);
+        // Create or attach to tmux session with claude running inside
+        // Use has-session to check, then either attach or create with claude as the command
+        channel.write(
+          `tmux has-session -t ${sessionName} 2>/dev/null && ` +
+          `tmux attach -t ${sessionName} || ` +
+          `tmux new-session -s ${sessionName} -d claude \\; attach -t ${sessionName}\n`
+        );
 
-        // Give tmux a moment to initialize
-        setTimeout(resolve, 500);
+        // Give tmux + claude a moment to initialize
+        setTimeout(resolve, 1500);
       });
     });
   }
 
   sendInput(serverId: string, text: string): void {
     const conn = this.connections.get(serverId);
-    if (!conn?.channel) throw new Error(`No active channel for server ${serverId}`);
-    conn.channel.write(text);
+    if (!conn?.channel || !conn.tmuxSession) {
+      throw new Error(`No active channel for server ${serverId}`);
+    }
+    // Send input via tmux send-keys so it goes to the program running inside tmux (claude)
+    // Use literal newline by sending Enter key
+    conn.channel.write(`tmux send-keys -t ${conn.tmuxSession} ${this.escapeTmuxArg(text)} Enter\n`);
+  }
+
+  private escapeTmuxArg(text: string): string {
+    // Wrap in quotes and escape inner quotes for shell safety
+    return `'${text.replace(/'/g, "'\\''")}'`;
   }
 
   async disconnect(serverId: string): Promise<void> {
