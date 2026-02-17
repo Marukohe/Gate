@@ -47,7 +47,7 @@ function setupSocket() {
         });
         break;
       case 'status':
-        storeRefs.setConnectionStatus?.(data.serverId, data.status);
+        storeRefs.setConnectionStatus?.(data.serverId, data.status, data.error);
         break;
       case 'history':
         storeRefs.setHistory?.(data.serverId, data.messages);

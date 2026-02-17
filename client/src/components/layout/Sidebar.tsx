@@ -12,6 +12,7 @@ export function Sidebar({ onAddServer }: SidebarProps) {
   const servers = useServerStore((s) => s.servers);
   const activeServerId = useServerStore((s) => s.activeServerId);
   const connectionStatus = useServerStore((s) => s.connectionStatus);
+  const connectionError = useServerStore((s) => s.connectionError);
   const setActiveServer = useServerStore((s) => s.setActiveServer);
 
   const statusColor = (id: string) => {
@@ -38,7 +39,12 @@ export function Sidebar({ onAddServer }: SidebarProps) {
                 <Circle className={cn('absolute -right-0.5 -top-0.5 h-2.5 w-2.5 fill-current', statusColor(server.id))} />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">{server.name}</TooltipContent>
+            <TooltipContent side="right">
+              <p>{server.name}</p>
+              {connectionStatus[server.id] === 'error' && connectionError[server.id] && (
+                <p className="text-xs text-destructive">{connectionError[server.id]}</p>
+              )}
+            </TooltipContent>
           </Tooltip>
         ))}
         <Tooltip>
