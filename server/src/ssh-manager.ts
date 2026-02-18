@@ -101,9 +101,9 @@ export class SSHManager extends EventEmitter {
     if (!conn?.channel || !conn.tmuxSession) {
       throw new Error(`No active channel for server ${serverId}`);
     }
-    // Channel is already attached to the tmux session, so writing
-    // directly sends input to whatever is running inside (claude)
-    conn.channel.write(text + '\n');
+    // Channel is attached to the tmux session running claude.
+    // Claude CLI runs in raw terminal mode where Enter = \r (carriage return).
+    conn.channel.write(text + '\r');
   }
 
   async disconnect(serverId: string): Promise<void> {
