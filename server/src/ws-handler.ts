@@ -100,7 +100,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
 
           case 'input': {
             if (!msg.text) return;
-            sshManager.sendInput(msg.serverId, msg.text + '\n');
+            sshManager.sendInput(msg.serverId, msg.text);
             break;
           }
 
