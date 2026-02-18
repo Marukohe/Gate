@@ -101,14 +101,9 @@ export class SSHManager extends EventEmitter {
     if (!conn?.channel || !conn.tmuxSession) {
       throw new Error(`No active channel for server ${serverId}`);
     }
-    // Send input via tmux send-keys so it goes to the program running inside tmux (claude)
-    // Use literal newline by sending Enter key
-    conn.channel.write(`tmux send-keys -t ${conn.tmuxSession} ${this.escapeTmuxArg(text)} Enter\n`);
-  }
-
-  private escapeTmuxArg(text: string): string {
-    // Wrap in quotes and escape inner quotes for shell safety
-    return `'${text.replace(/'/g, "'\\''")}'`;
+    // Channel is already attached to the tmux session, so writing
+    // directly sends input to whatever is running inside (claude)
+    conn.channel.write(text + '\n');
   }
 
   async disconnect(serverId: string): Promise<void> {
