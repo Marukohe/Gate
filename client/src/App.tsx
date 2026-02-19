@@ -14,7 +14,6 @@ function App() {
   const setServers = useServerStore((s) => s.setServers);
   const activeServerId = useServerStore((s) => s.activeServerId);
   const activeServerStatus = useServerStore((s) => s.activeServerId ? s.connectionStatus[s.activeServerId] : undefined);
-  const addMessage = useChatStore((s) => s.addMessage);
   const addPlan = usePlanStore((s) => s.addPlan);
   const setActivePlan = usePlanStore((s) => s.setActivePlan);
 
@@ -36,18 +35,14 @@ function App() {
     prevActiveRef.current = activeServerId;
   }, [activeServerId, activeServerStatus, connectToServer]);
 
+  const addMessage = useChatStore((s) => s.addMessage);
+
   const handleSend = useCallback((text: string) => {
     if (!activeServerId) return;
-
-    addMessage(activeServerId, {
-      id: crypto.randomUUID(),
-      type: 'user',
-      content: text,
-      timestamp: Date.now(),
-    });
-
+    // Show user message immediately for instant feedback
+    addMessage(activeServerId, { type: 'user', content: text, timestamp: Date.now() });
     sendInput(activeServerId, text);
-  }, [activeServerId, addMessage, sendInput]);
+  }, [activeServerId, sendInput, addMessage]);
 
   const handleExtractPlan = useCallback((content: string) => {
     if (!activeServerId) return;

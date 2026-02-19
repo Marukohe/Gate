@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useServerStore } from '../stores/server-store';
 import { useChatStore } from '../stores/chat-store';
 
@@ -19,8 +19,8 @@ function nextBackoff(): number {
 
 // Refs for store callbacks, updated each render so closures are never stale
 const storeRefs = {
-  addMessage: null as null | ReturnType<typeof useChatStore.getState>['addMessage'],
   setConnectionStatus: null as null | ReturnType<typeof useServerStore.getState>['setConnectionStatus'],
+  addMessage: null as null | ReturnType<typeof useChatStore.getState>['addMessage'],
   setHistory: null as null | ReturnType<typeof useChatStore.getState>['setHistory'],
 };
 
@@ -41,10 +41,8 @@ function setupSocket() {
     const data = JSON.parse(event.data);
     switch (data.type) {
       case 'message':
-        storeRefs.addMessage?.(data.serverId, {
-          id: crypto.randomUUID(),
-          ...data.message,
-        });
+        // Individual message from stream-json parser — append
+        storeRefs.addMessage?.(data.serverId, data.message);
         break;
       case 'status':
         storeRefs.setConnectionStatus?.(data.serverId, data.status, data.error);
@@ -75,8 +73,8 @@ export function useWebSocket() {
   const setHistory = useChatStore((s) => s.setHistory);
 
   // Keep refs current so WebSocket handlers always use latest store functions
-  storeRefs.addMessage = addMessage;
   storeRefs.setConnectionStatus = setConnectionStatus;
+  storeRefs.addMessage = addMessage;
   storeRefs.setHistory = setHistory;
 
   useEffect(() => {
@@ -89,10 +87,10 @@ export function useWebSocket() {
     };
   }, []);
 
-  const connectToServer = useCallback((serverId: string, tmuxSession?: string) => {
+  const connectToServer = useCallback((serverId: string) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     storeRefs.setConnectionStatus?.(serverId, 'connecting');
-    ws.send(JSON.stringify({ type: 'connect', serverId, tmuxSession }));
+    ws.send(JSON.stringify({ type: 'connect', serverId }));
   }, []);
 
   const sendInput = useCallback((serverId: string, text: string) => {

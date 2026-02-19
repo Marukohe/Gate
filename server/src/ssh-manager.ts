@@ -16,8 +16,12 @@ export interface ServerConfig {
 interface SSHConnection {
   client: Client;
   channel: ClientChannel | null;
-  tmuxSession: string | null;
+  claudeSessionId: string | null;
 }
+
+// Wrap in login shell so PATH includes ~/.local/bin, nvm, etc.
+const CLAUDE_CMD =
+  "bash -lc 'claude -p --output-format stream-json --input-format stream-json --verbose --dangerously-skip-permissions'";
 
 export class SSHManager extends EventEmitter {
   private connections = new Map<string, SSHConnection>();
@@ -31,7 +35,7 @@ export class SSHManager extends EventEmitter {
 
     return new Promise((resolve, reject) => {
       client.on('ready', () => {
-        this.connections.set(config.id, { client, channel: null, tmuxSession: null });
+        this.connections.set(config.id, { client, channel: null, claudeSessionId: null });
         this.emit('status', config.id, 'connected');
         resolve();
       });
@@ -62,48 +66,45 @@ export class SSHManager extends EventEmitter {
     });
   }
 
-  async attachTmux(serverId: string, sessionName: string): Promise<void> {
+  /** Launch Claude CLI in stream-json mode via SSH exec. */
+  async startClaude(serverId: string): Promise<void> {
     const conn = this.connections.get(serverId);
     if (!conn) throw new Error(`No connection for server ${serverId}`);
 
-    return new Promise((resolve, reject) => {
-      conn.client.shell({ term: 'xterm-256color', cols: 200, rows: 50 }, (err, channel) => {
+    const channel = await new Promise<ClientChannel>((resolve, reject) => {
+      conn.client.exec(CLAUDE_CMD, (err, ch) => {
         if (err) return reject(err);
-
-        conn.channel = channel;
-        conn.tmuxSession = sessionName;
-
-        channel.on('data', (data: Buffer) => {
-          this.emit('data', serverId, data.toString());
-        });
-
-        channel.on('close', () => {
-          conn.channel = null;
-          this.emit('status', serverId, 'disconnected');
-        });
-
-        // Create or attach to tmux session with claude running inside
-        // Use has-session to check, then either attach or create with claude as the command
-        channel.write(
-          `tmux has-session -t ${sessionName} 2>/dev/null && ` +
-          `tmux attach -t ${sessionName} || ` +
-          `tmux new-session -s ${sessionName} -d claude \\; attach -t ${sessionName}\n`
-        );
-
-        // Give tmux + claude a moment to initialize
-        setTimeout(resolve, 1500);
+        resolve(ch);
       });
+    });
+
+    conn.channel = channel;
+
+    channel.on('data', (data: Buffer) => {
+      this.emit('data', serverId, data.toString());
+    });
+
+    channel.stderr.on('data', (data: Buffer) => {
+      this.emit('stderr', serverId, data.toString());
+    });
+
+    channel.on('close', () => {
+      conn.channel = null;
+      this.emit('status', serverId, 'disconnected');
     });
   }
 
+  /** Write a user message to Claude's stdin as a JSON line. */
   sendInput(serverId: string, text: string): void {
     const conn = this.connections.get(serverId);
-    if (!conn?.channel || !conn.tmuxSession) {
+    if (!conn?.channel) {
       throw new Error(`No active channel for server ${serverId}`);
     }
-    // Channel is attached to the tmux session running claude.
-    // Claude CLI runs in raw terminal mode where Enter = \r (carriage return).
-    conn.channel.write(text + '\r');
+    const msg = JSON.stringify({
+      type: 'user',
+      message: { role: 'user', content: text },
+    });
+    conn.channel.write(msg + '\n');
   }
 
   async disconnect(serverId: string): Promise<void> {
@@ -118,9 +119,5 @@ export class SSHManager extends EventEmitter {
 
   isConnected(serverId: string): boolean {
     return this.connections.has(serverId);
-  }
-
-  getActiveSession(serverId: string): string | null {
-    return this.connections.get(serverId)?.tmuxSession ?? null;
   }
 }

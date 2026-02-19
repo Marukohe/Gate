@@ -9,9 +9,11 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+let msgSeq = 0;
+
 interface ChatStore {
   messages: Record<string, ChatMessage[]>; // keyed by serverId
-  addMessage: (serverId: string, message: ChatMessage) => void;
+  addMessage: (serverId: string, message: Omit<ChatMessage, 'id'>) => void;
   setHistory: (serverId: string, messages: ChatMessage[]) => void;
   clearMessages: (serverId: string) => void;
 }
@@ -21,7 +23,7 @@ export const useChatStore = create<ChatStore>((set) => ({
   addMessage: (serverId, message) => set((s) => ({
     messages: {
       ...s.messages,
-      [serverId]: [...(s.messages[serverId] ?? []), message],
+      [serverId]: [...(s.messages[serverId] ?? []), { ...message, id: `msg-${++msgSeq}` }],
     },
   })),
   setHistory: (serverId, messages) => set((s) => ({

@@ -1,14 +1,13 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Server as HttpServer } from 'http';
 import { SSHManager, type ServerConfig } from './ssh-manager.js';
-import { ClaudeOutputParser } from './parser.js';
+import { StreamJsonParser, type ParsedMessage } from './stream-json-parser.js';
 import type { Database } from './db.js';
 
 interface ClientMessage {
   type: 'connect' | 'input' | 'disconnect';
   serverId: string;
   text?: string;
-  tmuxSession?: string;
 }
 
 interface ServerMessage {
@@ -20,28 +19,30 @@ interface ServerMessage {
 export function setupWebSocket(httpServer: HttpServer, db: Database): void {
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
   const sshManager = new SSHManager();
-  const parsers = new Map<string, ClaudeOutputParser>();
+  const parsers = new Map<string, StreamJsonParser>();
 
   sshManager.on('status', (serverId: string, status: string, error?: string) => {
     broadcast(wss, { type: 'status', serverId, status, error });
   });
 
+  sshManager.on('stderr', (serverId: string, data: string) => {
+    console.error(`[claude stderr][${serverId}]`, data);
+  });
+
   sshManager.on('data', (serverId: string, data: string) => {
+    console.log(`[claude stdout][${serverId}]`, data);
     let parser = parsers.get(serverId);
     if (!parser) {
-      parser = new ClaudeOutputParser();
+      parser = new StreamJsonParser();
       parsers.set(serverId, parser);
 
-      parser.onMessage((message) => {
+      parser.on('message', (message: ParsedMessage) => {
         broadcast(wss, { type: 'message', serverId, message });
 
-        // Find active session and save message
+        // Persist to DB
         const sessions = db.listSessions(serverId);
         if (sessions.length > 0) {
-          db.saveMessage({
-            sessionId: sessions[0].id,
-            ...message,
-          });
+          db.saveMessage({ sessionId: sessions[0].id, ...message });
           db.updateSessionActivity(sessions[0].id);
         }
       });
@@ -79,15 +80,14 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
             };
 
             await sshManager.connect(config);
-
-            const tmuxSession = msg.tmuxSession ?? 'claude-main';
-            await sshManager.attachTmux(server.id, tmuxSession);
+            await sshManager.startClaude(server.id);
 
             // Create or reuse session
+            const sessionName = 'stream-json';
             const sessions = db.listSessions(server.id);
-            const existing = sessions.find(s => s.tmuxSession === tmuxSession);
+            const existing = sessions.find(s => s.tmuxSession === sessionName);
             if (!existing) {
-              db.createSession(server.id, tmuxSession);
+              db.createSession(server.id, sessionName);
             }
 
             // Send history

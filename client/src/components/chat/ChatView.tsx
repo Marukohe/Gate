@@ -48,6 +48,11 @@ export function ChatView({ onSend, onExtractPlan }: ChatViewProps) {
       )}
       <ScrollArea className="flex-1 px-4">
         <div className="mx-auto max-w-3xl py-4">
+          {messages.length === 0 && isConnected && (
+            <div className="py-12 text-center text-sm text-muted-foreground">
+              Waiting for Claude...
+            </div>
+          )}
           {messages.map((msg) => (
             <MessageBubble key={msg.id} message={msg} onExtractPlan={onExtractPlan} />
           ))}
