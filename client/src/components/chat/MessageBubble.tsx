@@ -3,7 +3,7 @@ import remarkGfm from 'remark-gfm';
 import { CodeBlock } from './CodeBlock';
 import { ToolCallCard } from './ToolCallCard';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { cn, stripLineNumbers } from '@/lib/utils';
 import type { ChatMessage } from '@/stores/chat-store';
 
 interface MessageBubbleProps {
@@ -35,21 +35,23 @@ export function MessageBubble({ message, onExtractPlan }: MessageBubbleProps) {
         {isUser ? (
           <p>{message.content}</p>
         ) : (
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              code({ className, children, ...props }) {
-                const match = /language-(\w+)/.exec(className || '');
-                const code = String(children).replace(/\n$/, '');
-                if (match) {
-                  return <CodeBlock code={code} language={match[1]} />;
-                }
-                return <code className="rounded bg-background/50 px-1 py-0.5 text-xs" {...props}>{children}</code>;
-              },
-            }}
-          >
-            {message.content}
-          </ReactMarkdown>
+          <div className="markdown-prose">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                code({ className, children, ...props }) {
+                  const match = /language-(\w+)/.exec(className || '');
+                  const code = String(children).replace(/\n$/, '');
+                  if (match) {
+                    return <CodeBlock code={code} language={match[1]} />;
+                  }
+                  return <code className="rounded bg-background/50 px-1 py-0.5 text-xs" {...props}>{children}</code>;
+                },
+              }}
+            >
+              {stripLineNumbers(message.content)}
+            </ReactMarkdown>
+          </div>
         )}
         {!isUser && message.content.includes('- [ ]') && onExtractPlan && (
           <Button

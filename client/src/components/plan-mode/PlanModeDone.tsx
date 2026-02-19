@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { usePlanModeStore } from '@/stores/plan-mode-store';
 import { CodeBlock } from '@/components/chat/CodeBlock';
 import { Button } from '@/components/ui/button';
+import { stripLineNumbers } from '@/lib/utils';
 
 export function PlanModeDone() {
   const finalPlanContent = usePlanModeStore((s) => s.finalPlanContent);
@@ -15,22 +16,24 @@ export function PlanModeDone() {
       <h2 className="text-lg font-semibold mb-6">Plan Complete</h2>
 
       {finalPlanContent && (
-        <div className="w-full max-w-3xl flex-1 overflow-y-auto rounded-lg border bg-card p-6 text-sm">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              code({ className, children, ...props }) {
-                const match = /language-(\w+)/.exec(className || '');
-                const code = String(children).replace(/\n$/, '');
-                if (match) {
-                  return <CodeBlock code={code} language={match[1]} />;
-                }
-                return <code className="rounded bg-muted px-1 py-0.5 text-xs" {...props}>{children}</code>;
-              },
-            }}
-          >
-            {finalPlanContent}
-          </ReactMarkdown>
+        <div className="w-full max-w-3xl flex-1 overflow-y-auto rounded-lg border bg-card p-6">
+          <div className="markdown-prose">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                code({ className, children, ...props }) {
+                  const match = /language-(\w+)/.exec(className || '');
+                  const code = String(children).replace(/\n$/, '');
+                  if (match) {
+                    return <CodeBlock code={code} language={match[1]} />;
+                  }
+                  return <code className="rounded bg-muted px-1 py-0.5 text-xs" {...props}>{children}</code>;
+                },
+              }}
+            >
+              {stripLineNumbers(finalPlanContent)}
+            </ReactMarkdown>
+          </div>
         </div>
       )}
 
