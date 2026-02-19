@@ -3,6 +3,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { ChatView } from '@/components/chat/ChatView';
 import { PlanPanel } from '@/components/plan/PlanPanel';
 import { ServerDialog } from '@/components/server/ServerDialog';
+import { PlanModeOverlay } from '@/components/plan-mode/PlanModeOverlay';
 import { useServerStore } from '@/stores/server-store';
 import { useChatStore } from '@/stores/chat-store';
 import { usePlanStore } from '@/stores/plan-store';
@@ -69,6 +70,7 @@ function App() {
         onAddServer={() => setServerDialogOpen(true)}
       />
       <ServerDialog open={serverDialogOpen} onOpenChange={setServerDialogOpen} />
+      <PlanModeOverlay onSendInput={handleSend} />
     </>
   );
 }

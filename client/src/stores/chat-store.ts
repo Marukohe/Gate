@@ -3,6 +3,7 @@ import { create } from 'zustand';
 export interface ChatMessage {
   id: string;
   type: 'assistant' | 'user' | 'tool_call' | 'tool_result' | 'system';
+  subType?: string;
   content: string;
   toolName?: string;
   toolDetail?: string;

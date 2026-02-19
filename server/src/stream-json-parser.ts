@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 
 export interface ParsedMessage {
   type: 'assistant' | 'user' | 'tool_call' | 'tool_result' | 'system';
+  subType?: string;
   content: string;
   toolName?: string;
   toolDetail?: string;
@@ -68,6 +69,7 @@ export class StreamJsonParser extends EventEmitter {
       this.sessionId = obj.session_id ?? null;
       this.emitMessage({
         type: 'system',
+        subType: 'init',
         content: `Session started${obj.session_id ? ` (${obj.session_id})` : ''}`,
         timestamp: Date.now(),
       });
@@ -81,6 +83,7 @@ export class StreamJsonParser extends EventEmitter {
       if (obj.num_turns != null) parts.push(`Turns: ${obj.num_turns}`);
       this.emitMessage({
         type: 'system',
+        subType: 'result',
         content: parts.join(' | ') || 'Task complete',
         timestamp: Date.now(),
       });
@@ -157,6 +160,9 @@ function summarizeToolInput(name: string | undefined, input: any): string {
     case 'WebFetch': return input.url ?? '';
     case 'WebSearch': return input.query ?? '';
     case 'Task': return input.description ?? '';
+    case 'EnterPlanMode': return 'Entering plan mode';
+    case 'ExitPlanMode': return 'Plan ready for review';
+    case 'AskUserQuestion': return input.questions?.[0]?.question ?? '';
     default: return '';
   }
 }

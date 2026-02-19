@@ -14,6 +14,7 @@ describe('StreamJsonParser', () => {
     parser.feed('{"type":"system","subtype":"init","session_id":"abc-123"}\n');
     expect(msgs).toHaveLength(1);
     expect(msgs[0].type).toBe('system');
+    expect(msgs[0].subType).toBe('init');
     expect(msgs[0].content).toContain('abc-123');
     expect(parser.getSessionId()).toBe('abc-123');
   });
@@ -114,6 +115,7 @@ describe('StreamJsonParser', () => {
     parser.feed('{"type":"result","total_cost_usd":0.0102,"duration_ms":2415,"num_turns":1}\n');
     expect(msgs).toHaveLength(1);
     expect(msgs[0].type).toBe('system');
+    expect(msgs[0].subType).toBe('result');
     expect(msgs[0].content).toContain('2.4s');
     expect(msgs[0].content).toContain('Turns: 1');
     expect(msgs[0].content).not.toContain('$');
@@ -180,6 +182,28 @@ describe('StreamJsonParser', () => {
       { name: 'WebFetch', input: { url: 'https://x.com' }, expected: 'https://x.com' },
       { name: 'WebSearch', input: { query: 'test' }, expected: 'test' },
       { name: 'Task', input: { description: 'do stuff' }, expected: 'do stuff' },
+    ];
+    for (const t of tools) {
+      parser.feed(JSON.stringify({
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 'x', name: t.name, input: t.input }],
+        },
+      }) + '\n');
+    }
+    for (let i = 0; i < tools.length; i++) {
+      expect(msgs[i].toolDetail).toBe(tools[i].expected);
+    }
+  });
+
+  it('summarizes plan-related tools', () => {
+    const parser = new StreamJsonParser();
+    const msgs = collect(parser);
+    const tools = [
+      { name: 'EnterPlanMode', input: {}, expected: 'Entering plan mode' },
+      { name: 'ExitPlanMode', input: {}, expected: 'Plan ready for review' },
+      { name: 'AskUserQuestion', input: { questions: [{ question: 'Which approach?' }] }, expected: 'Which approach?' },
     ];
     for (const t of tools) {
       parser.feed(JSON.stringify({

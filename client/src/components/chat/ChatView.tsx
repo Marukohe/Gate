@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { AlertCircle } from 'lucide-react';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { useChatStore, type ChatMessage } from '@/stores/chat-store';
@@ -46,7 +45,7 @@ export function ChatView({ onSend, onExtractPlan }: ChatViewProps) {
           Connecting...
         </div>
       )}
-      <ScrollArea className="flex-1 px-4">
+      <div className="flex-1 overflow-y-auto px-4">
         <div className="mx-auto max-w-3xl py-4">
           {messages.length === 0 && isConnected && (
             <div className="py-12 text-center text-sm text-muted-foreground">
@@ -58,7 +57,7 @@ export function ChatView({ onSend, onExtractPlan }: ChatViewProps) {
           ))}
           <div ref={bottomRef} />
         </div>
-      </ScrollArea>
+      </div>
       <ChatInput onSend={onSend} disabled={!isConnected} />
     </div>
   );

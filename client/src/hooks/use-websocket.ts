@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from 'react';
 import { useServerStore } from '../stores/server-store';
 import { useChatStore } from '../stores/chat-store';
+import { usePlanModeStore } from '../stores/plan-mode-store';
 
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -22,6 +23,7 @@ const storeRefs = {
   setConnectionStatus: null as null | ReturnType<typeof useServerStore.getState>['setConnectionStatus'],
   addMessage: null as null | ReturnType<typeof useChatStore.getState>['addMessage'],
   setHistory: null as null | ReturnType<typeof useChatStore.getState>['setHistory'],
+  processPlanModeMessage: null as null | ReturnType<typeof usePlanModeStore.getState>['processMessage'],
 };
 
 function setupSocket() {
@@ -43,6 +45,7 @@ function setupSocket() {
       case 'message':
         // Individual message from stream-json parser — append
         storeRefs.addMessage?.(data.serverId, data.message);
+        storeRefs.processPlanModeMessage?.(data.serverId, data.message);
         break;
       case 'status':
         storeRefs.setConnectionStatus?.(data.serverId, data.status, data.error);
@@ -71,11 +74,13 @@ export function useWebSocket() {
   const setConnectionStatus = useServerStore((s) => s.setConnectionStatus);
   const addMessage = useChatStore((s) => s.addMessage);
   const setHistory = useChatStore((s) => s.setHistory);
+  const processPlanModeMessage = usePlanModeStore((s) => s.processMessage);
 
   // Keep refs current so WebSocket handlers always use latest store functions
   storeRefs.setConnectionStatus = setConnectionStatus;
   storeRefs.addMessage = addMessage;
   storeRefs.setHistory = setHistory;
+  storeRefs.processPlanModeMessage = processPlanModeMessage;
 
   useEffect(() => {
     if (initialized) return;
