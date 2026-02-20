@@ -39,5 +39,28 @@ export function createServerRoutes(db: Database): Router {
     res.json(db.listSessions(req.params.id));
   });
 
+  router.post('/:id/sessions', (req, res) => {
+    const server = db.getServer(req.params.id);
+    if (!server) return res.status(404).json({ error: 'Server not found' });
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: 'Missing name' });
+    const session = db.createSession(server.id, name);
+    res.status(201).json(session);
+  });
+
+  router.put('/:id/sessions/:sessionId', (req, res) => {
+    const session = db.getSession(req.params.sessionId);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: 'Missing name' });
+    db.renameSession(session.id, name);
+    res.json({ ...session, name });
+  });
+
+  router.delete('/:id/sessions/:sessionId', (req, res) => {
+    db.deleteSession(req.params.sessionId);
+    res.status(204).end();
+  });
+
   return router;
 }

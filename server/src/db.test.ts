@@ -78,7 +78,7 @@ describe('Database', () => {
       db.createSession(server.id, 'claude-main');
       const sessions = db.listSessions(server.id);
       expect(sessions).toHaveLength(1);
-      expect(sessions[0].tmuxSession).toBe('claude-main');
+      expect(sessions[0].name).toBe('claude-main');
     });
   });
 

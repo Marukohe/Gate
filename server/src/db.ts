@@ -16,7 +16,8 @@ export interface Server {
 export interface Session {
   id: string;
   serverId: string;
-  tmuxSession: string;
+  name: string;
+  claudeSessionId: string | null;
   createdAt: number;
   lastActiveAt: number;
 }
@@ -40,9 +41,13 @@ export interface Database {
   listServers(): Server[];
   updateServer(id: string, updates: Partial<CreateServerInput>): void;
   deleteServer(id: string): void;
-  createSession(serverId: string, tmuxSession: string): Session;
+  createSession(serverId: string, name: string): Session;
+  getSession(id: string): Session | undefined;
   listSessions(serverId: string): Session[];
+  deleteSession(id: string): void;
+  renameSession(id: string, name: string): void;
   updateSessionActivity(id: string): void;
+  updateClaudeSessionId(id: string, claudeSessionId: string): void;
   saveMessage(input: CreateMessageInput): Message;
   getMessages(sessionId: string, limit?: number): Message[];
   close(): void;
@@ -53,6 +58,10 @@ export function createDb(dbPath: string): Database {
 
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
+
+  // Migrations
+  try { db.exec('ALTER TABLE sessions ADD COLUMN claudeSessionId TEXT'); } catch { /* already exists */ }
+  try { db.exec("ALTER TABLE sessions ADD COLUMN name TEXT DEFAULT 'Default'"); } catch { /* already exists */ }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS servers (
@@ -70,7 +79,8 @@ export function createDb(dbPath: string): Database {
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       serverId TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
-      tmuxSession TEXT NOT NULL,
+      name TEXT NOT NULL DEFAULT 'Default',
+      claudeSessionId TEXT,
       createdAt INTEGER NOT NULL,
       lastActiveAt INTEGER NOT NULL
     );
@@ -117,22 +127,38 @@ export function createDb(dbPath: string): Database {
       db.prepare('DELETE FROM servers WHERE id = ?').run(id);
     },
 
-    createSession(serverId, tmuxSession) {
+    createSession(serverId, name) {
       const id = randomUUID();
       const now = Date.now();
       db.prepare(`
-        INSERT INTO sessions (id, serverId, tmuxSession, createdAt, lastActiveAt)
+        INSERT INTO sessions (id, serverId, name, createdAt, lastActiveAt)
         VALUES (?, ?, ?, ?, ?)
-      `).run(id, serverId, tmuxSession, now, now);
-      return { id, serverId, tmuxSession, createdAt: now, lastActiveAt: now };
+      `).run(id, serverId, name, now, now);
+      return { id, serverId, name, claudeSessionId: null, createdAt: now, lastActiveAt: now };
+    },
+
+    getSession(id) {
+      return db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as Session | undefined;
     },
 
     listSessions(serverId) {
-      return db.prepare('SELECT * FROM sessions WHERE serverId = ? ORDER BY lastActiveAt DESC').all(serverId) as Session[];
+      return db.prepare('SELECT * FROM sessions WHERE serverId = ? ORDER BY createdAt ASC').all(serverId) as Session[];
+    },
+
+    deleteSession(id) {
+      db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
+    },
+
+    renameSession(id, name) {
+      db.prepare('UPDATE sessions SET name = ? WHERE id = ?').run(name, id);
     },
 
     updateSessionActivity(id) {
       db.prepare('UPDATE sessions SET lastActiveAt = ? WHERE id = ?').run(Date.now(), id);
+    },
+
+    updateClaudeSessionId(id, claudeSessionId) {
+      db.prepare('UPDATE sessions SET claudeSessionId = ? WHERE id = ?').run(claudeSessionId, id);
     },
 
     saveMessage(input) {

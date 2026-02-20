@@ -15,13 +15,16 @@ export interface ServerConfig {
 
 interface SSHConnection {
   client: Client;
-  channel: ClientChannel | null;
-  claudeSessionId: string | null;
+  channels: Map<string, ClientChannel>;  // sessionId → channel
 }
 
-// Wrap in login shell so PATH includes ~/.local/bin, nvm, etc.
-const CLAUDE_CMD =
-  "bash -lc 'claude -p --output-format stream-json --input-format stream-json --verbose --dangerously-skip-permissions'";
+const CLAUDE_BASE_ARGS =
+  '--output-format stream-json --input-format stream-json --verbose --dangerously-skip-permissions';
+
+function buildClaudeCmd(resumeSessionId?: string | null): string {
+  const resumeFlag = resumeSessionId ? ` --resume '${resumeSessionId}'` : '';
+  return `bash -lc 'claude -p${resumeFlag} ${CLAUDE_BASE_ARGS}'`;
+}
 
 export class SSHManager extends EventEmitter {
   private connections = new Map<string, SSHConnection>();
@@ -35,19 +38,19 @@ export class SSHManager extends EventEmitter {
 
     return new Promise((resolve, reject) => {
       client.on('ready', () => {
-        this.connections.set(config.id, { client, channel: null, claudeSessionId: null });
-        this.emit('status', config.id, 'connected');
+        this.connections.set(config.id, { client, channels: new Map() });
+        this.emit('status', config.id, null, 'connected');
         resolve();
       });
 
       client.on('error', (err) => {
-        this.emit('status', config.id, 'error', err.message);
+        this.emit('status', config.id, null, 'error', err.message);
         reject(err);
       });
 
       client.on('close', () => {
         this.connections.delete(config.id);
-        this.emit('status', config.id, 'disconnected');
+        this.emit('status', config.id, null, 'disconnected');
       });
 
       const connectConfig: ConnectConfig = {
@@ -66,58 +69,86 @@ export class SSHManager extends EventEmitter {
     });
   }
 
-  /** Launch Claude CLI in stream-json mode via SSH exec. */
-  async startClaude(serverId: string): Promise<void> {
+  /** Launch Claude CLI in stream-json mode via SSH exec on a new channel. */
+  async startClaude(serverId: string, sessionId: string, resumeClaudeSessionId?: string | null): Promise<void> {
     const conn = this.connections.get(serverId);
     if (!conn) throw new Error(`No connection for server ${serverId}`);
 
+    // Close existing channel for this session if any
+    const existing = conn.channels.get(sessionId);
+    if (existing) {
+      existing.end();
+      conn.channels.delete(sessionId);
+    }
+
+    const cmd = buildClaudeCmd(resumeClaudeSessionId);
     const channel = await new Promise<ClientChannel>((resolve, reject) => {
-      conn.client.exec(CLAUDE_CMD, (err, ch) => {
+      conn.client.exec(cmd, (err, ch) => {
         if (err) return reject(err);
         resolve(ch);
       });
     });
 
-    conn.channel = channel;
+    conn.channels.set(sessionId, channel);
 
     channel.on('data', (data: Buffer) => {
-      this.emit('data', serverId, data.toString());
+      this.emit('data', serverId, sessionId, data.toString());
     });
 
     channel.stderr.on('data', (data: Buffer) => {
-      this.emit('stderr', serverId, data.toString());
+      this.emit('stderr', serverId, sessionId, data.toString());
     });
 
     channel.on('close', () => {
-      conn.channel = null;
-      this.emit('status', serverId, 'disconnected');
+      conn.channels.delete(sessionId);
+      this.emit('status', serverId, sessionId, 'disconnected');
     });
   }
 
   /** Write a user message to Claude's stdin as a JSON line. */
-  sendInput(serverId: string, text: string): void {
+  sendInput(serverId: string, sessionId: string, text: string): void {
     const conn = this.connections.get(serverId);
-    if (!conn?.channel) {
-      throw new Error(`No active channel for server ${serverId}`);
+    const channel = conn?.channels.get(sessionId);
+    if (!channel) {
+      throw new Error(`No active channel for server ${serverId} session ${sessionId}`);
     }
     const msg = JSON.stringify({
       type: 'user',
       message: { role: 'user', content: text },
     });
-    conn.channel.write(msg + '\n');
+    channel.write(msg + '\n');
   }
 
+  /** Close a single session channel without dropping the SSH connection. */
+  stopSession(serverId: string, sessionId: string): void {
+    const conn = this.connections.get(serverId);
+    if (!conn) return;
+    const channel = conn.channels.get(sessionId);
+    if (channel) {
+      channel.end();
+      conn.channels.delete(sessionId);
+    }
+  }
+
+  /** Close all channels and the SSH connection. */
   async disconnect(serverId: string): Promise<void> {
     const conn = this.connections.get(serverId);
     if (!conn) return;
-    if (conn.channel) {
-      conn.channel.end();
+    for (const channel of conn.channels.values()) {
+      channel.end();
     }
+    conn.channels.clear();
     conn.client.end();
     this.connections.delete(serverId);
   }
 
   isConnected(serverId: string): boolean {
     return this.connections.has(serverId);
+  }
+
+  /** True if SSH is connected AND the given session channel is still open. */
+  hasActiveChannel(serverId: string, sessionId: string): boolean {
+    const conn = this.connections.get(serverId);
+    return conn?.channels.has(sessionId) ?? false;
   }
 }
