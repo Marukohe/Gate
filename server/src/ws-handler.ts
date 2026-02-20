@@ -126,6 +126,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
             // Resume previous Claude session if we have a session ID
             const resumeId = session.claudeSessionId ?? null;
             await sshManager.startClaude(server.id, sessionId, resumeId);
+            ws.send(JSON.stringify({ type: 'status', serverId: server.id, sessionId, status: 'connected' }));
             break;
           }
 

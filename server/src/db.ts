@@ -79,6 +79,7 @@ export function createDb(dbPath: string): Database {
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       serverId TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      tmuxSession TEXT NOT NULL DEFAULT '',
       name TEXT NOT NULL DEFAULT 'Default',
       claudeSessionId TEXT,
       createdAt INTEGER NOT NULL,
@@ -142,7 +143,7 @@ export function createDb(dbPath: string): Database {
     },
 
     listSessions(serverId) {
-      return db.prepare('SELECT * FROM sessions WHERE serverId = ? ORDER BY createdAt ASC').all(serverId) as Session[];
+      return db.prepare('SELECT * FROM sessions WHERE serverId = ? ORDER BY lastActiveAt DESC').all(serverId) as Session[];
     },
 
     deleteSession(id) {
