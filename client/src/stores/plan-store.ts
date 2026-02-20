@@ -19,11 +19,11 @@ export interface Plan {
 }
 
 interface PlanStore {
-  plans: Record<string, Plan[]>; // keyed by serverId
+  plans: Record<string, Plan[]>; // keyed by sessionId
   activePlanId: string | null;
-  addPlan: (serverId: string, plan: Plan) => void;
-  updatePlan: (serverId: string, planId: string, updates: Partial<Plan>) => void;
-  toggleStep: (serverId: string, planId: string, stepId: string) => void;
+  addPlan: (sessionId: string, plan: Plan) => void;
+  updatePlan: (sessionId: string, planId: string, updates: Partial<Plan>) => void;
+  toggleStep: (sessionId: string, planId: string, stepId: string) => void;
   setActivePlan: (planId: string | null) => void;
 }
 
@@ -38,24 +38,24 @@ function toggleStepInList(steps: PlanStep[], stepId: string): PlanStep[] {
 export const usePlanStore = create<PlanStore>((set) => ({
   plans: {},
   activePlanId: null,
-  addPlan: (serverId, plan) => set((s) => ({
+  addPlan: (sessionId, plan) => set((s) => ({
     plans: {
       ...s.plans,
-      [serverId]: [...(s.plans[serverId] ?? []), plan],
+      [sessionId]: [...(s.plans[sessionId] ?? []), plan],
     },
   })),
-  updatePlan: (serverId, planId, updates) => set((s) => ({
+  updatePlan: (sessionId, planId, updates) => set((s) => ({
     plans: {
       ...s.plans,
-      [serverId]: (s.plans[serverId] ?? []).map((p) =>
+      [sessionId]: (s.plans[sessionId] ?? []).map((p) =>
         p.id === planId ? { ...p, ...updates, updatedAt: Date.now() } : p
       ),
     },
   })),
-  toggleStep: (serverId, planId, stepId) => set((s) => ({
+  toggleStep: (sessionId, planId, stepId) => set((s) => ({
     plans: {
       ...s.plans,
-      [serverId]: (s.plans[serverId] ?? []).map((p) =>
+      [sessionId]: (s.plans[sessionId] ?? []).map((p) =>
         p.id === planId ? { ...p, steps: toggleStepInList(p.steps, stepId), updatedAt: Date.now() } : p
       ),
     },

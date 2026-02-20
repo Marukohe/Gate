@@ -17,7 +17,7 @@ type Phase = 'idle' | 'active' | 'question' | 'done';
 
 interface PlanModeStore {
   phase: Phase;
-  serverId: string | null;
+  sessionId: string | null;
   toolCallCount: number;
   lastToolName: string | null;
   progressMessages: string[];
@@ -25,7 +25,7 @@ interface PlanModeStore {
   selectedAnswers: Record<number, string[]>;
   finalPlanContent: string | null;
 
-  processMessage: (serverId: string, message: ChatMessage) => void;
+  processMessage: (sessionId: string, message: ChatMessage) => void;
   selectAnswer: (questionIndex: number, optionLabel: string) => void;
   deselectAnswer: (questionIndex: number, optionLabel: string) => void;
   submitAnswers: () => string;
@@ -54,7 +54,7 @@ function parseQuestions(content: string): PlanQuestion[] {
 
 export const usePlanModeStore = create<PlanModeStore>((set, get) => ({
   phase: 'idle',
-  serverId: null,
+  sessionId: null,
   toolCallCount: 0,
   lastToolName: null,
   progressMessages: [],
@@ -62,14 +62,14 @@ export const usePlanModeStore = create<PlanModeStore>((set, get) => ({
   selectedAnswers: {},
   finalPlanContent: null,
 
-  processMessage: (serverId, message) => {
+  processMessage: (sessionId, message) => {
     const state = get();
 
     // Enter plan mode on EnterPlanMode tool_call
     if (message.type === 'tool_call' && message.toolName === 'EnterPlanMode') {
       set({
         phase: 'active',
-        serverId,
+        sessionId,
         toolCallCount: 1,
         lastToolName: 'EnterPlanMode',
         progressMessages: [],
@@ -80,9 +80,9 @@ export const usePlanModeStore = create<PlanModeStore>((set, get) => ({
       return;
     }
 
-    // Ignore messages when idle or for a different server
+    // Ignore messages when idle or for a different session
     if (state.phase === 'idle') return;
-    if (state.serverId !== serverId) return;
+    if (state.sessionId !== sessionId) return;
 
     // ── question phase: HOLD until user acts ──
     // Under --dangerously-skip-permissions, AskUserQuestion auto-resolves
@@ -158,7 +158,7 @@ export const usePlanModeStore = create<PlanModeStore>((set, get) => ({
         }
         set({
           phase: 'idle',
-          serverId: null,
+          sessionId: null,
           toolCallCount: 0,
           lastToolName: null,
           progressMessages: [],
@@ -227,7 +227,7 @@ export const usePlanModeStore = create<PlanModeStore>((set, get) => ({
   dismiss: () => {
     set({
       phase: 'idle',
-      serverId: null,
+      sessionId: null,
       toolCallCount: 0,
       lastToolName: null,
       progressMessages: [],

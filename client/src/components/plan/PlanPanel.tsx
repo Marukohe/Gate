@@ -6,6 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlanStepItem } from './PlanStepItem';
 import { usePlanStore, type Plan } from '@/stores/plan-store';
 import { useServerStore } from '@/stores/server-store';
+import { useSessionStore } from '@/stores/session-store';
 import { parseMarkdownChecklist, stepsToMarkdown } from '@/lib/plan-parser';
 
 const EMPTY_PLANS: Plan[] = [];
@@ -16,7 +17,8 @@ interface PlanPanelProps {
 
 export function PlanPanel({ onSendToChat }: PlanPanelProps) {
   const activeServerId = useServerStore((s) => s.activeServerId);
-  const plans = usePlanStore((s) => activeServerId ? (s.plans[activeServerId] ?? EMPTY_PLANS) : EMPTY_PLANS);
+  const activeSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
+  const plans = usePlanStore((s) => activeSessionId ? (s.plans[activeSessionId] ?? EMPTY_PLANS) : EMPTY_PLANS);
   const activePlanId = usePlanStore((s) => s.activePlanId);
   const toggleStep = usePlanStore((s) => s.toggleStep);
   const updatePlan = usePlanStore((s) => s.updatePlan);
@@ -33,9 +35,9 @@ export function PlanPanel({ onSendToChat }: PlanPanelProps) {
   };
 
   const handleSave = () => {
-    if (!activePlan || !activeServerId) return;
+    if (!activePlan || !activeSessionId) return;
     const { title, steps } = parseMarkdownChecklist(editContent);
-    updatePlan(activeServerId, activePlan.id, { title, steps, content: editContent });
+    updatePlan(activeSessionId, activePlan.id, { title, steps, content: editContent });
     setTab('view');
   };
 
@@ -74,7 +76,7 @@ export function PlanPanel({ onSendToChat }: PlanPanelProps) {
               <PlanStepItem
                 key={step.id}
                 step={step}
-                onToggle={(stepId) => activeServerId && toggleStep(activeServerId, activePlan.id, stepId)}
+                onToggle={(stepId) => activeSessionId && toggleStep(activeSessionId, activePlan.id, stepId)}
               />
             ))}
           </ScrollArea>

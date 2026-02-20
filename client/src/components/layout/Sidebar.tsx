@@ -19,6 +19,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useServerStore, type Server as ServerType } from '@/stores/server-store';
+import { useSessionStore } from '@/stores/session-store';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps {
@@ -28,15 +29,18 @@ interface SidebarProps {
 export function Sidebar({ onAddServer }: SidebarProps) {
   const servers = useServerStore((s) => s.servers);
   const activeServerId = useServerStore((s) => s.activeServerId);
-  const connectionStatus = useServerStore((s) => s.connectionStatus);
-  const connectionError = useServerStore((s) => s.connectionError);
   const setActiveServer = useServerStore((s) => s.setActiveServer);
   const removeServer = useServerStore((s) => s.removeServer);
+  const activeSessionIds = useSessionStore((s) => s.activeSessionId);
+  const connectionStatus = useSessionStore((s) => s.connectionStatus);
+  const connectionError = useSessionStore((s) => s.connectionError);
 
   const [deleteTarget, setDeleteTarget] = useState<ServerType | null>(null);
 
-  const statusColor = (id: string) => {
-    const status = connectionStatus[id];
+  const statusColor = (serverId: string) => {
+    const sessionId = activeSessionIds[serverId];
+    if (!sessionId) return 'text-muted-foreground';
+    const status = connectionStatus[sessionId];
     if (status === 'connected') return 'text-green-500';
     if (status === 'connecting') return 'text-yellow-500';
     if (status === 'error') return 'text-red-500';
@@ -73,9 +77,12 @@ export function Sidebar({ onAddServer }: SidebarProps) {
               </ContextMenuTrigger>
               <TooltipContent side="right">
                 <p>{server.name}</p>
-                {connectionStatus[server.id] === 'error' && connectionError[server.id] && (
-                  <p className="text-xs text-destructive">{connectionError[server.id]}</p>
-                )}
+                {(() => {
+                  const sid = activeSessionIds[server.id];
+                  return sid && connectionStatus[sid] === 'error' && connectionError[sid] ? (
+                    <p className="text-xs text-destructive">{connectionError[sid]}</p>
+                  ) : null;
+                })()}
               </TooltipContent>
             </Tooltip>
             <ContextMenuContent>

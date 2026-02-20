@@ -13,24 +13,24 @@ export interface ChatMessage {
 let msgSeq = 0;
 
 interface ChatStore {
-  messages: Record<string, ChatMessage[]>; // keyed by serverId
-  addMessage: (serverId: string, message: Omit<ChatMessage, 'id'>) => void;
-  setHistory: (serverId: string, messages: ChatMessage[]) => void;
-  clearMessages: (serverId: string) => void;
+  messages: Record<string, ChatMessage[]>; // keyed by sessionId
+  addMessage: (sessionId: string, message: Omit<ChatMessage, 'id'>) => void;
+  setHistory: (sessionId: string, messages: ChatMessage[]) => void;
+  clearMessages: (sessionId: string) => void;
 }
 
 export const useChatStore = create<ChatStore>((set) => ({
   messages: {},
-  addMessage: (serverId, message) => set((s) => ({
+  addMessage: (sessionId, message) => set((s) => ({
     messages: {
       ...s.messages,
-      [serverId]: [...(s.messages[serverId] ?? []), { ...message, id: `msg-${++msgSeq}` }],
+      [sessionId]: [...(s.messages[sessionId] ?? []), { ...message, id: `msg-${++msgSeq}` }],
     },
   })),
-  setHistory: (serverId, messages) => set((s) => ({
-    messages: { ...s.messages, [serverId]: messages },
+  setHistory: (sessionId, messages) => set((s) => ({
+    messages: { ...s.messages, [sessionId]: messages },
   })),
-  clearMessages: (serverId) => set((s) => ({
-    messages: { ...s.messages, [serverId]: [] },
+  clearMessages: (sessionId) => set((s) => ({
+    messages: { ...s.messages, [sessionId]: [] },
   })),
 }));

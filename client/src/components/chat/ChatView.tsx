@@ -2,22 +2,28 @@ import { useEffect, useRef } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
+import { SessionBar } from './SessionBar';
 import { useChatStore, type ChatMessage } from '@/stores/chat-store';
 import { useServerStore } from '@/stores/server-store';
+import { useSessionStore } from '@/stores/session-store';
 
 const EMPTY_MESSAGES: ChatMessage[] = [];
 
 interface ChatViewProps {
   onSend: (text: string) => void;
   onExtractPlan?: (content: string) => void;
+  onCreateSession: (name: string) => void;
+  onDeleteSession: (sessionId: string) => void;
+  onSelectSession: (sessionId: string) => void;
 }
 
-export function ChatView({ onSend, onExtractPlan }: ChatViewProps) {
+export function ChatView({ onSend, onExtractPlan, onCreateSession, onDeleteSession, onSelectSession }: ChatViewProps) {
   const activeServerId = useServerStore((s) => s.activeServerId);
-  const isConnected = useServerStore((s) => s.activeServerId ? s.connectionStatus[s.activeServerId] === 'connected' : false);
-  const connectionStatus = useServerStore((s) => s.activeServerId ? s.connectionStatus[s.activeServerId] : undefined);
-  const connectionError = useServerStore((s) => s.activeServerId ? s.connectionError[s.activeServerId] : undefined);
-  const messages = useChatStore((s) => activeServerId ? (s.messages[activeServerId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES);
+  const activeSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
+  const connectionStatus = useSessionStore((s) => activeSessionId ? s.connectionStatus[activeSessionId] : undefined);
+  const connectionError = useSessionStore((s) => activeSessionId ? s.connectionError[activeSessionId] : undefined);
+  const isConnected = connectionStatus === 'connected';
+  const messages = useChatStore((s) => activeSessionId ? (s.messages[activeSessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,6 +40,12 @@ export function ChatView({ onSend, onExtractPlan }: ChatViewProps) {
 
   return (
     <div className="flex h-full flex-col">
+      <SessionBar
+        serverId={activeServerId}
+        onCreateSession={onCreateSession}
+        onDeleteSession={onDeleteSession}
+        onSelectSession={onSelectSession}
+      />
       {connectionStatus === 'error' && connectionError && (
         <div className="flex items-center gap-2 border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">
           <AlertCircle className="h-4 w-4 shrink-0" />
