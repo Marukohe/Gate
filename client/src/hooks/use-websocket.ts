@@ -25,6 +25,7 @@ const storeRefs = {
   setActiveSession: null as null | ReturnType<typeof useSessionStore.getState>['setActiveSession'],
   removeSession: null as null | ReturnType<typeof useSessionStore.getState>['removeSession'],
   setGitInfo: null as null | ReturnType<typeof useSessionStore.getState>['setGitInfo'],
+  setBranches: null as null | ReturnType<typeof useSessionStore.getState>['setBranches'],
   addMessage: null as null | ReturnType<typeof useChatStore.getState>['addMessage'],
   setHistory: null as null | ReturnType<typeof useChatStore.getState>['setHistory'],
   processPlanModeMessage: null as null | ReturnType<typeof usePlanModeStore.getState>['processMessage'],
@@ -75,6 +76,11 @@ function setupSocket() {
           storeRefs.setGitInfo?.(data.sessionId, { branch: data.branch, worktree: data.worktree });
         }
         break;
+      case 'branches':
+        if (data.sessionId) {
+          storeRefs.setBranches?.(data.sessionId, { current: data.current, local: data.local, remote: data.remote });
+        }
+        break;
     }
   };
 
@@ -98,6 +104,7 @@ export function useWebSocket() {
   const setActiveSession = useSessionStore((s) => s.setActiveSession);
   const removeSession = useSessionStore((s) => s.removeSession);
   const setGitInfo = useSessionStore((s) => s.setGitInfo);
+  const setBranches = useSessionStore((s) => s.setBranches);
   const addMessage = useChatStore((s) => s.addMessage);
   const setHistory = useChatStore((s) => s.setHistory);
   const processPlanModeMessage = usePlanModeStore((s) => s.processMessage);
@@ -108,6 +115,7 @@ export function useWebSocket() {
   storeRefs.setActiveSession = setActiveSession;
   storeRefs.removeSession = removeSession;
   storeRefs.setGitInfo = setGitInfo;
+  storeRefs.setBranches = setBranches;
   storeRefs.addMessage = addMessage;
   storeRefs.setHistory = setHistory;
   storeRefs.processPlanModeMessage = processPlanModeMessage;
@@ -148,11 +156,21 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'fetch-git-info', serverId, sessionId }));
   }, []);
 
+  const listBranches = useCallback((serverId: string, sessionId: string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'list-branches', serverId, sessionId }));
+  }, []);
+
+  const switchBranch = useCallback((serverId: string, sessionId: string, branch: string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'switch-branch', serverId, sessionId, branch }));
+  }, []);
+
   const deleteSession = useCallback((serverId: string, sessionId: string) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: 'delete-session', serverId, sessionId }));
     storeRefs.removeSession?.(serverId, sessionId);
   }, []);
 
-  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession, fetchGitInfo };
+  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch };
 }

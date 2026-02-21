@@ -19,6 +19,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { CreateSessionDialog } from './CreateSessionDialog';
+import { BranchSwitcher } from './BranchSwitcher';
 import { useSessionStore, type Session } from '@/stores/session-store';
 import { useServerStore } from '@/stores/server-store';
 import { cn } from '@/lib/utils';
@@ -30,9 +31,11 @@ interface SessionBarProps {
   onCreateSession: (name: string, workingDir: string | null) => void;
   onDeleteSession: (sessionId: string) => void;
   onSelectSession: (sessionId: string) => void;
+  onListBranches: (serverId: string, sessionId: string) => void;
+  onSwitchBranch: (serverId: string, sessionId: string, branch: string) => void;
 }
 
-export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelectSession }: SessionBarProps) {
+export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelectSession, onListBranches, onSwitchBranch }: SessionBarProps) {
   const sessions = useSessionStore((s) => s.sessions[serverId]) ?? EMPTY_SESSIONS;
   const activeSessionId = useSessionStore((s) => s.activeSessionId[serverId]);
   const connectionStatus = useSessionStore((s) => s.connectionStatus);
@@ -42,6 +45,7 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [branchSessionId, setBranchSessionId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
 
@@ -119,7 +123,14 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
                   <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', statusDot(session.id))} />
                   {session.name}
                   {gitInfo[session.id] && (
-                    <span className="flex items-center gap-0.5 opacity-70">
+                    <span
+                      role="button"
+                      className="flex items-center gap-0.5 opacity-70 hover:opacity-100 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setBranchSessionId(session.id);
+                      }}
+                    >
                       <GitBranch className="h-3 w-3" />
                       {gitInfo[session.id].branch}
                     </span>
@@ -160,6 +171,17 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
         defaultWorkingDir={server?.defaultWorkingDir}
         serverId={serverId}
       />
+
+      {branchSessionId && (
+        <BranchSwitcher
+          open={!!branchSessionId}
+          onOpenChange={(open) => { if (!open) setBranchSessionId(null); }}
+          sessionId={branchSessionId}
+          serverId={serverId}
+          onListBranches={onListBranches}
+          onSwitchBranch={onSwitchBranch}
+        />
+      )}
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>

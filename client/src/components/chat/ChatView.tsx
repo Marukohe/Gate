@@ -14,9 +14,11 @@ interface ChatViewProps {
   onCreateSession: (name: string, workingDir: string | null) => void;
   onDeleteSession: (sessionId: string) => void;
   onSelectSession: (sessionId: string) => void;
+  onListBranches: (serverId: string, sessionId: string) => void;
+  onSwitchBranch: (serverId: string, sessionId: string, branch: string) => void;
 }
 
-export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSession }: ChatViewProps) {
+export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSession, onListBranches, onSwitchBranch }: ChatViewProps) {
   const activeServerId = useServerStore((s) => s.activeServerId);
   const activeSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
   const connectionStatus = useSessionStore((s) => activeSessionId ? s.connectionStatus[activeSessionId] : undefined);
@@ -44,6 +46,8 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
         onCreateSession={onCreateSession}
         onDeleteSession={onDeleteSession}
         onSelectSession={onSelectSession}
+        onListBranches={onListBranches}
+        onSwitchBranch={onSwitchBranch}
       />
       {connectionStatus === 'error' && connectionError && (
         <div className="flex items-center gap-2 border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">

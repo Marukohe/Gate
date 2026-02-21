@@ -5,16 +5,17 @@ import { StreamJsonParser, type ParsedMessage } from './stream-json-parser.js';
 import type { Database } from './db.js';
 
 interface ClientMessage {
-  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info';
+  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch';
   serverId: string;
   sessionId?: string;
   sessionName?: string;
   workingDir?: string;
   text?: string;
+  branch?: string;
 }
 
 interface ServerMessage {
-  type: 'message' | 'status' | 'history' | 'sessions' | 'git-info';
+  type: 'message' | 'status' | 'history' | 'sessions' | 'git-info' | 'branches';
   serverId: string;
   sessionId?: string | null;
   [key: string]: any;
@@ -207,6 +208,26 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
             if (gitInfo) {
               broadcast(wss, { type: 'git-info', serverId: msg.serverId, sessionId: msg.sessionId, ...gitInfo });
             }
+            break;
+          }
+
+          case 'list-branches': {
+            if (!msg.sessionId) return;
+            const brSession = db.getSession(msg.sessionId);
+            if (!brSession?.workingDir) return;
+            if (!sshManager.isConnected(msg.serverId)) return;
+            const branches = await sshManager.listBranches(msg.serverId, brSession.workingDir);
+            ws.send(JSON.stringify({ type: 'branches', serverId: msg.serverId, sessionId: msg.sessionId, ...branches }));
+            break;
+          }
+
+          case 'switch-branch': {
+            if (!msg.sessionId || !msg.branch) return;
+            const swSession = db.getSession(msg.sessionId);
+            if (!swSession?.workingDir) return;
+            if (!sshManager.isConnected(msg.serverId)) return;
+            const newInfo = await sshManager.switchBranch(msg.serverId, swSession.workingDir, msg.branch);
+            broadcast(wss, { type: 'git-info', serverId: msg.serverId, sessionId: msg.sessionId, ...newInfo });
             break;
           }
         }

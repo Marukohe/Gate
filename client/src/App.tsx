@@ -17,7 +17,7 @@ function App() {
   const setSessions = useSessionStore((s) => s.setSessions);
   const setActiveSession = useSessionStore((s) => s.setActiveSession);
 
-  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo } = useWebSocket();
+  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch } = useWebSocket();
 
   useEffect(() => {
     fetch('/api/servers')
@@ -106,6 +106,8 @@ function App() {
             onCreateSession={handleCreateSession}
             onDeleteSession={handleDeleteSession}
             onSelectSession={handleSelectSession}
+            onListBranches={listBranches}
+            onSwitchBranch={switchBranch}
           />
         }
         onAddServer={() => setServerDialogOpen(true)}

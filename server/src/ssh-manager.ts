@@ -26,6 +26,12 @@ export interface GitInfo {
   worktree: string;
 }
 
+export interface BranchList {
+  current: string;
+  local: string[];
+  remote: string[];
+}
+
 function buildClaudeCmd(resumeSessionId?: string | null, workingDir?: string | null): string {
   const resumeFlag = resumeSessionId ? ` --resume '${resumeSessionId}'` : '';
   const cdPrefix = workingDir ? `cd '${workingDir}' && ` : '';
@@ -176,6 +182,28 @@ export class SSHManager extends EventEmitter {
     } catch {
       return null;
     }
+  }
+
+  /** List local and remote branches. */
+  async listBranches(serverId: string, workingDir: string): Promise<BranchList> {
+    const current = await this.execCommand(serverId,
+      `cd '${workingDir}' && git rev-parse --abbrev-ref HEAD`);
+    const localRaw = await this.execCommand(serverId,
+      `cd '${workingDir}' && git branch --format='%(refname:short)'`);
+    const remoteRaw = await this.execCommand(serverId,
+      `cd '${workingDir}' && git branch -r --format='%(refname:short)'`);
+    const local = localRaw.split('\n').filter(Boolean);
+    // Filter out HEAD pointers like "origin/HEAD"
+    const remote = remoteRaw.split('\n').filter((b) => b && !b.endsWith('/HEAD'));
+    return { current, local, remote };
+  }
+
+  /** Switch branch and return the new git info. */
+  async switchBranch(serverId: string, workingDir: string, branch: string): Promise<GitInfo> {
+    await this.execCommand(serverId, `cd '${workingDir}' && git checkout '${branch}'`);
+    const info = await this.fetchGitInfo(serverId, workingDir);
+    if (!info) throw new Error('Failed to read git info after checkout');
+    return info;
   }
 
   isConnected(serverId: string): boolean {
