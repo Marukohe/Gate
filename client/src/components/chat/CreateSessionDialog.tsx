@@ -109,7 +109,7 @@ export function CreateSessionDialog({ open, onOpenChange, onSubmit, defaultName,
         onOpenChange={setPickerOpen}
         onSelect={setWorkingDir}
         fetchDirs={fetchDirs}
-        initialPath={workingDir || defaultWorkingDir || '~'}
+        initialPath={workingDir || defaultWorkingDir || ''}
       />
     </>
   );

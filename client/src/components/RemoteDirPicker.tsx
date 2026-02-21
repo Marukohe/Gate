@@ -25,7 +25,7 @@ interface RemoteDirPickerProps {
   initialPath?: string;
 }
 
-export function RemoteDirPicker({ open, onOpenChange, onSelect, fetchDirs, initialPath = '~' }: RemoteDirPickerProps) {
+export function RemoteDirPicker({ open, onOpenChange, onSelect, fetchDirs, initialPath = '' }: RemoteDirPickerProps) {
   const [currentPath, setCurrentPath] = useState(initialPath);
   const [inputPath, setInputPath] = useState(initialPath);
   const [directories, setDirectories] = useState<string[]>([]);
@@ -50,7 +50,7 @@ export function RemoteDirPicker({ open, onOpenChange, onSelect, fetchDirs, initi
   useEffect(() => {
     if (open) {
       setError(null);
-      navigate(initialPath || '~');
+      navigate(initialPath || '');
     }
   }, [open, initialPath, navigate]);
 

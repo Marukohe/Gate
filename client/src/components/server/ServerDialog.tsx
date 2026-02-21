@@ -124,7 +124,7 @@ export function ServerDialog({ open, onOpenChange }: ServerDialogProps) {
         onOpenChange={setPickerOpen}
         onSelect={setDefaultWorkingDir}
         fetchDirs={fetchDirs}
-        initialPath={defaultWorkingDir || '~'}
+        initialPath={defaultWorkingDir || ''}
       />
     </>
   );

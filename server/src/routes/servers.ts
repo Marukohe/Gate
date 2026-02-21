@@ -39,7 +39,7 @@ export function createServerRoutes(db: Database): Router {
   router.post('/:id/browse', async (req, res) => {
     const server = db.getServer(req.params.id);
     if (!server) return res.status(404).json({ error: 'Server not found' });
-    const dirPath: string = req.body.path || '~';
+    const dirPath: string = req.body.path || '$HOME';
     try {
       const result = await listRemoteDirectory({
         host: server.host,

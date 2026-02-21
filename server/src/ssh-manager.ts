@@ -32,10 +32,18 @@ export interface BranchList {
   remote: string[];
 }
 
+/** Return a shell-safe cd expression. Replaces leading ~ with $HOME so it works unquoted. */
+function shellCd(dir: string): string {
+  if (dir === '~' || dir.startsWith('~/')) {
+    return `cd $HOME${dir.slice(1)}`;
+  }
+  return `cd '${dir}'`;
+}
+
 function buildClaudeCmd(resumeSessionId?: string | null, workingDir?: string | null): string {
   const resumeFlag = resumeSessionId ? ` --resume '${resumeSessionId}'` : '';
-  const cdPrefix = workingDir ? `cd '${workingDir}' && ` : '';
-  // Use double quotes for bash -lc to allow single quotes inside (cd path, --resume id)
+  const cdPrefix = workingDir ? `${shellCd(workingDir)} && ` : '';
+  // Use double quotes for bash -lc to allow single quotes inside (--resume id)
   return `bash -lc "${cdPrefix}claude -p${resumeFlag} ${CLAUDE_BASE_ARGS}"`;
 }
 
@@ -174,7 +182,7 @@ export class SSHManager extends EventEmitter {
   /** Fetch git branch and worktree root for a directory. */
   async fetchGitInfo(serverId: string, workingDir: string): Promise<GitInfo | null> {
     try {
-      const cmd = `cd '${workingDir}' && git rev-parse --abbrev-ref HEAD && git rev-parse --show-toplevel`;
+      const cmd = `${shellCd(workingDir)} && git rev-parse --abbrev-ref HEAD && git rev-parse --show-toplevel`;
       const output = await this.execCommand(serverId, cmd);
       const lines = output.split('\n');
       if (lines.length < 2 || !lines[0]) return null;
@@ -186,12 +194,13 @@ export class SSHManager extends EventEmitter {
 
   /** List local and remote branches. */
   async listBranches(serverId: string, workingDir: string): Promise<BranchList> {
+    const cd = shellCd(workingDir);
     const current = await this.execCommand(serverId,
-      `cd '${workingDir}' && git rev-parse --abbrev-ref HEAD`);
+      `${cd} && git rev-parse --abbrev-ref HEAD`);
     const localRaw = await this.execCommand(serverId,
-      `cd '${workingDir}' && git branch --format='%(refname:short)'`);
+      `${cd} && git branch --format='%(refname:short)'`);
     const remoteRaw = await this.execCommand(serverId,
-      `cd '${workingDir}' && git branch -r --format='%(refname:short)'`);
+      `${cd} && git branch -r --format='%(refname:short)'`);
     const local = localRaw.split('\n').filter(Boolean);
     // Filter out HEAD pointers like "origin/HEAD"
     const remote = remoteRaw.split('\n').filter((b) => b && !b.endsWith('/HEAD'));
@@ -200,7 +209,7 @@ export class SSHManager extends EventEmitter {
 
   /** Switch branch and return the new git info. */
   async switchBranch(serverId: string, workingDir: string, branch: string): Promise<GitInfo> {
-    await this.execCommand(serverId, `cd '${workingDir}' && git checkout '${branch}'`);
+    await this.execCommand(serverId, `${shellCd(workingDir)} && git checkout '${branch}'`);
     const info = await this.fetchGitInfo(serverId, workingDir);
     if (!info) throw new Error('Failed to read git info after checkout');
     return info;

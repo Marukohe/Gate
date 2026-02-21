@@ -47,9 +47,19 @@ export async function listRemoteDirectory(config: BrowseConfig, dirPath: string)
       client.connect(connectConfig);
     });
 
+    // Expand ~ to $HOME since single-quoted cd won't do tilde expansion;
+    // $HOME must remain unquoted so the shell resolves it.
+    let cdExpr: string;
+    if (dirPath === '~' || dirPath === '$HOME') {
+      cdExpr = 'cd $HOME';
+    } else if (dirPath.startsWith('~/')) {
+      cdExpr = `cd $HOME${dirPath.slice(1)}`;
+    } else {
+      cdExpr = `cd '${dirPath}'`;
+    }
     // pwd gives the resolved absolute path; find lists immediate subdirectories
     // Run directly via exec (no bash -lc wrapper) to avoid single-quote nesting issues
-    const cmd = `cd '${dirPath}' && pwd && find . -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sed 's|^\\./||' | LC_ALL=C sort`;
+    const cmd = `${cdExpr} && pwd && find . -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sed 's|^\\./||' | LC_ALL=C sort`;
 
     const output = await new Promise<string>((resolve, reject) => {
       client.exec(cmd, (err, channel) => {

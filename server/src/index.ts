@@ -25,7 +25,7 @@ app.post('/api/browse', async (req, res) => {
   try {
     const result = await listRemoteDirectory(
       { host, port: port ?? 22, username, authType, password, privateKeyPath },
-      dirPath || '~',
+      dirPath || '$HOME',
     );
     res.json(result);
   } catch (err: any) {
