@@ -22,7 +22,7 @@ function nextBackoff(): number {
 const storeRefs = {
   setConnectionStatus: null as null | ReturnType<typeof useSessionStore.getState>['setConnectionStatus'],
   setSessions: null as null | ReturnType<typeof useSessionStore.getState>['setSessions'],
-  addSession: null as null | ReturnType<typeof useSessionStore.getState>['addSession'],
+  setActiveSession: null as null | ReturnType<typeof useSessionStore.getState>['setActiveSession'],
   removeSession: null as null | ReturnType<typeof useSessionStore.getState>['removeSession'],
   addMessage: null as null | ReturnType<typeof useChatStore.getState>['addMessage'],
   setHistory: null as null | ReturnType<typeof useChatStore.getState>['setHistory'],
@@ -65,7 +65,9 @@ function setupSocket() {
         storeRefs.setSessions?.(data.serverId, data.sessions);
         break;
       case 'session-created':
-        storeRefs.addSession?.(data.serverId, data.session);
+        // Don't addSession — the 'sessions' broadcast already updated the full list.
+        // Just auto-select the newly created session.
+        storeRefs.setActiveSession?.(data.serverId, data.session.id);
         break;
     }
   };
@@ -87,7 +89,7 @@ let initialized = false;
 export function useWebSocket() {
   const setConnectionStatus = useSessionStore((s) => s.setConnectionStatus);
   const setSessions = useSessionStore((s) => s.setSessions);
-  const addSession = useSessionStore((s) => s.addSession);
+  const setActiveSession = useSessionStore((s) => s.setActiveSession);
   const removeSession = useSessionStore((s) => s.removeSession);
   const addMessage = useChatStore((s) => s.addMessage);
   const setHistory = useChatStore((s) => s.setHistory);
@@ -96,7 +98,7 @@ export function useWebSocket() {
   // Keep refs current so WebSocket handlers always use latest store functions
   storeRefs.setConnectionStatus = setConnectionStatus;
   storeRefs.setSessions = setSessions;
-  storeRefs.addSession = addSession;
+  storeRefs.setActiveSession = setActiveSession;
   storeRefs.removeSession = removeSession;
   storeRefs.addMessage = addMessage;
   storeRefs.setHistory = setHistory;

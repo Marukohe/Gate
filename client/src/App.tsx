@@ -16,7 +16,6 @@ function App() {
   const setServers = useServerStore((s) => s.setServers);
   const activeServerId = useServerStore((s) => s.activeServerId);
 
-  const sessions = useSessionStore((s) => activeServerId ? (s.sessions[activeServerId] ?? []) : []);
   const activeSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
   const setSessions = useSessionStore((s) => s.setSessions);
   const setActiveSession = useSessionStore((s) => s.setActiveSession);
@@ -33,7 +32,7 @@ function App() {
       .catch(() => {});
   }, [setServers]);
 
-  // Fetch sessions when server changes
+  // Fetch sessions when server changes, auto-select first session
   const prevServerRef = useRef<string | null>(null);
   useEffect(() => {
     if (!activeServerId) return;
@@ -45,23 +44,23 @@ function App() {
       .then((sessionList: any[]) => {
         setSessions(activeServerId, sessionList);
         if (sessionList.length > 0) {
-          // Auto-select first session
           setActiveSession(activeServerId, sessionList[0].id);
         } else {
-          // No sessions — create a default one
           createSession(activeServerId, 'Default');
         }
       })
       .catch(() => {});
   }, [activeServerId, setSessions, setActiveSession, createSession]);
 
-  // Auto-select newly created session when sessions list changes and no active session
+  // Auto-select newly created session (from WS 'session-created' event)
+  const sessions = useSessionStore((s) => activeServerId ? s.sessions[activeServerId] : undefined);
   useEffect(() => {
-    if (!activeServerId || sessions.length === 0) return;
-    if (!activeSessionId || !sessions.find((s) => s.id === activeSessionId)) {
+    if (!activeServerId || !sessions || sessions.length === 0) return;
+    const currentActive = useSessionStore.getState().activeSessionId[activeServerId];
+    if (!currentActive || !sessions.find((s) => s.id === currentActive)) {
       setActiveSession(activeServerId, sessions[0].id);
     }
-  }, [activeServerId, sessions, activeSessionId, setActiveSession]);
+  }, [activeServerId, sessions, setActiveSession]);
 
   // Connect when activeSessionId changes
   const prevSessionRef = useRef<string | undefined>(undefined);

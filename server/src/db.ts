@@ -132,8 +132,8 @@ export function createDb(dbPath: string): Database {
       const id = randomUUID();
       const now = Date.now();
       db.prepare(`
-        INSERT INTO sessions (id, serverId, name, createdAt, lastActiveAt)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO sessions (id, serverId, name, tmuxSession, createdAt, lastActiveAt)
+        VALUES (?, ?, ?, '', ?, ?)
       `).run(id, serverId, name, now, now);
       return { id, serverId, name, claudeSessionId: null, createdAt: now, lastActiveAt: now };
     },

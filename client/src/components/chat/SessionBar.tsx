@@ -21,6 +21,8 @@ import {
 import { useSessionStore, type Session } from '@/stores/session-store';
 import { cn } from '@/lib/utils';
 
+const EMPTY_SESSIONS: Session[] = [];
+
 interface SessionBarProps {
   serverId: string;
   onCreateSession: (name: string) => void;
@@ -29,7 +31,7 @@ interface SessionBarProps {
 }
 
 export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelectSession }: SessionBarProps) {
-  const sessions = useSessionStore((s) => s.sessions[serverId] ?? []);
+  const sessions = useSessionStore((s) => s.sessions[serverId]) ?? EMPTY_SESSIONS;
   const activeSessionId = useSessionStore((s) => s.activeSessionId[serverId]);
   const connectionStatus = useSessionStore((s) => s.connectionStatus);
 
