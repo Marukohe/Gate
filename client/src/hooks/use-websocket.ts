@@ -2,6 +2,7 @@ import { useEffect, useCallback } from 'react';
 import { useSessionStore } from '../stores/session-store';
 import { useChatStore } from '../stores/chat-store';
 import { usePlanModeStore } from '../stores/plan-mode-store';
+import { usePlanStore } from '../stores/plan-store';
 
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -51,6 +52,10 @@ function setupSocket() {
         if (data.sessionId) {
           storeRefs.addMessage?.(data.sessionId, data.message);
           storeRefs.processPlanModeMessage?.(data.sessionId, data.message);
+          // Auto-extract plans from assistant messages with checklists
+          if (data.message.type === 'assistant' && usePlanModeStore.getState().phase === 'idle') {
+            usePlanStore.getState().autoExtractPlan(data.sessionId, data.message.content);
+          }
         }
         break;
       case 'status':
@@ -61,6 +66,17 @@ function setupSocket() {
       case 'history':
         if (data.sessionId) {
           storeRefs.setHistory?.(data.sessionId, data.messages);
+          // Scan history backwards for the most recent assistant checklist
+          if (Array.isArray(data.messages)) {
+            const planStore = usePlanStore.getState();
+            for (let i = data.messages.length - 1; i >= 0; i--) {
+              const msg = data.messages[i];
+              if (msg.type === 'assistant' && msg.content) {
+                planStore.autoExtractPlan(data.sessionId, msg.content);
+                if (usePlanStore.getState().autoExtractedPlanIds[data.sessionId]) break;
+              }
+            }
+          }
         }
         break;
       case 'sessions':

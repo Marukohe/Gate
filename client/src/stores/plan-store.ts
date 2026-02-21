@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { parseMarkdownChecklist } from '@/lib/plan-parser';
+import { useUIStore } from './ui-store';
 
 export interface PlanStep {
   id: string;
@@ -21,10 +23,12 @@ export interface Plan {
 interface PlanStore {
   plans: Record<string, Plan[]>; // keyed by sessionId
   activePlanId: string | null;
+  autoExtractedPlanIds: Record<string, string>; // sessionId → planId
   addPlan: (sessionId: string, plan: Plan) => void;
   updatePlan: (sessionId: string, planId: string, updates: Partial<Plan>) => void;
   toggleStep: (sessionId: string, planId: string, stepId: string) => void;
   setActivePlan: (planId: string | null) => void;
+  autoExtractPlan: (sessionId: string, content: string) => void;
 }
 
 function toggleStepInList(steps: PlanStep[], stepId: string): PlanStep[] {
@@ -35,9 +39,10 @@ function toggleStepInList(steps: PlanStep[], stepId: string): PlanStep[] {
   });
 }
 
-export const usePlanStore = create<PlanStore>((set) => ({
+export const usePlanStore = create<PlanStore>((set, get) => ({
   plans: {},
   activePlanId: null,
+  autoExtractedPlanIds: {},
   addPlan: (sessionId, plan) => set((s) => ({
     plans: {
       ...s.plans,
@@ -61,4 +66,52 @@ export const usePlanStore = create<PlanStore>((set) => ({
     },
   })),
   setActivePlan: (planId) => set({ activePlanId: planId }),
+  autoExtractPlan: (sessionId, content) => {
+    const { title, steps } = parseMarkdownChecklist(content);
+    if (steps.length < 2) return;
+
+    const state = get();
+    const existingPlanId = state.autoExtractedPlanIds[sessionId];
+
+    if (existingPlanId) {
+      // Update the existing auto-extracted plan
+      set((s) => ({
+        plans: {
+          ...s.plans,
+          [sessionId]: (s.plans[sessionId] ?? []).map((p) =>
+            p.id === existingPlanId
+              ? { ...p, title, steps, content, updatedAt: Date.now() }
+              : p
+          ),
+        },
+        activePlanId: existingPlanId,
+      }));
+    } else {
+      // Create a new plan
+      const planId = crypto.randomUUID();
+      const plan: Plan = {
+        id: planId,
+        sessionId,
+        title,
+        content,
+        steps,
+        status: 'active',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      set((s) => ({
+        plans: {
+          ...s.plans,
+          [sessionId]: [...(s.plans[sessionId] ?? []), plan],
+        },
+        activePlanId: planId,
+        autoExtractedPlanIds: {
+          ...s.autoExtractedPlanIds,
+          [sessionId]: planId,
+        },
+      }));
+    }
+
+    useUIStore.getState().setPlanPanelOpen(true);
+  },
 }));
