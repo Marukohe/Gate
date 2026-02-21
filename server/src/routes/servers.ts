@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { Database } from '../db.js';
+import { listRemoteDirectory } from '../ssh-browse.js';
 
 export function createServerRoutes(db: Database): Router {
   const router = Router();
@@ -15,11 +16,11 @@ export function createServerRoutes(db: Database): Router {
   });
 
   router.post('/', (req, res) => {
-    const { name, host, port, username, authType, password, privateKeyPath } = req.body;
+    const { name, host, port, username, authType, password, privateKeyPath, defaultWorkingDir } = req.body;
     if (!name || !host || !username || !authType) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
-    const server = db.createServer({ name, host, port: port ?? 22, username, authType, password, privateKeyPath });
+    const server = db.createServer({ name, host, port: port ?? 22, username, authType, password, privateKeyPath, defaultWorkingDir });
     res.status(201).json(server);
   });
 
@@ -35,6 +36,25 @@ export function createServerRoutes(db: Database): Router {
     res.status(204).end();
   });
 
+  router.post('/:id/browse', async (req, res) => {
+    const server = db.getServer(req.params.id);
+    if (!server) return res.status(404).json({ error: 'Server not found' });
+    const dirPath: string = req.body.path || '~';
+    try {
+      const result = await listRemoteDirectory({
+        host: server.host,
+        port: server.port,
+        username: server.username,
+        authType: server.authType as 'password' | 'privateKey',
+        password: server.password,
+        privateKeyPath: server.privateKeyPath,
+      }, dirPath);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   router.get('/:id/sessions', (req, res) => {
     res.json(db.listSessions(req.params.id));
   });
@@ -42,9 +62,9 @@ export function createServerRoutes(db: Database): Router {
   router.post('/:id/sessions', (req, res) => {
     const server = db.getServer(req.params.id);
     if (!server) return res.status(404).json({ error: 'Server not found' });
-    const { name } = req.body;
+    const { name, workingDir } = req.body;
     if (!name) return res.status(400).json({ error: 'Missing name' });
-    const session = db.createSession(server.id, name);
+    const session = db.createSession(server.id, name, workingDir || null);
     res.status(201).json(session);
   });
 

@@ -5,8 +5,14 @@ export interface Session {
   serverId: string;
   name: string;
   claudeSessionId: string | null;
+  workingDir: string | null;
   createdAt: number;
   lastActiveAt: number;
+}
+
+export interface GitInfo {
+  branch: string;
+  worktree: string;
 }
 
 type ConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'error';
@@ -16,12 +22,14 @@ interface SessionStore {
   activeSessionId: Record<string, string>;      // serverId → active sessionId
   connectionStatus: Record<string, ConnectionStatus>;  // sessionId → status
   connectionError: Record<string, string>;      // sessionId → error
+  gitInfo: Record<string, GitInfo>;             // sessionId → git info
 
   setSessions: (serverId: string, sessions: Session[]) => void;
   addSession: (serverId: string, session: Session) => void;
   removeSession: (serverId: string, sessionId: string) => void;
   setActiveSession: (serverId: string, sessionId: string) => void;
   setConnectionStatus: (sessionId: string, status: ConnectionStatus, error?: string) => void;
+  setGitInfo: (sessionId: string, info: GitInfo) => void;
   getActiveSessionId: (serverId: string | null) => string | undefined;
 }
 
@@ -30,6 +38,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   activeSessionId: {},
   connectionStatus: {},
   connectionError: {},
+  gitInfo: {},
 
   setSessions: (serverId, sessions) => set((s) => ({
     sessions: { ...s.sessions, [serverId]: sessions },
@@ -70,6 +79,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       : status !== 'error'
         ? { ...s.connectionError, [sessionId]: '' }
         : s.connectionError,
+  })),
+
+  setGitInfo: (sessionId, info) => set((s) => ({
+    gitInfo: { ...s.gitInfo, [sessionId]: info },
   })),
 
   getActiveSessionId: (serverId) => {

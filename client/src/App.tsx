@@ -17,7 +17,7 @@ function App() {
   const setSessions = useSessionStore((s) => s.setSessions);
   const setActiveSession = useSessionStore((s) => s.setActiveSession);
 
-  const { connectToSession, sendInput, createSession, deleteSession } = useWebSocket();
+  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo } = useWebSocket();
 
   useEffect(() => {
     fetch('/api/servers')
@@ -65,6 +65,15 @@ function App() {
     connectToSession(activeServerId, activeSessionId);
   }, [activeServerId, activeSessionId, connectToSession]);
 
+  // Periodically refresh git info for the active session
+  useEffect(() => {
+    if (!activeServerId || !activeSessionId) return;
+    const interval = setInterval(() => {
+      fetchGitInfo(activeServerId, activeSessionId);
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [activeServerId, activeSessionId, fetchGitInfo]);
+
   const addMessage = useChatStore((s) => s.addMessage);
 
   const handleSend = useCallback((text: string) => {
@@ -73,9 +82,9 @@ function App() {
     sendInput(activeServerId, activeSessionId, text);
   }, [activeServerId, activeSessionId, sendInput, addMessage]);
 
-  const handleCreateSession = useCallback((name: string) => {
+  const handleCreateSession = useCallback((name: string, workingDir: string | null) => {
     if (!activeServerId) return;
-    createSession(activeServerId, name);
+    createSession(activeServerId, name, workingDir);
   }, [activeServerId, createSession]);
 
   const handleDeleteSession = useCallback((sessionId: string) => {

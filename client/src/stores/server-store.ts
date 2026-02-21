@@ -9,6 +9,7 @@ export interface Server {
   authType: 'password' | 'privateKey';
   password?: string;
   privateKeyPath?: string;
+  defaultWorkingDir?: string;
   createdAt: number;
 }
 

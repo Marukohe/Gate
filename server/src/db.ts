@@ -10,6 +10,7 @@ export interface Server {
   authType: 'password' | 'privateKey';
   password?: string;
   privateKeyPath?: string;
+  defaultWorkingDir?: string;
   createdAt: number;
 }
 
@@ -18,6 +19,7 @@ export interface Session {
   serverId: string;
   name: string;
   claudeSessionId: string | null;
+  workingDir: string | null;
   createdAt: number;
   lastActiveAt: number;
 }
@@ -41,7 +43,7 @@ export interface Database {
   listServers(): Server[];
   updateServer(id: string, updates: Partial<CreateServerInput>): void;
   deleteServer(id: string): void;
-  createSession(serverId: string, name: string): Session;
+  createSession(serverId: string, name: string, workingDir?: string | null): Session;
   getSession(id: string): Session | undefined;
   listSessions(serverId: string): Session[];
   deleteSession(id: string): void;
@@ -62,6 +64,8 @@ export function createDb(dbPath: string): Database {
   // Migrations
   try { db.exec('ALTER TABLE sessions ADD COLUMN claudeSessionId TEXT'); } catch { /* already exists */ }
   try { db.exec("ALTER TABLE sessions ADD COLUMN name TEXT DEFAULT 'Default'"); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE sessions ADD COLUMN workingDir TEXT'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE servers ADD COLUMN defaultWorkingDir TEXT'); } catch { /* already exists */ }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS servers (
@@ -73,6 +77,7 @@ export function createDb(dbPath: string): Database {
       authType TEXT NOT NULL,
       password TEXT,
       privateKeyPath TEXT,
+      defaultWorkingDir TEXT,
       createdAt INTEGER NOT NULL
     );
 
@@ -82,6 +87,7 @@ export function createDb(dbPath: string): Database {
       tmuxSession TEXT NOT NULL DEFAULT '',
       name TEXT NOT NULL DEFAULT 'Default',
       claudeSessionId TEXT,
+      workingDir TEXT,
       createdAt INTEGER NOT NULL,
       lastActiveAt INTEGER NOT NULL
     );
@@ -102,9 +108,9 @@ export function createDb(dbPath: string): Database {
       const id = randomUUID();
       const createdAt = Date.now();
       db.prepare(`
-        INSERT INTO servers (id, name, host, port, username, authType, password, privateKeyPath, createdAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, input.name, input.host, input.port, input.username, input.authType, input.password ?? null, input.privateKeyPath ?? null, createdAt);
+        INSERT INTO servers (id, name, host, port, username, authType, password, privateKeyPath, defaultWorkingDir, createdAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, input.name, input.host, input.port, input.username, input.authType, input.password ?? null, input.privateKeyPath ?? null, input.defaultWorkingDir ?? null, createdAt);
       return { id, ...input, createdAt };
     },
 
@@ -128,14 +134,15 @@ export function createDb(dbPath: string): Database {
       db.prepare('DELETE FROM servers WHERE id = ?').run(id);
     },
 
-    createSession(serverId, name) {
+    createSession(serverId, name, workingDir?) {
       const id = randomUUID();
       const now = Date.now();
+      const dir = workingDir ?? null;
       db.prepare(`
-        INSERT INTO sessions (id, serverId, name, tmuxSession, createdAt, lastActiveAt)
-        VALUES (?, ?, ?, '', ?, ?)
-      `).run(id, serverId, name, now, now);
-      return { id, serverId, name, claudeSessionId: null, createdAt: now, lastActiveAt: now };
+        INSERT INTO sessions (id, serverId, name, tmuxSession, workingDir, createdAt, lastActiveAt)
+        VALUES (?, ?, ?, '', ?, ?, ?)
+      `).run(id, serverId, name, dir, now, now);
+      return { id, serverId, name, claudeSessionId: null, workingDir: dir, createdAt: now, lastActiveAt: now };
     },
 
     getSession(id) {

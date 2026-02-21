@@ -21,9 +21,16 @@ interface SSHConnection {
 const CLAUDE_BASE_ARGS =
   '--output-format stream-json --input-format stream-json --verbose --dangerously-skip-permissions';
 
-function buildClaudeCmd(resumeSessionId?: string | null): string {
+export interface GitInfo {
+  branch: string;
+  worktree: string;
+}
+
+function buildClaudeCmd(resumeSessionId?: string | null, workingDir?: string | null): string {
   const resumeFlag = resumeSessionId ? ` --resume '${resumeSessionId}'` : '';
-  return `bash -lc 'claude -p${resumeFlag} ${CLAUDE_BASE_ARGS}'`;
+  const cdPrefix = workingDir ? `cd '${workingDir}' && ` : '';
+  // Use double quotes for bash -lc to allow single quotes inside (cd path, --resume id)
+  return `bash -lc "${cdPrefix}claude -p${resumeFlag} ${CLAUDE_BASE_ARGS}"`;
 }
 
 export class SSHManager extends EventEmitter {
@@ -70,7 +77,7 @@ export class SSHManager extends EventEmitter {
   }
 
   /** Launch Claude CLI in stream-json mode via SSH exec on a new channel. */
-  async startClaude(serverId: string, sessionId: string, resumeClaudeSessionId?: string | null): Promise<void> {
+  async startClaude(serverId: string, sessionId: string, resumeClaudeSessionId?: string | null, workingDir?: string | null): Promise<void> {
     const conn = this.connections.get(serverId);
     if (!conn) throw new Error(`No connection for server ${serverId}`);
 
@@ -81,7 +88,7 @@ export class SSHManager extends EventEmitter {
       conn.channels.delete(sessionId);
     }
 
-    const cmd = buildClaudeCmd(resumeClaudeSessionId);
+    const cmd = buildClaudeCmd(resumeClaudeSessionId, workingDir);
     const channel = await new Promise<ClientChannel>((resolve, reject) => {
       conn.client.exec(cmd, (err, ch) => {
         if (err) return reject(err);
@@ -140,6 +147,35 @@ export class SSHManager extends EventEmitter {
     conn.channels.clear();
     conn.client.end();
     this.connections.delete(serverId);
+  }
+
+  /** Run a one-shot command over SSH and return stdout. */
+  private async execCommand(serverId: string, cmd: string): Promise<string> {
+    const conn = this.connections.get(serverId);
+    if (!conn) throw new Error(`No connection for server ${serverId}`);
+
+    return new Promise((resolve, reject) => {
+      conn.client.exec(cmd, (err, channel) => {
+        if (err) return reject(err);
+        let stdout = '';
+        channel.on('data', (data: Buffer) => { stdout += data.toString(); });
+        channel.on('close', () => resolve(stdout.trim()));
+        channel.stderr.on('data', () => {}); // ignore stderr
+      });
+    });
+  }
+
+  /** Fetch git branch and worktree root for a directory. */
+  async fetchGitInfo(serverId: string, workingDir: string): Promise<GitInfo | null> {
+    try {
+      const cmd = `cd '${workingDir}' && git rev-parse --abbrev-ref HEAD && git rev-parse --show-toplevel`;
+      const output = await this.execCommand(serverId, cmd);
+      const lines = output.split('\n');
+      if (lines.length < 2 || !lines[0]) return null;
+      return { branch: lines[0], worktree: lines[1] };
+    } catch {
+      return null;
+    }
   }
 
   isConnected(serverId: string): boolean {

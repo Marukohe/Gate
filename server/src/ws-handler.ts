@@ -5,15 +5,16 @@ import { StreamJsonParser, type ParsedMessage } from './stream-json-parser.js';
 import type { Database } from './db.js';
 
 interface ClientMessage {
-  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session';
+  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info';
   serverId: string;
   sessionId?: string;
   sessionName?: string;
+  workingDir?: string;
   text?: string;
 }
 
 interface ServerMessage {
-  type: 'message' | 'status' | 'history' | 'sessions';
+  type: 'message' | 'status' | 'history' | 'sessions' | 'git-info';
   serverId: string;
   sessionId?: string | null;
   [key: string]: any;
@@ -125,8 +126,17 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
 
             // Resume previous Claude session if we have a session ID
             const resumeId = session.claudeSessionId ?? null;
-            await sshManager.startClaude(server.id, sessionId, resumeId);
+            await sshManager.startClaude(server.id, sessionId, resumeId, session.workingDir);
             ws.send(JSON.stringify({ type: 'status', serverId: server.id, sessionId, status: 'connected' }));
+
+            // Async fetch git info if session has a workingDir
+            if (session.workingDir) {
+              sshManager.fetchGitInfo(server.id, session.workingDir).then((info) => {
+                if (info) {
+                  broadcast(wss, { type: 'git-info', serverId: server.id, sessionId, ...info });
+                }
+              }).catch(() => {});
+            }
             break;
           }
 
@@ -166,7 +176,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
 
           case 'create-session': {
             const name = msg.sessionName || 'New Session';
-            const session = db.createSession(msg.serverId, name);
+            const session = db.createSession(msg.serverId, name, msg.workingDir || null);
             const sessions = db.listSessions(msg.serverId);
             broadcast(wss, { type: 'sessions', serverId: msg.serverId, sessions });
             // Also tell the sender which session was created
@@ -185,6 +195,18 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
             db.deleteSession(msg.sessionId);
             const sessions = db.listSessions(msg.serverId);
             broadcast(wss, { type: 'sessions', serverId: msg.serverId, sessions });
+            break;
+          }
+
+          case 'fetch-git-info': {
+            if (!msg.sessionId) return;
+            const gitSession = db.getSession(msg.sessionId);
+            if (!gitSession?.workingDir) return;
+            if (!sshManager.isConnected(msg.serverId)) return;
+            const gitInfo = await sshManager.fetchGitInfo(msg.serverId, gitSession.workingDir);
+            if (gitInfo) {
+              broadcast(wss, { type: 'git-info', serverId: msg.serverId, sessionId: msg.sessionId, ...gitInfo });
+            }
             break;
           }
         }

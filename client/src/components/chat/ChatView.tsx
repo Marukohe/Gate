@@ -11,7 +11,7 @@ const EMPTY_MESSAGES: ChatMessage[] = [];
 
 interface ChatViewProps {
   onSend: (text: string) => void;
-  onCreateSession: (name: string) => void;
+  onCreateSession: (name: string, workingDir: string | null) => void;
   onDeleteSession: (sessionId: string) => void;
   onSelectSession: (sessionId: string) => void;
 }

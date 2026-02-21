@@ -24,6 +24,7 @@ const storeRefs = {
   setSessions: null as null | ReturnType<typeof useSessionStore.getState>['setSessions'],
   setActiveSession: null as null | ReturnType<typeof useSessionStore.getState>['setActiveSession'],
   removeSession: null as null | ReturnType<typeof useSessionStore.getState>['removeSession'],
+  setGitInfo: null as null | ReturnType<typeof useSessionStore.getState>['setGitInfo'],
   addMessage: null as null | ReturnType<typeof useChatStore.getState>['addMessage'],
   setHistory: null as null | ReturnType<typeof useChatStore.getState>['setHistory'],
   processPlanModeMessage: null as null | ReturnType<typeof usePlanModeStore.getState>['processMessage'],
@@ -69,6 +70,11 @@ function setupSocket() {
         // Just auto-select the newly created session.
         storeRefs.setActiveSession?.(data.serverId, data.session.id);
         break;
+      case 'git-info':
+        if (data.sessionId) {
+          storeRefs.setGitInfo?.(data.sessionId, { branch: data.branch, worktree: data.worktree });
+        }
+        break;
     }
   };
 
@@ -91,6 +97,7 @@ export function useWebSocket() {
   const setSessions = useSessionStore((s) => s.setSessions);
   const setActiveSession = useSessionStore((s) => s.setActiveSession);
   const removeSession = useSessionStore((s) => s.removeSession);
+  const setGitInfo = useSessionStore((s) => s.setGitInfo);
   const addMessage = useChatStore((s) => s.addMessage);
   const setHistory = useChatStore((s) => s.setHistory);
   const processPlanModeMessage = usePlanModeStore((s) => s.processMessage);
@@ -100,6 +107,7 @@ export function useWebSocket() {
   storeRefs.setSessions = setSessions;
   storeRefs.setActiveSession = setActiveSession;
   storeRefs.removeSession = removeSession;
+  storeRefs.setGitInfo = setGitInfo;
   storeRefs.addMessage = addMessage;
   storeRefs.setHistory = setHistory;
   storeRefs.processPlanModeMessage = processPlanModeMessage;
@@ -130,9 +138,14 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'disconnect', serverId, sessionId }));
   }, []);
 
-  const createSession = useCallback((serverId: string, name: string) => {
+  const createSession = useCallback((serverId: string, name: string, workingDir?: string | null) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'create-session', serverId, sessionName: name }));
+    ws.send(JSON.stringify({ type: 'create-session', serverId, sessionName: name, workingDir: workingDir || undefined }));
+  }, []);
+
+  const fetchGitInfo = useCallback((serverId: string, sessionId: string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'fetch-git-info', serverId, sessionId }));
   }, []);
 
   const deleteSession = useCallback((serverId: string, sessionId: string) => {
@@ -141,5 +154,5 @@ export function useWebSocket() {
     storeRefs.removeSession?.(serverId, sessionId);
   }, []);
 
-  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession };
+  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession, fetchGitInfo };
 }

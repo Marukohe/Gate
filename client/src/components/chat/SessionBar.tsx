@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, GitBranch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -18,14 +18,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { CreateSessionDialog } from './CreateSessionDialog';
 import { useSessionStore, type Session } from '@/stores/session-store';
+import { useServerStore } from '@/stores/server-store';
 import { cn } from '@/lib/utils';
 
 const EMPTY_SESSIONS: Session[] = [];
 
 interface SessionBarProps {
   serverId: string;
-  onCreateSession: (name: string) => void;
+  onCreateSession: (name: string, workingDir: string | null) => void;
   onDeleteSession: (sessionId: string) => void;
   onSelectSession: (sessionId: string) => void;
 }
@@ -34,9 +36,12 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
   const sessions = useSessionStore((s) => s.sessions[serverId]) ?? EMPTY_SESSIONS;
   const activeSessionId = useSessionStore((s) => s.activeSessionId[serverId]);
   const connectionStatus = useSessionStore((s) => s.connectionStatus);
+  const gitInfo = useSessionStore((s) => s.gitInfo);
+  const server = useServerStore((s) => s.servers.find((sv) => sv.id === serverId));
 
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
 
@@ -113,6 +118,12 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
                 >
                   <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', statusDot(session.id))} />
                   {session.name}
+                  {gitInfo[session.id] && (
+                    <span className="flex items-center gap-0.5 opacity-70">
+                      <GitBranch className="h-3 w-3" />
+                      {gitInfo[session.id].branch}
+                    </span>
+                  )}
                 </button>
               )}
             </ContextMenuTrigger>
@@ -135,11 +146,20 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
           variant="ghost"
           size="icon"
           className="h-6 w-6 shrink-0"
-          onClick={() => onCreateSession(`Session ${sessions.length + 1}`)}
+          onClick={() => setCreateDialogOpen(true)}
         >
           <Plus className="h-3.5 w-3.5" />
         </Button>
       </div>
+
+      <CreateSessionDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onSubmit={onCreateSession}
+        defaultName={`Session ${sessions.length + 1}`}
+        defaultWorkingDir={server?.defaultWorkingDir}
+        serverId={serverId}
+      />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
