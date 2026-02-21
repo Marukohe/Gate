@@ -1,8 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { SessionBar } from './SessionBar';
+import { ToolActivityBlock } from './ToolActivityBlock';
+import { groupMessages } from './group-tools';
 import { useChatStore, type ChatMessage } from '@/stores/chat-store';
 import { useServerStore } from '@/stores/server-store';
 import { useSessionStore } from '@/stores/session-store';
@@ -25,6 +27,7 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
   const connectionError = useSessionStore((s) => activeSessionId ? s.connectionError[activeSessionId] : undefined);
   const isConnected = connectionStatus === 'connected';
   const messages = useChatStore((s) => activeSessionId ? (s.messages[activeSessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES);
+  const renderItems = useMemo(() => groupMessages(messages), [messages]);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -67,9 +70,11 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
               Waiting for Claude...
             </div>
           )}
-          {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} />
-          ))}
+          {renderItems.map((item, i) =>
+            item.kind === 'single'
+              ? <MessageBubble key={item.message.id} message={item.message} />
+              : <ToolActivityBlock key={item.items[0]?.call.id ?? i} group={item} />
+          )}
           <div ref={bottomRef} />
         </div>
       </div>

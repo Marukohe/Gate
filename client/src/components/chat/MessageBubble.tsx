@@ -1,7 +1,6 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from './CodeBlock';
-import { ToolCallCard } from './ToolCallCard';
 import { cn, stripLineNumbers } from '@/lib/utils';
 import type { ChatMessage } from '@/stores/chat-store';
 
@@ -10,10 +9,6 @@ interface MessageBubbleProps {
 }
 
 export function MessageBubble({ message }: MessageBubbleProps) {
-  if (message.type === 'tool_call' || message.type === 'tool_result') {
-    return <ToolCallCard message={message} />;
-  }
-
   if (message.type === 'system') {
     return (
       <div className="my-2 text-center text-xs text-muted-foreground">{message.content}</div>
