@@ -35,12 +35,12 @@ function getToolNames(items: MergedToolItem[]): string[] {
   return names;
 }
 
-function ToolLineItem({ item }: { item: MergedToolItem }) {
-  const [open, setOpen] = useState(false);
+function ToolLineItem({ item, defaultOpen }: { item: MergedToolItem; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen ?? false);
   const Icon = getToolIcon(item.call.toolName);
   const name = item.call.toolName ?? 'tool';
   const detail = item.call.toolDetail || item.call.content.slice(0, 100);
-  const hasResult = item.result !== null;
+  const isRunning = item.result === null && item.call.type === 'tool_call';
   const content = item.result?.content ?? item.call.content;
 
   return (
@@ -50,7 +50,7 @@ function ToolLineItem({ item }: { item: MergedToolItem }) {
         <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="font-medium text-foreground/80">{name}</span>
         <span className="truncate text-muted-foreground">{detail}</span>
-        {!hasResult && (
+        {isRunning && (
           <Loader2 className="ml-auto h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
         )}
       </CollapsibleTrigger>
@@ -86,7 +86,7 @@ export function ToolActivityBlock({ group }: ToolActivityBlockProps) {
         </CollapsibleTrigger>
         <CollapsibleContent className="border-l-2 border-muted ml-[11px] mt-0.5">
           {group.items.map((item, i) => (
-            <ToolLineItem key={item.call.id ?? i} item={item} />
+            <ToolLineItem key={item.call.id ?? i} item={item} defaultOpen={group.isUserBash} />
           ))}
         </CollapsibleContent>
       </Collapsible>
