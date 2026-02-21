@@ -1,15 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ChatView } from '@/components/chat/ChatView';
-import { PlanPanel } from '@/components/plan/PlanPanel';
 import { ServerDialog } from '@/components/server/ServerDialog';
 import { PlanModeOverlay } from '@/components/plan-mode/PlanModeOverlay';
 import { useServerStore } from '@/stores/server-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useChatStore } from '@/stores/chat-store';
-import { usePlanStore } from '@/stores/plan-store';
 import { useWebSocket } from '@/hooks/use-websocket';
-import { parseMarkdownChecklist } from '@/lib/plan-parser';
 
 function App() {
   const [serverDialogOpen, setServerDialogOpen] = useState(false);
@@ -19,9 +16,6 @@ function App() {
   const activeSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
   const setSessions = useSessionStore((s) => s.setSessions);
   const setActiveSession = useSessionStore((s) => s.setActiveSession);
-
-  const addPlan = usePlanStore((s) => s.addPlan);
-  const setActivePlan = usePlanStore((s) => s.setActivePlan);
 
   const { connectToSession, sendInput, createSession, deleteSession } = useWebSocket();
 
@@ -79,23 +73,6 @@ function App() {
     sendInput(activeServerId, activeSessionId, text);
   }, [activeServerId, activeSessionId, sendInput, addMessage]);
 
-  const handleExtractPlan = useCallback((content: string) => {
-    if (!activeSessionId) return;
-    const { title, steps } = parseMarkdownChecklist(content);
-    const plan = {
-      id: crypto.randomUUID(),
-      sessionId: activeSessionId,
-      title,
-      content,
-      steps,
-      status: 'active' as const,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-    addPlan(activeSessionId, plan);
-    setActivePlan(plan.id);
-  }, [activeSessionId, addPlan, setActivePlan]);
-
   const handleCreateSession = useCallback((name: string) => {
     if (!activeServerId) return;
     createSession(activeServerId, name);
@@ -117,13 +94,11 @@ function App() {
         chatView={
           <ChatView
             onSend={handleSend}
-            onExtractPlan={handleExtractPlan}
             onCreateSession={handleCreateSession}
             onDeleteSession={handleDeleteSession}
             onSelectSession={handleSelectSession}
           />
         }
-        planPanel={<PlanPanel onSendToChat={handleSend} />}
         onAddServer={() => setServerDialogOpen(true)}
       />
       <ServerDialog open={serverDialogOpen} onOpenChange={setServerDialogOpen} />

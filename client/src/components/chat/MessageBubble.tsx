@@ -2,16 +2,14 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from './CodeBlock';
 import { ToolCallCard } from './ToolCallCard';
-import { Button } from '@/components/ui/button';
 import { cn, stripLineNumbers } from '@/lib/utils';
 import type { ChatMessage } from '@/stores/chat-store';
 
 interface MessageBubbleProps {
   message: ChatMessage;
-  onExtractPlan?: (content: string) => void;
 }
 
-export function MessageBubble({ message, onExtractPlan }: MessageBubbleProps) {
+export function MessageBubble({ message }: MessageBubbleProps) {
   if (message.type === 'tool_call' || message.type === 'tool_result') {
     return <ToolCallCard message={message} />;
   }
@@ -52,16 +50,6 @@ export function MessageBubble({ message, onExtractPlan }: MessageBubbleProps) {
               {stripLineNumbers(message.content)}
             </ReactMarkdown>
           </div>
-        )}
-        {!isUser && message.content.includes('- [ ]') && onExtractPlan && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-2"
-            onClick={() => onExtractPlan(message.content)}
-          >
-            Extract to Plan Panel
-          </Button>
         )}
       </div>
     </div>

@@ -11,13 +11,12 @@ const EMPTY_MESSAGES: ChatMessage[] = [];
 
 interface ChatViewProps {
   onSend: (text: string) => void;
-  onExtractPlan?: (content: string) => void;
   onCreateSession: (name: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onSelectSession: (sessionId: string) => void;
 }
 
-export function ChatView({ onSend, onExtractPlan, onCreateSession, onDeleteSession, onSelectSession }: ChatViewProps) {
+export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSession }: ChatViewProps) {
   const activeServerId = useServerStore((s) => s.activeServerId);
   const activeSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
   const connectionStatus = useSessionStore((s) => activeSessionId ? s.connectionStatus[activeSessionId] : undefined);
@@ -65,7 +64,7 @@ export function ChatView({ onSend, onExtractPlan, onCreateSession, onDeleteSessi
             </div>
           )}
           {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} onExtractPlan={onExtractPlan} />
+            <MessageBubble key={msg.id} message={msg} />
           ))}
           <div ref={bottomRef} />
         </div>

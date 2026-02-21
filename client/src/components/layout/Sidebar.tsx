@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { Server, Plus, Circle, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -22,6 +21,23 @@ import { useServerStore, type Server as ServerType } from '@/stores/server-store
 import { useSessionStore } from '@/stores/session-store';
 import { cn } from '@/lib/utils';
 
+const AVATAR_COLORS = [
+  'bg-blue-600', 'bg-emerald-600', 'bg-violet-600', 'bg-amber-600',
+  'bg-rose-600', 'bg-cyan-600', 'bg-pink-600', 'bg-teal-600',
+];
+
+function getInitials(name: string): string {
+  const words = name.trim().split(/\s+/);
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+function getAvatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
 interface SidebarProps {
   onAddServer: () => void;
 }
@@ -33,18 +49,17 @@ export function Sidebar({ onAddServer }: SidebarProps) {
   const removeServer = useServerStore((s) => s.removeServer);
   const activeSessionIds = useSessionStore((s) => s.activeSessionId);
   const connectionStatus = useSessionStore((s) => s.connectionStatus);
-  const connectionError = useSessionStore((s) => s.connectionError);
 
   const [deleteTarget, setDeleteTarget] = useState<ServerType | null>(null);
 
-  const statusColor = (serverId: string) => {
+  const statusInfo = (serverId: string) => {
     const sessionId = activeSessionIds[serverId];
-    if (!sessionId) return 'text-muted-foreground';
+    if (!sessionId) return { color: 'bg-muted-foreground/40', label: '' };
     const status = connectionStatus[sessionId];
-    if (status === 'connected') return 'text-green-500';
-    if (status === 'connecting') return 'text-yellow-500';
-    if (status === 'error') return 'text-red-500';
-    return 'text-muted-foreground';
+    if (status === 'connected') return { color: 'bg-green-500', label: 'Connected' };
+    if (status === 'connecting') return { color: 'bg-yellow-500', label: 'Connecting...' };
+    if (status === 'error') return { color: 'bg-red-500', label: 'Error' };
+    return { color: 'bg-muted-foreground/40', label: '' };
   };
 
   const handleDelete = async () => {
@@ -57,53 +72,58 @@ export function Sidebar({ onAddServer }: SidebarProps) {
   };
 
   return (
-    <TooltipProvider delayDuration={0}>
-      <div className="flex h-full w-16 flex-col items-center gap-2 border-r bg-muted/40 py-4">
-        {servers.map((server) => (
-          <ContextMenu key={server.id}>
-            <Tooltip>
-              <ContextMenuTrigger asChild>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={activeServerId === server.id ? 'secondary' : 'ghost'}
-                    size="icon"
-                    className={cn('relative h-10 w-10')}
+    <>
+      <div className="flex h-full w-52 flex-col border-r bg-muted/40">
+        <div className="px-3 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          Servers
+        </div>
+        <div className="flex-1 overflow-y-auto px-2 space-y-1">
+          {servers.map((server) => {
+            const isActive = activeServerId === server.id;
+            const status = statusInfo(server.id);
+            return (
+              <ContextMenu key={server.id}>
+                <ContextMenuTrigger asChild>
+                  <button
+                    className={cn(
+                      'flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-sm transition-colors',
+                      isActive
+                        ? 'bg-accent text-accent-foreground'
+                        : 'text-foreground/70 hover:bg-accent/50 hover:text-accent-foreground'
+                    )}
                     onClick={() => setActiveServer(server.id)}
                   >
-                    <Server className="h-5 w-5" />
-                    <Circle className={cn('absolute -right-0.5 -top-0.5 h-2.5 w-2.5 fill-current', statusColor(server.id))} />
-                  </Button>
-                </TooltipTrigger>
-              </ContextMenuTrigger>
-              <TooltipContent side="right">
-                <p>{server.name}</p>
-                {(() => {
-                  const sid = activeSessionIds[server.id];
-                  return sid && connectionStatus[sid] === 'error' && connectionError[sid] ? (
-                    <p className="text-xs text-destructive">{connectionError[sid]}</p>
-                  ) : null;
-                })()}
-              </TooltipContent>
-            </Tooltip>
-            <ContextMenuContent>
-              <ContextMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={() => setDeleteTarget(server)}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </ContextMenuItem>
-            </ContextMenuContent>
-          </ContextMenu>
-        ))}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-10 w-10" onClick={onAddServer}>
-              <Plus className="h-5 w-5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">Add server</TooltipContent>
-        </Tooltip>
+                    <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold text-white', getAvatarColor(server.name))}>
+                      {getInitials(server.name)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium">{server.name}</div>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className={cn('inline-block h-1.5 w-1.5 rounded-full', status.color)} />
+                        <span className="truncate">{status.label || server.host}</span>
+                      </div>
+                    </div>
+                  </button>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => setDeleteTarget(server)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
+            );
+          })}
+        </div>
+        <div className="border-t p-4">
+          <Button variant="outline" className="h-10 w-full justify-start gap-2" onClick={onAddServer}>
+            <Plus className="h-4 w-4" />
+            Add Server
+          </Button>
+        </div>
       </div>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
@@ -122,6 +142,6 @@ export function Sidebar({ onAddServer }: SidebarProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </TooltipProvider>
+    </>
   );
 }

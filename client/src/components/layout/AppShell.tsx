@@ -6,15 +6,12 @@ import { useUIStore } from '@/stores/ui-store';
 
 interface AppShellProps {
   chatView: ReactNode;
-  planPanel: ReactNode;
   onAddServer: () => void;
 }
 
-export function AppShell({ chatView, planPanel, onAddServer }: AppShellProps) {
+export function AppShell({ chatView, onAddServer }: AppShellProps) {
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
-  const planPanelOpen = useUIStore((s) => s.planPanelOpen);
-  const setPlanPanelOpen = useUIStore((s) => s.setPlanPanelOpen);
 
   return (
     <div className="flex h-dvh">
@@ -33,25 +30,10 @@ export function AppShell({ chatView, planPanel, onAddServer }: AppShellProps) {
       {/* Main area */}
       <div className="flex flex-1 flex-col overflow-hidden">
         <TopBar />
-        <div className="flex flex-1 overflow-hidden">
-          {/* Chat view */}
-          <div className="flex-1 overflow-hidden">
-            {chatView}
-          </div>
-
-          {/* Desktop plan panel */}
-          <div className="hidden w-80 border-l lg:block">
-            {planPanel}
-          </div>
+        <div className="flex-1 overflow-hidden">
+          {chatView}
         </div>
       </div>
-
-      {/* Mobile plan panel drawer */}
-      <Sheet open={planPanelOpen} onOpenChange={setPlanPanelOpen}>
-        <SheetContent side="right" className="w-full p-0 sm:w-96 lg:hidden">
-          {planPanel}
-        </SheetContent>
-      </Sheet>
     </div>
   );
 }
