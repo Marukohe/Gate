@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Plus, GitBranch } from 'lucide-react';
+import { Plus, GitBranch, ClipboardList } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -22,6 +22,8 @@ import { CreateSessionDialog } from './CreateSessionDialog';
 import { BranchSwitcher } from './BranchSwitcher';
 import { useSessionStore, type Session } from '@/stores/session-store';
 import { useServerStore } from '@/stores/server-store';
+import { usePlanStore } from '@/stores/plan-store';
+import { useUIStore } from '@/stores/ui-store';
 import { cn } from '@/lib/utils';
 
 const EMPTY_SESSIONS: Session[] = [];
@@ -48,6 +50,9 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
   const [branchSessionId, setBranchSessionId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const activePlanId = usePlanStore((s) => s.activePlanId);
+  const togglePlanPanel = useUIStore((s) => s.togglePlanPanel);
+  const planPanelOpen = useUIStore((s) => s.planPanelOpen);
 
   const statusDot = (sessionId: string) => {
     const status = connectionStatus[sessionId];
@@ -161,6 +166,21 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
         >
           <Plus className="h-3.5 w-3.5" />
         </Button>
+
+        {activePlanId && (
+          <>
+            <div className="flex-1" />
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn('h-6 w-6 shrink-0', planPanelOpen && 'bg-accent')}
+              onClick={togglePlanPanel}
+              title="Toggle plan panel"
+            >
+              <ClipboardList className="h-3.5 w-3.5" />
+            </Button>
+          </>
+        )}
       </div>
 
       <CreateSessionDialog

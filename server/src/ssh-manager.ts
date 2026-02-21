@@ -151,6 +151,37 @@ export class SSHManager extends EventEmitter {
     }
   }
 
+  /** Run a one-shot command over SSH and return stdout, stderr, and exit code. */
+  async runCommand(serverId: string, workingDir: string | null, command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    const conn = this.connections.get(serverId);
+    if (!conn) throw new Error(`No connection for server ${serverId}`);
+
+    const cdPrefix = workingDir ? `${shellCd(workingDir)} && ` : 'cd $HOME && ';
+    const cmd = `bash -lc "${cdPrefix}${command.replace(/"/g, '\\"')}"`;
+
+    return new Promise((resolve, reject) => {
+      conn.client.exec(cmd, (err, channel) => {
+        if (err) return reject(err);
+        let stdout = '';
+        let stderr = '';
+        let exitCode = 0;
+
+        const timeout = setTimeout(() => {
+          channel.close();
+          reject(new Error('Command timed out after 30 seconds'));
+        }, 30_000);
+
+        channel.on('data', (data: Buffer) => { stdout += data.toString(); });
+        channel.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
+        channel.on('close', (code: number) => {
+          clearTimeout(timeout);
+          exitCode = code ?? 0;
+          resolve({ stdout, stderr, exitCode });
+        });
+      });
+    });
+  }
+
   /** Close all channels and the SSH connection. */
   async disconnect(serverId: string): Promise<void> {
     const conn = this.connections.get(serverId);

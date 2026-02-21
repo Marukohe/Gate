@@ -11,7 +11,8 @@ interface ToolCallCardProps {
 }
 
 export function ToolCallCard({ message }: ToolCallCardProps) {
-  const [open, setOpen] = useState(false);
+  const isBashResult = message.type === 'tool_result' && message.toolName === 'bash';
+  const [open, setOpen] = useState(isBashResult);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="my-2 rounded-md border bg-muted/30">

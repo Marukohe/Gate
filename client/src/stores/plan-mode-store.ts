@@ -217,10 +217,17 @@ export const usePlanModeStore = create<PlanModeStore>((set, get) => ({
       }
     }
     const answer = lines.join('\n') || 'Continue';
-    // If Claude already finished while we were frozen, go to done;
-    // otherwise back to active to show thinking progress.
-    const nextPhase = state.finalPlanContent ? 'done' : 'active';
-    set({ phase: nextPhase, currentQuestions: [], selectedAnswers: {} });
+    // Always go back to active — the answer is being sent to Claude and
+    // planning will continue. Clear finalPlanContent since whatever Claude
+    // generated while we were frozen in question phase was based on the
+    // auto-resolved answer, not the user's actual choice.
+    set({
+      phase: 'active',
+      currentQuestions: [],
+      selectedAnswers: {},
+      finalPlanContent: null,
+      progressMessages: [],
+    });
     return answer;
   },
 

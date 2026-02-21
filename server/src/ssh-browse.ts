@@ -19,6 +19,66 @@ export interface BrowseResult {
  * List subdirectories at `dirPath` on a remote server via a temporary SSH connection.
  * Returns the resolved absolute path and sorted directory names.
  */
+/** Create a directory at `dirPath/name` on a remote server. Returns the resolved absolute path. */
+export async function createRemoteDirectory(config: BrowseConfig, parentPath: string, name: string): Promise<string> {
+  const client = new Client();
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        client.end();
+        reject(new Error('SSH connection timeout'));
+      }, 10_000);
+
+      client.on('ready', () => { clearTimeout(timeout); resolve(); });
+      client.on('error', (err) => { clearTimeout(timeout); reject(err); });
+
+      const connectConfig: ConnectConfig = {
+        host: config.host,
+        port: config.port,
+        username: config.username,
+      };
+
+      if (config.authType === 'password') {
+        connectConfig.password = config.password;
+      } else if (config.authType === 'privateKey' && config.privateKeyPath) {
+        connectConfig.privateKey = readFileSync(config.privateKeyPath);
+      }
+
+      client.connect(connectConfig);
+    });
+
+    let cdExpr: string;
+    if (parentPath === '~' || parentPath === '$HOME') {
+      cdExpr = 'cd $HOME';
+    } else if (parentPath.startsWith('~/')) {
+      cdExpr = `cd $HOME${parentPath.slice(1)}`;
+    } else {
+      cdExpr = `cd '${parentPath}'`;
+    }
+
+    const cmd = `${cdExpr} && mkdir '${name}' && cd '${name}' && pwd`;
+
+    const output = await new Promise<string>((resolve, reject) => {
+      client.exec(cmd, (err, channel) => {
+        if (err) return reject(err);
+        let stdout = '';
+        let stderr = '';
+        channel.on('data', (data: Buffer) => { stdout += data.toString(); });
+        channel.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
+        channel.on('close', (code: number) => {
+          if (code !== 0) return reject(new Error(stderr.trim() || `Exit code ${code}`));
+          resolve(stdout.trim());
+        });
+      });
+    });
+
+    return output;
+  } finally {
+    client.end();
+  }
+}
+
 export async function listRemoteDirectory(config: BrowseConfig, dirPath: string): Promise<BrowseResult> {
   const client = new Client();
 

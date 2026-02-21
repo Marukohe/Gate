@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { Database } from '../db.js';
-import { listRemoteDirectory } from '../ssh-browse.js';
+import { listRemoteDirectory, createRemoteDirectory } from '../ssh-browse.js';
 
 export function createServerRoutes(db: Database): Router {
   const router = Router();
@@ -50,6 +50,26 @@ export function createServerRoutes(db: Database): Router {
         privateKeyPath: server.privateKeyPath,
       }, dirPath);
       res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post('/:id/mkdir', async (req, res) => {
+    const server = db.getServer(req.params.id);
+    if (!server) return res.status(404).json({ error: 'Server not found' });
+    const { parentPath, name } = req.body;
+    if (!parentPath || !name) return res.status(400).json({ error: 'Missing parentPath or name' });
+    try {
+      const createdPath = await createRemoteDirectory({
+        host: server.host,
+        port: server.port,
+        username: server.username,
+        authType: server.authType as 'password' | 'privateKey',
+        password: server.password,
+        privateKeyPath: server.privateKeyPath,
+      }, parentPath, name);
+      res.json({ path: createdPath });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

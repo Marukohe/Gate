@@ -18,6 +18,7 @@ interface ServerStore {
   activeServerId: string | null;
   setServers: (servers: Server[]) => void;
   addServer: (server: Server) => void;
+  updateServer: (server: Server) => void;
   removeServer: (id: string) => void;
   setActiveServer: (id: string | null) => void;
 }
@@ -27,6 +28,9 @@ export const useServerStore = create<ServerStore>((set) => ({
   activeServerId: null,
   setServers: (servers) => set({ servers }),
   addServer: (server) => set((s) => ({ servers: [...s.servers, server] })),
+  updateServer: (server) => set((s) => ({
+    servers: s.servers.map((sv) => sv.id === server.id ? server : sv),
+  })),
   removeServer: (id) => set((s) => ({
     servers: s.servers.filter((sv) => sv.id !== id),
     activeServerId: s.activeServerId === id ? null : s.activeServerId,

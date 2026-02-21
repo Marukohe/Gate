@@ -5,13 +5,14 @@ import { StreamJsonParser, type ParsedMessage } from './stream-json-parser.js';
 import type { Database } from './db.js';
 
 interface ClientMessage {
-  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch';
+  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec';
   serverId: string;
   sessionId?: string;
   sessionName?: string;
   workingDir?: string;
   text?: string;
   branch?: string;
+  command?: string;
 }
 
 interface ServerMessage {
@@ -228,6 +229,44 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
             if (!sshManager.isConnected(msg.serverId)) return;
             const newInfo = await sshManager.switchBranch(msg.serverId, swSession.workingDir, msg.branch);
             broadcast(wss, { type: 'git-info', serverId: msg.serverId, sessionId: msg.sessionId, ...newInfo });
+            break;
+          }
+
+          case 'exec': {
+            if (!msg.sessionId || !msg.command) return;
+            if (!sshManager.isConnected(msg.serverId)) {
+              ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: 'Not connected to server' }));
+              return;
+            }
+
+            const execSession = db.getSession(msg.sessionId);
+            const execDir = execSession?.workingDir ?? null;
+
+            // Save the user !command to DB for history persistence
+            db.saveMessage({
+              sessionId: msg.sessionId,
+              type: 'user',
+              content: `!${msg.command}`,
+              timestamp: Date.now(),
+            });
+            db.updateSessionActivity(msg.sessionId);
+
+            const { stdout, stderr, exitCode } = await sshManager.runCommand(msg.serverId, execDir, msg.command);
+            const output = (stdout + stderr).trimEnd();
+            const resultContent = exitCode !== 0 ? `${output}\n[exit code: ${exitCode}]` : output;
+
+            const resultMessage = {
+              sessionId: msg.sessionId,
+              type: 'tool_result' as const,
+              content: resultContent || '(no output)',
+              toolName: 'bash',
+              toolDetail: msg.command,
+              timestamp: Date.now(),
+            };
+
+            db.saveMessage(resultMessage);
+            db.updateSessionActivity(msg.sessionId);
+            broadcast(wss, { type: 'message', serverId: msg.serverId, sessionId: msg.sessionId, message: resultMessage });
             break;
           }
         }

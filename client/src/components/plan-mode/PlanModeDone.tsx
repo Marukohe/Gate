@@ -2,13 +2,43 @@ import { CheckCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { usePlanModeStore } from '@/stores/plan-mode-store';
+import { usePlanStore } from '@/stores/plan-store';
+import { useUIStore } from '@/stores/ui-store';
+import { parseMarkdownChecklist } from '@/lib/plan-parser';
 import { CodeBlock } from '@/components/chat/CodeBlock';
 import { Button } from '@/components/ui/button';
 import { stripLineNumbers } from '@/lib/utils';
 
 export function PlanModeDone() {
   const finalPlanContent = usePlanModeStore((s) => s.finalPlanContent);
+  const sessionId = usePlanModeStore((s) => s.sessionId);
   const dismiss = usePlanModeStore((s) => s.dismiss);
+  const addPlan = usePlanStore((s) => s.addPlan);
+  const setActivePlan = usePlanStore((s) => s.setActivePlan);
+  const setPlanPanelOpen = useUIStore((s) => s.setPlanPanelOpen);
+
+  const handleDismiss = () => {
+    // Extract plan into plan store if there's checklist content
+    if (finalPlanContent && sessionId) {
+      const { title, steps } = parseMarkdownChecklist(finalPlanContent);
+      if (steps.length > 0) {
+        const planId = crypto.randomUUID();
+        addPlan(sessionId, {
+          id: planId,
+          sessionId,
+          title,
+          content: finalPlanContent,
+          steps,
+          status: 'active',
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+        setActivePlan(planId);
+        setPlanPanelOpen(true);
+      }
+    }
+    dismiss();
+  };
 
   return (
     <div className="flex h-full flex-col items-center overflow-y-auto px-4 pt-12">
@@ -38,7 +68,7 @@ export function PlanModeDone() {
       )}
 
       <div className="mt-6 pb-8">
-        <Button onClick={dismiss} size="lg" variant="outline">
+        <Button onClick={handleDismiss} size="lg" variant="outline">
           Close
         </Button>
       </div>

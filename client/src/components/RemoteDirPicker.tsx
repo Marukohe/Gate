@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Folder, FolderOpen, ArrowUp, Loader2, AlertCircle } from 'lucide-react';
+import { Folder, FolderOpen, FolderPlus, ArrowUp, Loader2, AlertCircle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -22,15 +22,19 @@ interface RemoteDirPickerProps {
   onSelect: (path: string) => void;
   /** Called when user navigates; returns resolved path + subdirectories. */
   fetchDirs: (path: string) => Promise<BrowseResult>;
+  /** Called to create a new folder. Returns the created path. */
+  createDir?: (parentPath: string, name: string) => Promise<string>;
   initialPath?: string;
 }
 
-export function RemoteDirPicker({ open, onOpenChange, onSelect, fetchDirs, initialPath = '' }: RemoteDirPickerProps) {
+export function RemoteDirPicker({ open, onOpenChange, onSelect, fetchDirs, createDir, initialPath = '' }: RemoteDirPickerProps) {
   const [currentPath, setCurrentPath] = useState(initialPath);
   const [inputPath, setInputPath] = useState(initialPath);
   const [directories, setDirectories] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
 
   const navigate = useCallback(async (path: string) => {
     setLoading(true);
@@ -67,6 +71,23 @@ export function RemoteDirPicker({ open, onOpenChange, onSelect, fetchDirs, initi
   const handleSelect = () => {
     onSelect(currentPath);
     onOpenChange(false);
+  };
+
+  const handleCreateFolder = async () => {
+    const name = newFolderName.trim();
+    if (!name || !createDir) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await createDir(currentPath, name);
+      setCreatingFolder(false);
+      setNewFolderName('');
+      await navigate(currentPath);
+    } catch (err: any) {
+      setError(err.message || 'Failed to create folder');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -127,6 +148,28 @@ export function RemoteDirPicker({ open, onOpenChange, onSelect, fetchDirs, initi
             </div>
           )}
         </ScrollArea>
+
+        {createDir && (
+          creatingFolder ? (
+            <form onSubmit={(e) => { e.preventDefault(); handleCreateFolder(); }} className="flex gap-2">
+              <Input
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                placeholder="Folder name"
+                className="flex-1 text-sm"
+                autoFocus
+                onKeyDown={(e) => { if (e.key === 'Escape') { setCreatingFolder(false); setNewFolderName(''); } }}
+              />
+              <Button type="submit" size="sm" disabled={loading || !newFolderName.trim()}>Create</Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => { setCreatingFolder(false); setNewFolderName(''); }}>Cancel</Button>
+            </form>
+          ) : (
+            <Button variant="outline" size="sm" className="w-full" onClick={() => setCreatingFolder(true)} disabled={loading}>
+              <FolderPlus className="h-4 w-4 mr-2" />
+              New Folder
+            </Button>
+          )
+        )}
 
         <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-xs font-mono text-muted-foreground">
           <FolderOpen className="h-3.5 w-3.5 shrink-0" />

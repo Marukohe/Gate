@@ -55,6 +55,20 @@ export function CreateSessionDialog({ open, onOpenChange, onSubmit, defaultName,
     return res.json();
   }, [serverId]);
 
+  const createDir = useCallback(async (parentPath: string, name: string): Promise<string> => {
+    const res = await fetch(`/api/servers/${serverId}/mkdir`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parentPath, name }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || 'Failed to create folder');
+    }
+    const data = await res.json();
+    return data.path;
+  }, [serverId]);
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -109,6 +123,7 @@ export function CreateSessionDialog({ open, onOpenChange, onSubmit, defaultName,
         onOpenChange={setPickerOpen}
         onSelect={setWorkingDir}
         fetchDirs={fetchDirs}
+        createDir={createDir}
         initialPath={workingDir || defaultWorkingDir || ''}
       />
     </>

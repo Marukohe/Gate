@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
@@ -40,9 +40,10 @@ function getAvatarColor(name: string): string {
 
 interface SidebarProps {
   onAddServer: () => void;
+  onEditServer: (server: ServerType) => void;
 }
 
-export function Sidebar({ onAddServer }: SidebarProps) {
+export function Sidebar({ onAddServer, onEditServer }: SidebarProps) {
   const servers = useServerStore((s) => s.servers);
   const activeServerId = useServerStore((s) => s.activeServerId);
   const setActiveServer = useServerStore((s) => s.setActiveServer);
@@ -106,6 +107,10 @@ export function Sidebar({ onAddServer }: SidebarProps) {
                   </button>
                 </ContextMenuTrigger>
                 <ContextMenuContent>
+                  <ContextMenuItem onClick={() => onEditServer(server)}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Edit
+                  </ContextMenuItem>
                   <ContextMenuItem
                     className="text-destructive focus:text-destructive"
                     onClick={() => setDeleteTarget(server)}

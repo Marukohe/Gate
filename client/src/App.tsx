@@ -3,13 +3,14 @@ import { AppShell } from '@/components/layout/AppShell';
 import { ChatView } from '@/components/chat/ChatView';
 import { ServerDialog } from '@/components/server/ServerDialog';
 import { PlanModeOverlay } from '@/components/plan-mode/PlanModeOverlay';
-import { useServerStore } from '@/stores/server-store';
+import { useServerStore, type Server } from '@/stores/server-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useChatStore } from '@/stores/chat-store';
 import { useWebSocket } from '@/hooks/use-websocket';
 
 function App() {
   const [serverDialogOpen, setServerDialogOpen] = useState(false);
+  const [editingServer, setEditingServer] = useState<Server | null>(null);
   const setServers = useServerStore((s) => s.setServers);
   const activeServerId = useServerStore((s) => s.activeServerId);
 
@@ -17,7 +18,7 @@ function App() {
   const setSessions = useSessionStore((s) => s.setSessions);
   const setActiveSession = useSessionStore((s) => s.setActiveSession);
 
-  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch } = useWebSocket();
+  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand } = useWebSocket();
 
   useEffect(() => {
     fetch('/api/servers')
@@ -79,8 +80,18 @@ function App() {
   const handleSend = useCallback((text: string) => {
     if (!activeServerId || !activeSessionId) return;
     addMessage(activeSessionId, { type: 'user', content: text, timestamp: Date.now() });
+
+    // Direct bash command: !command prefix
+    if (text.startsWith('!')) {
+      const command = text.slice(1).trim();
+      if (command) {
+        execCommand(activeServerId, activeSessionId, command);
+        return;
+      }
+    }
+
     sendInput(activeServerId, activeSessionId, text);
-  }, [activeServerId, activeSessionId, sendInput, addMessage]);
+  }, [activeServerId, activeSessionId, sendInput, addMessage, execCommand]);
 
   const handleCreateSession = useCallback((name: string, workingDir: string | null) => {
     if (!activeServerId) return;
@@ -110,9 +121,15 @@ function App() {
             onSwitchBranch={switchBranch}
           />
         }
-        onAddServer={() => setServerDialogOpen(true)}
+        onAddServer={() => { setEditingServer(null); setServerDialogOpen(true); }}
+        onEditServer={(server) => { setEditingServer(server); setServerDialogOpen(true); }}
+        onSendToChat={handleSend}
       />
-      <ServerDialog open={serverDialogOpen} onOpenChange={setServerDialogOpen} />
+      <ServerDialog
+        open={serverDialogOpen}
+        onOpenChange={(open) => { setServerDialogOpen(open); if (!open) setEditingServer(null); }}
+        editServer={editingServer}
+      />
       <PlanModeOverlay onSendInput={handleSend} />
     </>
   );

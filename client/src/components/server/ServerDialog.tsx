@@ -1,19 +1,22 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Folder } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RemoteDirPicker, type BrowseResult } from '@/components/RemoteDirPicker';
-import { useServerStore } from '@/stores/server-store';
+import { useServerStore, type Server } from '@/stores/server-store';
 
 interface ServerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** When set, dialog switches to edit mode for this server. */
+  editServer?: Server | null;
 }
 
-export function ServerDialog({ open, onOpenChange }: ServerDialogProps) {
+export function ServerDialog({ open, onOpenChange, editServer }: ServerDialogProps) {
   const addServer = useServerStore((s) => s.addServer);
+  const updateServer = useServerStore((s) => s.updateServer);
   const [name, setName] = useState('');
   const [host, setHost] = useState('');
   const [port, setPort] = useState('22');
@@ -24,23 +27,56 @@ export function ServerDialog({ open, onOpenChange }: ServerDialogProps) {
   const [defaultWorkingDir, setDefaultWorkingDir] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  const isEdit = !!editServer;
+
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (open && editServer) {
+      setName(editServer.name);
+      setHost(editServer.host);
+      setPort(String(editServer.port));
+      setUsername(editServer.username);
+      setAuthType(editServer.authType);
+      setPassword(editServer.password ?? '');
+      setPrivateKeyPath(editServer.privateKeyPath ?? '');
+      setDefaultWorkingDir(editServer.defaultWorkingDir ?? '');
+    } else if (open && !editServer) {
+      resetForm();
+    }
+  }, [open, editServer]);
+
   const canBrowse = !!host && !!username;
 
   const handleSubmit = async () => {
-    const res = await fetch('/api/servers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name, host, port: parseInt(port), username, authType,
-        ...(authType === 'password' ? { password } : { privateKeyPath }),
-        ...(defaultWorkingDir.trim() ? { defaultWorkingDir: defaultWorkingDir.trim() } : {}),
-      }),
-    });
-    if (res.ok) {
-      const server = await res.json();
-      addServer(server);
-      onOpenChange(false);
-      resetForm();
+    const payload = {
+      name, host, port: parseInt(port), username, authType,
+      ...(authType === 'password' ? { password } : { privateKeyPath }),
+      ...(defaultWorkingDir.trim() ? { defaultWorkingDir: defaultWorkingDir.trim() } : { defaultWorkingDir: null }),
+    };
+
+    if (isEdit) {
+      const res = await fetch(`/api/servers/${editServer!.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const server = await res.json();
+        updateServer(server);
+        onOpenChange(false);
+      }
+    } else {
+      const res = await fetch('/api/servers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const server = await res.json();
+        addServer(server);
+        onOpenChange(false);
+        resetForm();
+      }
     }
   };
 
@@ -49,7 +85,20 @@ export function ServerDialog({ open, onOpenChange }: ServerDialogProps) {
     setPassword(''); setPrivateKeyPath(''); setDefaultWorkingDir('');
   };
 
-  const fetchDirs = useCallback(async (path: string): Promise<BrowseResult> => {
+  const fetchDirsForSaved = useCallback(async (path: string): Promise<BrowseResult> => {
+    const res = await fetch(`/api/servers/${editServer!.id}/browse`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || 'Browse failed');
+    }
+    return res.json();
+  }, [editServer]);
+
+  const fetchDirsAdHoc = useCallback(async (path: string): Promise<BrowseResult> => {
     const res = await fetch('/api/browse', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -66,12 +115,48 @@ export function ServerDialog({ open, onOpenChange }: ServerDialogProps) {
     return res.json();
   }, [host, port, username, authType, password, privateKeyPath]);
 
+  const fetchDirs = isEdit ? fetchDirsForSaved : fetchDirsAdHoc;
+
+  const createDirForSaved = useCallback(async (parentPath: string, dirName: string): Promise<string> => {
+    const res = await fetch(`/api/servers/${editServer!.id}/mkdir`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parentPath, name: dirName }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || 'Failed to create folder');
+    }
+    const data = await res.json();
+    return data.path;
+  }, [editServer]);
+
+  const createDirAdHoc = useCallback(async (parentPath: string, dirName: string): Promise<string> => {
+    const res = await fetch('/api/mkdir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        host, port: parseInt(port), username, authType,
+        ...(authType === 'password' ? { password } : { privateKeyPath }),
+        parentPath, name: dirName,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || 'Failed to create folder');
+    }
+    const data = await res.json();
+    return data.path;
+  }, [host, port, username, authType, password, privateKeyPath]);
+
+  const createDir = isEdit ? createDirForSaved : createDirAdHoc;
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add Server</DialogTitle>
+            <DialogTitle>{isEdit ? 'Edit Server' : 'Add Server'}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <Input placeholder="Name (e.g. dev-server)" value={name} onChange={(e) => setName(e.target.value)} />
@@ -114,7 +199,9 @@ export function ServerDialog({ open, onOpenChange }: ServerDialogProps) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button onClick={handleSubmit} disabled={!name || !host || !username}>Add</Button>
+            <Button onClick={handleSubmit} disabled={!name || !host || !username}>
+              {isEdit ? 'Save' : 'Add'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -124,6 +211,7 @@ export function ServerDialog({ open, onOpenChange }: ServerDialogProps) {
         onOpenChange={setPickerOpen}
         onSelect={setDefaultWorkingDir}
         fetchDirs={fetchDirs}
+        createDir={createDir}
         initialPath={defaultWorkingDir || ''}
       />
     </>

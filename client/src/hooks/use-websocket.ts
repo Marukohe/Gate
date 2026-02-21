@@ -172,5 +172,10 @@ export function useWebSocket() {
     storeRefs.removeSession?.(serverId, sessionId);
   }, []);
 
-  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch };
+  const execCommand = useCallback((serverId: string, sessionId: string, command: string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'exec', serverId, sessionId, command }));
+  }, []);
+
+  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand };
 }
