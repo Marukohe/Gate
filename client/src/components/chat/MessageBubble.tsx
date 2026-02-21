@@ -38,7 +38,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                   if (match) {
                     return <CodeBlock code={code} language={match[1]} />;
                   }
-                  return <code className="rounded bg-background/50 px-1 py-0.5 text-xs" {...props}>{children}</code>;
+                  return <code className="rounded border border-border/40 bg-muted/70 px-1.5 py-0.5 text-[0.8125rem]" style={{ fontFamily: "'Fira Code', monospace" }} {...props}>{children}</code>;
                 },
               }}
             >

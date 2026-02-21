@@ -1,8 +1,21 @@
 import { Check, Copy } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Button } from '@/components/ui/button';
+
+function subscribeToTheme(cb: () => void) {
+  const observer = new MutationObserver(cb);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  return () => observer.disconnect();
+}
+
+function getIsDark() {
+  return document.documentElement.classList.contains('dark');
+}
+
+const CODE_FONT = "'Fira Code', monospace";
 
 interface CodeBlockProps {
   code: string;
@@ -11,6 +24,7 @@ interface CodeBlockProps {
 
 export function CodeBlock({ code, language }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
+  const isDark = useSyncExternalStore(subscribeToTheme, getIsDark);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
@@ -18,19 +32,39 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const displayLang = language ?? 'text';
+
   return (
-    <div className="group relative my-2 overflow-x-auto rounded-md">
-      <Button
-        variant="ghost"
-        size="icon"
-        className="absolute right-2 top-2 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100"
-        onClick={handleCopy}
-      >
-        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-      </Button>
-      <SyntaxHighlighter language={language ?? 'text'} style={oneDark} customStyle={{ margin: 0, fontSize: '0.85rem' }}>
-        {code}
-      </SyntaxHighlighter>
+    <div className="my-2 overflow-hidden rounded-lg border border-border">
+      <div className="flex items-center justify-between border-b border-border bg-muted/50 px-3 py-1">
+        <span className="text-xs text-muted-foreground">{displayLang}</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6"
+          onClick={handleCopy}
+        >
+          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        </Button>
+      </div>
+      <div className="overflow-x-auto">
+        <SyntaxHighlighter
+          language={displayLang}
+          style={isDark ? oneDark : oneLight}
+          customStyle={{
+            margin: 0,
+            fontSize: '0.8125rem',
+            lineHeight: 1.45,
+            background: 'none',
+            fontFamily: CODE_FONT,
+          }}
+          codeTagProps={{
+            style: { background: 'none', fontFamily: CODE_FONT },
+          }}
+        >
+          {code}
+        </SyntaxHighlighter>
+      </div>
     </div>
   );
 }
