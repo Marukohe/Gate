@@ -8,6 +8,12 @@ CodingEverywhere bridges your browser to Claude Code sessions over SSH + tmux, g
 Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──► Remote Server (tmux + claude)
 ```
 
+## Usage
+
+<p align="center">
+  <img src="assets/mobile-chat.jpeg" alt="Mobile chat view" width="300" />
+</p>
+
 ## Features
 
 - **Remote Claude Code access** — connect to any server via SSH, manage multiple tmux sessions
@@ -105,10 +111,6 @@ Server → Client:
 | Desktop (≥1024px) | Sidebar + Chat + Plan panel (3-column) |
 | Tablet (768–1023px) | Chat fullwidth, sidebar/plan as drawers |
 | Mobile (<768px) | Fullscreen chat, bottom sheet for servers, swipe to switch sessions |
-
-<p align="center">
-  <img src="assets/mobile-chat.jpeg" alt="Mobile chat view" width="300" />
-</p>
 
 ## License
 
