@@ -73,11 +73,6 @@ Server sends: `{ type: 'message'|'status'|'history', serverId, ... }`
 - Tablet (768-1023px): Chat fullwidth, sidebar and plan as drawers
 - Mobile (<768px): Fullscreen chat, sidebar/plan as full-screen sheet overlays
 
-## Design Docs
-
-- `docs/plans/2026-02-16-codingeverywhere-design.md` — Full design document
-- `docs/plans/2026-02-16-codingeverywhere-implementation.md` — 16-task implementation plan
-
 ## Best Practices
 
 1. Use git frequently and meaningfully
