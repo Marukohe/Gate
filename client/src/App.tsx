@@ -47,7 +47,11 @@ function App() {
       .then((sessionList: any[]) => {
         setSessions(activeServerId, sessionList);
         if (sessionList.length > 0) {
-          setActiveSession(activeServerId, sessionList[0].id);
+          // Keep persisted session if it still exists, otherwise pick first
+          const persisted = useSessionStore.getState().activeSessionId[activeServerId];
+          if (!persisted || !sessionList.find((s: any) => s.id === persisted)) {
+            setActiveSession(activeServerId, sessionList[0].id);
+          }
         } else {
           createSession(activeServerId, 'Default');
         }
@@ -71,9 +75,10 @@ function App() {
     connectToSession(activeServerId, activeSessionId);
   }, [activeServerId, activeSessionId, connectToSession]);
 
-  // Periodically refresh git info for the active session
+  // Fetch git info immediately and refresh periodically
   useEffect(() => {
     if (!activeServerId || !activeSessionId) return;
+    fetchGitInfo(activeServerId, activeSessionId);
     const interval = setInterval(() => {
       fetchGitInfo(activeServerId, activeSessionId);
     }, 30_000);
