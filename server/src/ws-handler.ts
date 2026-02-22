@@ -72,6 +72,16 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
             db.updateClaudeSessionId(sessionId, sid);
           }
         }
+
+        // Refresh git info after Claude completes a turn (may have changed git state)
+        if (message.type === 'system' && message.subType === 'result') {
+          const s = db.getSession(sessionId);
+          if (s?.workingDir && sshManager.isConnected(serverId)) {
+            sshManager.fetchGitInfo(serverId, s.workingDir).then((info) => {
+              if (info) broadcast(wss, { type: 'git-info', serverId, sessionId, ...info });
+            }).catch(() => {});
+          }
+        }
       });
     }
     parser.feed(data);
