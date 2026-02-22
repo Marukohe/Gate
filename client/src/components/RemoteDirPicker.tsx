@@ -79,10 +79,10 @@ export function RemoteDirPicker({ open, onOpenChange, onSelect, fetchDirs, creat
     setLoading(true);
     setError(null);
     try {
-      await createDir(currentPath, name);
+      const createdPath = await createDir(currentPath, name);
       setCreatingFolder(false);
       setNewFolderName('');
-      await navigate(currentPath);
+      await navigate(createdPath);
     } catch (err: any) {
       setError(err.message || 'Failed to create folder');
     } finally {
