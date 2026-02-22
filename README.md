@@ -1,8 +1,8 @@
 # Gate
 
-Chat with [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI running on remote servers — from any device.
+**Gate** opens a portal to [Claude Code](https://docs.anthropic.com/en/docs/claude-code) on remote servers — code from anywhere, on any device.
 
-Gate bridges your browser to Claude Code sessions over SSH + tmux, giving you a responsive chat interface on phones, tablets, and desktops. Designed for internal network deployment.
+Waiting in line, on the couch, on the train — pull out your phone and pick up right where you left off. Gate bridges your browser to Claude Code CLI sessions over SSH + tmux, so your coding environment is always one tap away.
 
 ```
 Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──► Remote Server (tmux + claude)
@@ -36,7 +36,7 @@ Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──�
 ### Install & Run
 
 ```bash
-git clone <repo-url> gate
+git clone https://github.com/Marukohe/Gate.git gate
 cd gate
 npm install
 npm run dev
