@@ -38,6 +38,18 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
   sshManager.on('data', (serverId: string, sessionId: string, data: string) => {
     // Raw stdout logged only at debug level to avoid flooding the terminal
     if (process.env.DEBUG) console.log(`[claude stdout][${serverId}:${sessionId}]`, data);
+
+    // Auto-approve CLI prompts that bypass stream-json (e.g. plan mode exit).
+    // These appear as non-JSON lines on stdout while Claude waits for raw "y" on stdin.
+    for (const line of data.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('{')) continue;
+      if (/\?\s*$/.test(trimmed)) {
+        sshManager.writeRaw(serverId, sessionId, 'y\n');
+        break;
+      }
+    }
+
     let parser = parsers.get(sessionId);
     if (!parser) {
       parser = new StreamJsonParser();

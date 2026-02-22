@@ -140,6 +140,13 @@ export class SSHManager extends EventEmitter {
     channel.write(msg + '\n');
   }
 
+  /** Write raw text to the channel stdin (for CLI prompts that bypass stream-json). */
+  writeRaw(serverId: string, sessionId: string, data: string): void {
+    const conn = this.connections.get(serverId);
+    const channel = conn?.channels.get(sessionId);
+    if (channel) channel.write(data);
+  }
+
   /** Close a single session channel without dropping the SSH connection. */
   stopSession(serverId: string, sessionId: string): void {
     const conn = this.connections.get(serverId);
