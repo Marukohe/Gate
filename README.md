@@ -11,7 +11,10 @@ Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──�
 ## Example
 
 <p align="center">
-  <img src="assets/mobile-chat.jpeg" alt="Mobile chat view" width="300" />
+  <img src="assets/communication.png" alt="Chat with Claude" width="240" />
+  <img src="assets/planning.png" alt="Planning mode" width="240" />
+  <img src="assets/plan_interact.png" alt="Interactive questions" width="240" />
+  <img src="assets/command_invoke.png" alt="Command execution" width="240" />
 </p>
 
 ## Features
