@@ -31,6 +31,7 @@ Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──�
 - Node.js >= 20
 - A remote server with SSH access and [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed
 - tmux on the remote server
+- **Claude Code logged in on the remote server** — SSH into the server and run `claude` once to complete authentication before using CodingEverywhere
 
 ### Install & Run
 
