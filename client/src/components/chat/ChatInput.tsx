@@ -34,10 +34,10 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          className="min-h-[40px] max-h-[200px] resize-none"
+          className="!min-h-10 max-h-[200px] resize-none"
           rows={1}
         />
-        <Button size="icon" className="h-10 w-10 shrink-0" onClick={handleSend} disabled={disabled || !value.trim()}>
+        <Button size="icon-lg" onClick={handleSend} disabled={disabled || !value.trim()}>
           <SendHorizontal className="h-4 w-4" />
         </Button>
       </div>
