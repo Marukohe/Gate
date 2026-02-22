@@ -51,6 +51,7 @@ function setupSocket() {
       if (sessionId) {
         storeRefs.setConnectionStatus?.(sessionId, 'connecting');
         socket.send(JSON.stringify({ type: 'connect', serverId, sessionId }));
+        socket.send(JSON.stringify({ type: 'fetch-git-info', serverId, sessionId }));
       }
     }
   };
