@@ -10,12 +10,16 @@ Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──�
 
 ## Example
 
-<p align="center">
-  <img src="assets/communication.png" alt="Chat with Claude" width="240" />
-  <img src="assets/planning.png" alt="Planning mode" width="240" />
-  <img src="assets/plan_interact.png" alt="Interactive questions" width="240" />
-  <img src="assets/command_invoke.png" alt="Command execution" width="240" />
-</p>
+<table align="center">
+  <tr>
+    <td align="center"><img src="assets/planning.png" alt="Planning mode" width="240" /><br/><em>Planning mode</em></td>
+    <td align="center"><img src="assets/plan_interact.png" alt="Interactive questions" width="240" /><br/><em>Interactive questions</em></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="assets/communication.png" alt="Chat with Claude" width="240" /><br/><em>Chat with Claude</em></td>
+    <td align="center"><img src="assets/command_invoke.png" alt="Command execution" width="240" /><br/><em>Command execution</em></td>
+  </tr>
+</table>
 
 ## Features
 
