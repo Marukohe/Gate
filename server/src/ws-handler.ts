@@ -36,7 +36,8 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
   });
 
   sshManager.on('data', (serverId: string, sessionId: string, data: string) => {
-    console.log(`[claude stdout][${serverId}:${sessionId}]`, data);
+    // Raw stdout logged only at debug level to avoid flooding the terminal
+    if (process.env.DEBUG) console.log(`[claude stdout][${serverId}:${sessionId}]`, data);
     let parser = parsers.get(sessionId);
     if (!parser) {
       parser = new StreamJsonParser();
