@@ -34,7 +34,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          className="!min-h-10 max-h-[200px] resize-none"
+          className="!min-h-10 !py-1.5 max-h-[200px] resize-none"
           rows={1}
         />
         <Button size="icon-lg" onClick={handleSend} disabled={disabled || !value.trim()}>
