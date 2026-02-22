@@ -20,7 +20,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   return (
     <div className={cn('my-2 flex', isUser ? 'justify-end' : 'justify-start')}>
       <div className={cn(
-        'max-w-[85%] rounded-lg px-4 py-2 text-sm',
+        'max-w-[85%] min-w-0 overflow-hidden rounded-lg px-4 py-2 text-sm',
         isUser
           ? 'bg-primary text-primary-foreground'
           : 'bg-muted'
@@ -38,7 +38,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                   if (match) {
                     return <CodeBlock code={code} language={match[1]} />;
                   }
-                  return <code className="rounded border border-border/40 bg-muted/70 px-1.5 py-0.5 text-[0.8125rem]" style={{ fontFamily: "'Fira Code', monospace" }} {...props}>{children}</code>;
+                  return <code className="break-all rounded border border-border/40 bg-muted/70 px-1.5 py-0.5 text-[0.8125rem]" style={{ fontFamily: "'Fira Code', monospace" }} {...props}>{children}</code>;
                 },
               }}
             >

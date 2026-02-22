@@ -22,7 +22,7 @@ export function ToolCallCard({ message }: ToolCallCardProps) {
         <span className="truncate text-muted-foreground">{message.toolDetail || message.content.slice(0, 80)}</span>
       </CollapsibleTrigger>
       <CollapsibleContent className="border-t px-3 py-2">
-        <pre className="whitespace-pre-wrap text-xs">{stripLineNumbers(message.content)}</pre>
+        <pre className="whitespace-pre-wrap break-all text-xs">{stripLineNumbers(message.content)}</pre>
       </CollapsibleContent>
     </Collapsible>
   );
