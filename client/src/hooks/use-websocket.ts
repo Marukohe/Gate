@@ -1,5 +1,4 @@
 import { useEffect, useCallback } from 'react';
-import { useServerStore } from '../stores/server-store';
 import { useSessionStore } from '../stores/session-store';
 import { useChatStore } from '../stores/chat-store';
 import { usePlanModeStore } from '../stores/plan-mode-store';
@@ -9,6 +8,9 @@ let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectDelay = 1000;
 const MAX_RECONNECT_DELAY = 30000;
+
+// Queued connect request — sent when WS opens
+let pendingConnect: { serverId: string; sessionId: string } | null = null;
 
 function resetBackoff() {
   reconnectDelay = 1000;
@@ -33,6 +35,12 @@ const storeRefs = {
   processPlanModeMessage: null as null | ReturnType<typeof usePlanModeStore.getState>['processMessage'],
 };
 
+function sendConnect(socket: WebSocket, serverId: string, sessionId: string) {
+  storeRefs.setConnectionStatus?.(sessionId, 'connecting');
+  socket.send(JSON.stringify({ type: 'connect', serverId, sessionId }));
+  socket.send(JSON.stringify({ type: 'fetch-git-info', serverId, sessionId }));
+}
+
 function setupSocket() {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
     return;
@@ -44,15 +52,11 @@ function setupSocket() {
 
   socket.onopen = () => {
     resetBackoff();
-    // Auto-reconnect to active session after WS (re)connects
-    const serverId = useServerStore.getState().activeServerId;
-    if (serverId) {
-      const sessionId = useSessionStore.getState().activeSessionId[serverId];
-      if (sessionId) {
-        storeRefs.setConnectionStatus?.(sessionId, 'connecting');
-        socket.send(JSON.stringify({ type: 'connect', serverId, sessionId }));
-        socket.send(JSON.stringify({ type: 'fetch-git-info', serverId, sessionId }));
-      }
+    // Flush any queued connect request
+    if (pendingConnect) {
+      const { serverId, sessionId } = pendingConnect;
+      pendingConnect = null;
+      sendConnect(socket, serverId, sessionId);
     }
   };
 
@@ -158,9 +162,12 @@ export function useWebSocket() {
   }, []);
 
   const connectToSession = useCallback((serverId: string, sessionId: string) => {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    storeRefs.setConnectionStatus?.(sessionId, 'connecting');
-    ws.send(JSON.stringify({ type: 'connect', serverId, sessionId }));
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      // Queue — will be sent when WS opens
+      pendingConnect = { serverId, sessionId };
+      return;
+    }
+    sendConnect(ws, serverId, sessionId);
   }, []);
 
   const sendInput = useCallback((serverId: string, sessionId: string, text: string) => {
