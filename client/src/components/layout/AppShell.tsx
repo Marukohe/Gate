@@ -1,8 +1,8 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, useCallback } from 'react';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { PlanPanel } from '@/components/plan/PlanPanel';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useUIStore } from '@/stores/ui-store';
 import type { Server } from '@/stores/server-store';
 
@@ -19,6 +19,8 @@ export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat }: 
   const planPanelOpen = useUIStore((s) => s.planPanelOpen);
   const setPlanPanelOpen = useUIStore((s) => s.setPlanPanelOpen);
 
+  const closeSidebar = useCallback(() => setSidebarOpen(false), [setSidebarOpen]);
+
   return (
     <div className="flex h-dvh">
       {/* Desktop sidebar */}
@@ -26,10 +28,23 @@ export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat }: 
         <Sidebar onAddServer={onAddServer} onEditServer={onEditServer} />
       </div>
 
-      {/* Mobile sidebar drawer */}
+      {/* Mobile sidebar — bottom sheet */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-        <SheetContent side="left" className="w-64 p-0 lg:hidden">
-          <Sidebar onAddServer={onAddServer} onEditServer={onEditServer} />
+        <SheetContent
+          side="bottom"
+          showCloseButton={false}
+          className="rounded-t-2xl px-0 pb-[env(safe-area-inset-bottom)] lg:hidden"
+        >
+          {/* Drag handle */}
+          <div className="flex justify-center pt-2 pb-1">
+            <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
+          </div>
+          <SheetHeader className="px-4 pb-2">
+            <SheetTitle className="text-base">Servers</SheetTitle>
+          </SheetHeader>
+          <div className="max-h-[50dvh] overflow-y-auto">
+            <Sidebar onAddServer={onAddServer} onEditServer={onEditServer} onClose={closeSidebar} />
+          </div>
         </SheetContent>
       </Sheet>
 

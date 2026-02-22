@@ -47,9 +47,10 @@ function getAvatarColor(name: string): string {
 interface SidebarProps {
   onAddServer: () => void;
   onEditServer: (server: ServerType) => void;
+  onClose?: () => void;
 }
 
-export function Sidebar({ onAddServer, onEditServer }: SidebarProps) {
+export function Sidebar({ onAddServer, onEditServer, onClose }: SidebarProps) {
   const servers = useServerStore((s) => s.servers);
   const activeServerId = useServerStore((s) => s.activeServerId);
   const setActiveServer = useServerStore((s) => s.setActiveServer);
@@ -78,13 +79,21 @@ export function Sidebar({ onAddServer, onEditServer }: SidebarProps) {
     setDeleteTarget(null);
   };
 
+  // When onClose is set we're inside the mobile bottom sheet — skip fixed sizing
+  const isMobile = !!onClose;
+
   return (
     <>
-      <div className="flex h-full w-52 flex-col border-r bg-muted/40">
-        <div className="px-3 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          Servers
-        </div>
-        <div className="flex-1 overflow-y-auto px-2 space-y-1">
+      <div className={cn(
+        'flex flex-col bg-muted/40',
+        isMobile ? 'w-full' : 'h-full w-52 border-r',
+      )}>
+        {!isMobile && (
+          <div className="px-3 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Servers
+          </div>
+        )}
+        <div className={cn('overflow-y-auto px-2 space-y-1', !isMobile && 'flex-1')}>
           {servers.map((server) => {
             const isActive = activeServerId === server.id;
             const status = statusInfo(server.id);
@@ -98,7 +107,7 @@ export function Sidebar({ onAddServer, onEditServer }: SidebarProps) {
                         ? 'bg-accent text-accent-foreground'
                         : 'text-foreground/70 hover:bg-accent/50 hover:text-accent-foreground'
                     )}
-                    onClick={() => setActiveServer(server.id)}
+                    onClick={() => { setActiveServer(server.id); onClose?.(); }}
                   >
                     <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold text-white', getAvatarColor(server.name))}>
                       {getInitials(server.name)}
@@ -152,8 +161,8 @@ export function Sidebar({ onAddServer, onEditServer }: SidebarProps) {
             );
           })}
         </div>
-        <div className="border-t p-4">
-          <Button variant="outline" className="h-10 w-full justify-start gap-2" onClick={onAddServer}>
+        <div className={cn('p-4', !isMobile && 'border-t')}>
+          <Button variant="outline" className="h-10 w-full justify-start gap-2" onClick={() => { onAddServer(); onClose?.(); }}>
             <Plus className="h-4 w-4" />
             Add Server
           </Button>
