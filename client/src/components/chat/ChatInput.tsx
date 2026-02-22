@@ -26,7 +26,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   };
 
   return (
-    <div className="border-t p-4">
+    <div className="border-t px-2 py-3 sm:p-4">
       <div className="flex items-end gap-2">
         <Textarea
           placeholder="Send a message to Claude..."
