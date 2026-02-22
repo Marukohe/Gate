@@ -8,7 +8,7 @@ CodingEverywhere bridges your browser to Claude Code sessions over SSH + tmux, g
 Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──► Remote Server (tmux + claude)
 ```
 
-## Usage
+## Example
 
 <p align="center">
   <img src="assets/mobile-chat.jpeg" alt="Mobile chat view" width="300" />
