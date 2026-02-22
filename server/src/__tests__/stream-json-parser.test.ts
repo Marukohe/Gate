@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { StreamJsonParser, type ParsedMessage } from './stream-json-parser.js';
+import { StreamJsonParser, type ParsedMessage } from '../stream-json-parser.js';
 
 function collect(parser: StreamJsonParser): ParsedMessage[] {
   const msgs: ParsedMessage[] = [];
