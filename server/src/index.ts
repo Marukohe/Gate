@@ -1,16 +1,22 @@
 import express from 'express';
 import { createServer } from 'http';
+import { fileURLToPath } from 'url';
+import path from 'path';
 import { createDb } from './db.js';
 import { createServerRoutes } from './routes/servers.js';
 import { setupWebSocket } from './ws-handler.js';
 import { listRemoteDirectory, createRemoteDirectory } from './ssh-browse.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 const app = express();
-const PORT = 3001;
+const PORT = Number(process.env.PORT) || 3001;
+const HOST = process.env.HOST || '0.0.0.0';
 
 app.use(express.json());
 
-const db = createDb('./data/codingeverywhere.db');
+const dbPath = path.resolve(__dirname, '../data/codingeverywhere.db');
+const db = createDb(dbPath);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
@@ -52,10 +58,18 @@ app.post('/api/mkdir', async (req, res) => {
 
 app.use('/api/servers', createServerRoutes(db));
 
+// Serve built client in production
+const clientDist = path.resolve(__dirname, '../../client/dist');
+app.use(express.static(clientDist));
+app.get('/{*path}', (_req, res, next) => {
+  if (_req.path.startsWith('/api')) return next();
+  res.sendFile(path.join(clientDist, 'index.html'));
+});
+
 const httpServer = createServer(app);
 
 setupWebSocket(httpServer, db);
 
-httpServer.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+httpServer.listen(PORT, HOST, () => {
+  console.log(`Server running on http://${HOST}:${PORT}`);
 });

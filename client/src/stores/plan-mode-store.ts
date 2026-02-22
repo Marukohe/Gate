@@ -32,8 +32,6 @@ interface PlanModeStore {
   dismiss: () => void;
 }
 
-const PLAN_TOOLS = new Set(['EnterPlanMode', 'ExitPlanMode', 'AskUserQuestion']);
-
 function parseQuestions(content: string): PlanQuestion[] {
   try {
     const input = JSON.parse(content);
