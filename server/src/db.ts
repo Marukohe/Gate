@@ -178,8 +178,13 @@ export function createDb(dbPath: string): Database {
       return { id, ...input };
     },
 
-    getMessages(sessionId, limit = 200) {
-      return db.prepare('SELECT * FROM messages WHERE sessionId = ? ORDER BY timestamp ASC LIMIT ?').all(sessionId, limit) as Message[];
+    getMessages(sessionId, limit = 500) {
+      // Subquery picks the N most-recent rows, outer query re-orders them chronologically
+      return db.prepare(`
+        SELECT * FROM (
+          SELECT * FROM messages WHERE sessionId = ? ORDER BY timestamp DESC LIMIT ?
+        ) ORDER BY timestamp ASC
+      `).all(sessionId, limit) as Message[];
     },
 
     close() {
