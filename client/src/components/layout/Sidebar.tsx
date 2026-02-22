@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, MoreVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
@@ -7,6 +7,12 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -87,7 +93,7 @@ export function Sidebar({ onAddServer, onEditServer }: SidebarProps) {
                 <ContextMenuTrigger asChild>
                   <button
                     className={cn(
-                      'flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-sm transition-colors',
+                      'group flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-sm transition-colors',
                       isActive
                         ? 'bg-accent text-accent-foreground'
                         : 'text-foreground/70 hover:bg-accent/50 hover:text-accent-foreground'
@@ -104,6 +110,29 @@ export function Sidebar({ onAddServer, onEditServer }: SidebarProps) {
                         <span className="truncate">{status.label || server.host}</span>
                       </div>
                     </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                        <span
+                          role="button"
+                          className="shrink-0 rounded p-0.5 opacity-60 hover:bg-accent sm:opacity-0 sm:group-hover:opacity-100"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </span>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => onEditServer(server)}>
+                          <Pencil className="mr-2 h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => setDeleteTarget(server)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </button>
                 </ContextMenuTrigger>
                 <ContextMenuContent>

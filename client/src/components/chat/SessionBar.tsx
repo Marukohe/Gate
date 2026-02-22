@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Plus, GitBranch, ClipboardList } from 'lucide-react';
+import { Plus, GitBranch, ClipboardList, MoreVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -8,6 +8,12 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -116,31 +122,58 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
                   className="h-6 w-24 px-2 text-xs"
                 />
               ) : (
-                <button
+                <span
                   className={cn(
-                    'flex items-center gap-1.5 rounded-full px-3 py-0.5 text-xs whitespace-nowrap transition-colors',
+                    'group flex items-center gap-1.5 rounded-full px-3 py-0.5 text-xs whitespace-nowrap transition-colors',
                     activeSessionId === session.id
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground hover:bg-muted/80'
                   )}
-                  onClick={() => onSelectSession(session.id)}
                 >
-                  <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', statusDot(session.id))} />
-                  {session.name}
-                  {gitInfo[session.id] && (
-                    <span
-                      role="button"
-                      className="flex items-center gap-0.5 opacity-70 hover:opacity-100 transition-opacity"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setBranchSessionId(session.id);
-                      }}
-                    >
-                      <GitBranch className="h-3 w-3" />
-                      {gitInfo[session.id].branch}
-                    </span>
-                  )}
-                </button>
+                  <button
+                    className="flex items-center gap-1.5"
+                    onClick={() => onSelectSession(session.id)}
+                  >
+                    <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', statusDot(session.id))} />
+                    {session.name}
+                    {gitInfo[session.id] && (
+                      <span
+                        role="button"
+                        className="flex items-center gap-0.5 opacity-70 hover:opacity-100 transition-opacity"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setBranchSessionId(session.id);
+                        }}
+                      >
+                        <GitBranch className="h-3 w-3" />
+                        {gitInfo[session.id].branch}
+                      </span>
+                    )}
+                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                      <span
+                        role="button"
+                        className="shrink-0 rounded opacity-60 hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                      >
+                        <MoreVertical className="h-3 w-3" />
+                      </span>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuItem onClick={() => startRename(session)}>
+                        Rename
+                      </DropdownMenuItem>
+                      {sessions.length > 1 && (
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => setDeleteTarget(session)}
+                        >
+                          Delete
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </span>
               )}
             </ContextMenuTrigger>
             <ContextMenuContent>
