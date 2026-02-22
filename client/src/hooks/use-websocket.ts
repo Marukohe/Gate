@@ -1,4 +1,5 @@
 import { useEffect, useCallback } from 'react';
+import { useServerStore } from '../stores/server-store';
 import { useSessionStore } from '../stores/session-store';
 import { useChatStore } from '../stores/chat-store';
 import { usePlanModeStore } from '../stores/plan-mode-store';
@@ -43,6 +44,15 @@ function setupSocket() {
 
   socket.onopen = () => {
     resetBackoff();
+    // Auto-reconnect to active session after WS (re)connects
+    const serverId = useServerStore.getState().activeServerId;
+    if (serverId) {
+      const sessionId = useSessionStore.getState().activeSessionId[serverId];
+      if (sessionId) {
+        storeRefs.setConnectionStatus?.(sessionId, 'connecting');
+        socket.send(JSON.stringify({ type: 'connect', serverId, sessionId }));
+      }
+    }
   };
 
   socket.onmessage = (event) => {

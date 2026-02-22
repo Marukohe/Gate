@@ -65,12 +65,9 @@ function App() {
     }
   }, [activeServerId, sessions, setActiveSession]);
 
-  // Connect when activeSessionId changes
-  const prevSessionRef = useRef<string | undefined>(undefined);
+  // Connect when activeSessionId changes (onopen handles WS-not-ready case)
   useEffect(() => {
     if (!activeServerId || !activeSessionId) return;
-    if (activeSessionId === prevSessionRef.current) return;
-    prevSessionRef.current = activeSessionId;
     connectToSession(activeServerId, activeSessionId);
   }, [activeServerId, activeSessionId, connectToSession]);
 
@@ -113,8 +110,13 @@ function App() {
 
   const handleSelectSession = useCallback((sessionId: string) => {
     if (!activeServerId) return;
+    if (sessionId === activeSessionId) {
+      // Already selected — force reconnect if not connected
+      connectToSession(activeServerId, sessionId);
+      return;
+    }
     setActiveSession(activeServerId, sessionId);
-  }, [activeServerId, setActiveSession]);
+  }, [activeServerId, activeSessionId, setActiveSession, connectToSession]);
 
   return (
     <>
