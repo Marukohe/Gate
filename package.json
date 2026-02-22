@@ -1,5 +1,5 @@
 {
-  "name": "codingeverywhere",
+  "name": "gate",
   "private": true,
   "workspaces": [
     "client",

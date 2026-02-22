@@ -1,8 +1,8 @@
-# CodingEverywhere Design Document
+# Gate Design Document
 
 ## 1. Overview
 
-CodingEverywhere is a responsive web app that bridges a browser-based chat UI to Claude Code CLI sessions running on remote servers via SSH + tmux. It lets you "vibe code" from any device — phone, tablet, or desktop.
+Gate is a responsive web app that bridges a browser-based chat UI to Claude Code CLI sessions running on remote servers via SSH + tmux. It lets you "vibe code" from any device — phone, tablet, or desktop.
 
 **Deployment model:** Internal network, no authentication.
 

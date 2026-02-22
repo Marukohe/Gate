@@ -7,7 +7,7 @@ export function TopBar() {
 
   return (
     <div className="flex h-10 items-center border-b px-4 lg:hidden">
-      <span className="text-sm font-medium">{activeServer?.name ?? 'CodingEverywhere'}</span>
+      <span className="text-sm font-medium">{activeServer?.name ?? 'Gate'}</span>
     </div>
   );
 }

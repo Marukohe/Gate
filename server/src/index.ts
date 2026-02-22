@@ -15,7 +15,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 app.use(express.json());
 
-const dbPath = path.resolve(__dirname, '../data/codingeverywhere.db');
+const dbPath = path.resolve(__dirname, '../data/gate.db');
 const db = createDb(dbPath);
 
 app.get('/api/health', (_req, res) => {

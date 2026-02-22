@@ -1,8 +1,8 @@
-# CodingEverywhere
+# Gate
 
 Chat with [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI running on remote servers — from any device.
 
-CodingEverywhere bridges your browser to Claude Code sessions over SSH + tmux, giving you a responsive chat interface on phones, tablets, and desktops. Designed for internal network deployment.
+Gate bridges your browser to Claude Code sessions over SSH + tmux, giving you a responsive chat interface on phones, tablets, and desktops. Designed for internal network deployment.
 
 ```
 Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──► Remote Server (tmux + claude)
@@ -31,13 +31,13 @@ Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──�
 - Node.js >= 20
 - A remote server with SSH access and [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed
 - tmux on the remote server
-- **Claude Code logged in on the remote server** — SSH into the server and run `claude` once to complete authentication before using CodingEverywhere
+- **Claude Code logged in on the remote server** — SSH into the server and run `claude` once to complete authentication before using Gate
 
 ### Install & Run
 
 ```bash
-git clone <repo-url> codingeverywhere
-cd codingeverywhere
+git clone <repo-url> gate
+cd gate
 npm install
 npm run dev
 ```
@@ -63,7 +63,7 @@ Open the app → click **Add Server** → fill in your SSH credentials (password
 ## Project Structure
 
 ```
-codingeverywhere/
+gate/
 ├── client/                      # React frontend
 │   └── src/
 │       ├── components/

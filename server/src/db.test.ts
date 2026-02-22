@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createDb, type Database } from './db.js';
 import fs from 'fs';
 
-const TEST_DB = '/tmp/codingeverywhere-test.db';
+const TEST_DB = '/tmp/gate-test.db';
 
 describe('Database', () => {
   let db: Database;

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-CodingEverywhere is a responsive web app for "vibe coding" — chat with Claude Code CLI running on remote servers via SSH + tmux, from any device (phone, tablet, desktop). Internal network deployment only, no auth.
+Gate is a responsive web app for "vibe coding" — chat with Claude Code CLI running on remote servers via SSH + tmux, from any device (phone, tablet, desktop). Internal network deployment only, no auth.
 
 ## Architecture
 
