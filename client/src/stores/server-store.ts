@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 export interface Server {
   id: string;
@@ -23,17 +24,25 @@ interface ServerStore {
   setActiveServer: (id: string | null) => void;
 }
 
-export const useServerStore = create<ServerStore>((set) => ({
-  servers: [],
-  activeServerId: null,
-  setServers: (servers) => set({ servers }),
-  addServer: (server) => set((s) => ({ servers: [...s.servers, server] })),
-  updateServer: (server) => set((s) => ({
-    servers: s.servers.map((sv) => sv.id === server.id ? server : sv),
-  })),
-  removeServer: (id) => set((s) => ({
-    servers: s.servers.filter((sv) => sv.id !== id),
-    activeServerId: s.activeServerId === id ? null : s.activeServerId,
-  })),
-  setActiveServer: (id) => set({ activeServerId: id }),
-}));
+export const useServerStore = create<ServerStore>()(
+  persist(
+    (set) => ({
+      servers: [],
+      activeServerId: null,
+      setServers: (servers) => set({ servers }),
+      addServer: (server) => set((s) => ({ servers: [...s.servers, server] })),
+      updateServer: (server) => set((s) => ({
+        servers: s.servers.map((sv) => sv.id === server.id ? server : sv),
+      })),
+      removeServer: (id) => set((s) => ({
+        servers: s.servers.filter((sv) => sv.id !== id),
+        activeServerId: s.activeServerId === id ? null : s.activeServerId,
+      })),
+      setActiveServer: (id) => set({ activeServerId: id }),
+    }),
+    {
+      name: 'server-store',
+      partialize: (state) => ({ activeServerId: state.activeServerId }),
+    },
+  ),
+);

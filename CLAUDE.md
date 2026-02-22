@@ -106,9 +106,10 @@ ALWAYS:
 1. Clear all compiler warnings
 2. Format code with `clang-format`
 3. Ensure all tests pass (timeouts excepted)
-4. Check changes with `git status`
-5. Split work into small, reviewable commits
-6. Use Conventional Commit messages:
+4. Verify the dev server starts without errors (`npm run dev`)
+5. Check changes with `git status`
+6. Auto-commit after each completed change (small, reviewable commits)
+7. Use Conventional Commit messages:
 
 ```text
 <type>[optional scope]: <title>

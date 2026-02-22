@@ -13,6 +13,7 @@ function App() {
   const [editingServer, setEditingServer] = useState<Server | null>(null);
   const setServers = useServerStore((s) => s.setServers);
   const activeServerId = useServerStore((s) => s.activeServerId);
+  const setActiveServer = useServerStore((s) => s.setActiveServer);
 
   const activeSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
   const setSessions = useSessionStore((s) => s.setSessions);
@@ -23,9 +24,16 @@ function App() {
   useEffect(() => {
     fetch('/api/servers')
       .then((r) => r.ok ? r.json() : [])
-      .then(setServers)
+      .then((servers: any[]) => {
+        setServers(servers);
+        // Clear persisted activeServerId if the server no longer exists
+        const current = useServerStore.getState().activeServerId;
+        if (current && !servers.find((s) => s.id === current)) {
+          setActiveServer(null);
+        }
+      })
       .catch(() => {});
-  }, [setServers]);
+  }, [setServers, setActiveServer]);
 
   // Fetch sessions when server changes, auto-select first session
   const prevServerRef = useRef<string | null>(null);
