@@ -113,6 +113,10 @@ Server → Client:
 | Tablet (768–1023px) | Chat fullwidth, sidebar/plan as drawers |
 | Mobile (<768px) | Fullscreen chat, bottom sheet for servers, swipe to switch sessions |
 
+## Why "Gate"?
+
+Named after *Steins;Gate* — the anime where messages travel through time to change the worldline. Here, your messages travel through SSH to reach Claude on a remote server, opening a gate between any device and your coding environment.
+
 ## License
 
 MIT
