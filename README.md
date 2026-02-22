@@ -75,7 +75,7 @@ codingeverywhere/
 │       ├── stream-json-parser.ts# Claude CLI output parser
 │       ├── ws-handler.ts        # WebSocket server
 │       └── routes/              # REST API
-└── docs/plans/                  # Design documents
+└── docs/                        # Design documents
 ```
 
 ## Tech Stack
@@ -105,6 +105,10 @@ Server → Client:
 | Desktop (≥1024px) | Sidebar + Chat + Plan panel (3-column) |
 | Tablet (768–1023px) | Chat fullwidth, sidebar/plan as drawers |
 | Mobile (<768px) | Fullscreen chat, bottom sheet for servers, swipe to switch sessions |
+
+<p align="center">
+  <img src="assets/mobile-chat.jpeg" alt="Mobile chat view" width="300" />
+</p>
 
 ## License
 
