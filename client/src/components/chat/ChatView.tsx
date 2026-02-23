@@ -47,12 +47,15 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
     useCallback(() => switchSession(-1), [switchSession]),  // swipe right → prev
   );
 
-  // Scroll instant on session switch, smooth on new messages within the same session
+  // Scroll instant on session switch or initial mount, smooth on new messages
+  const isInitialRef = useRef(true);
   const prevSessionRef = useRef(activeSessionId);
   useEffect(() => {
     const switched = prevSessionRef.current !== activeSessionId;
     prevSessionRef.current = activeSessionId;
-    bottomRef.current?.scrollIntoView({ behavior: switched ? 'instant' : 'smooth' });
+    const behavior = isInitialRef.current || switched ? 'instant' : 'smooth';
+    isInitialRef.current = false;
+    bottomRef.current?.scrollIntoView({ behavior });
   }, [messages, activeSessionId]);
 
   if (!activeServerId) {
