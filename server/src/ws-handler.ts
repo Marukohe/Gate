@@ -26,6 +26,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
   const sshManager = new SSHManager();
   const parsers = new Map<string, StreamJsonParser>(); // keyed by sessionId
+  const connecting = new Set<string>(); // sessionIds currently being connected
 
   sshManager.on('status', (serverId: string, sessionId: string | null, status: string, error?: string) => {
     broadcast(wss, { type: 'status', serverId, sessionId, status, error });
@@ -134,25 +135,33 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
               break;
             }
 
-            // Ensure SSH connection exists
-            const config: ServerConfig = {
-              id: server.id,
-              host: server.host,
-              port: server.port,
-              username: server.username,
-              authType: server.authType as 'password' | 'privateKey',
-              password: server.password ?? undefined,
-              privateKeyPath: server.privateKeyPath ?? undefined,
-            };
+            // Skip if this session is already being connected
+            if (connecting.has(sessionId)) break;
+            connecting.add(sessionId);
 
-            if (!sshManager.isConnected(server.id)) {
-              await sshManager.connect(config);
+            try {
+              // Ensure SSH connection exists
+              const config: ServerConfig = {
+                id: server.id,
+                host: server.host,
+                port: server.port,
+                username: server.username,
+                authType: server.authType as 'password' | 'privateKey',
+                password: server.password ?? undefined,
+                privateKeyPath: server.privateKeyPath ?? undefined,
+              };
+
+              if (!sshManager.isConnected(server.id)) {
+                await sshManager.connect(config);
+              }
+
+              // Resume previous Claude session if we have a session ID
+              const resumeId = session.claudeSessionId ?? null;
+              await sshManager.startClaude(server.id, sessionId, resumeId, session.workingDir);
+              ws.send(JSON.stringify({ type: 'status', serverId: server.id, sessionId, status: 'connected' }));
+            } finally {
+              connecting.delete(sessionId);
             }
-
-            // Resume previous Claude session if we have a session ID
-            const resumeId = session.claudeSessionId ?? null;
-            await sshManager.startClaude(server.id, sessionId, resumeId, session.workingDir);
-            ws.send(JSON.stringify({ type: 'status', serverId: server.id, sessionId, status: 'connected' }));
 
             // Async fetch git info if session has a workingDir
             if (session.workingDir) {

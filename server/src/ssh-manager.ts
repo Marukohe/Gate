@@ -78,6 +78,9 @@ export class SSHManager extends EventEmitter {
         host: config.host,
         port: config.port,
         username: config.username,
+        readyTimeout: 10_000,
+        keepaliveInterval: 15_000,
+        keepaliveCountMax: 3,
       };
 
       if (config.authType === 'password') {
@@ -104,7 +107,9 @@ export class SSHManager extends EventEmitter {
 
     const cmd = buildClaudeCmd(resumeClaudeSessionId, workingDir);
     const channel = await new Promise<ClientChannel>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Claude CLI launch timed out')), 15_000);
       conn.client.exec(cmd, (err, ch) => {
+        clearTimeout(timeout);
         if (err) return reject(err);
         resolve(ch);
       });

@@ -35,7 +35,14 @@ const storeRefs = {
   processPlanModeMessage: null as null | ReturnType<typeof usePlanModeStore.getState>['processMessage'],
 };
 
+// Track the last session we sent a connect for so we don't spam the server
+let lastConnectedSession: string | null = null;
+
 function sendConnect(socket: WebSocket, serverId: string, sessionId: string) {
+  // Skip if we already connected/connecting this session
+  const status = useSessionStore.getState().connectionStatus[sessionId];
+  if (sessionId === lastConnectedSession && (status === 'connected' || status === 'connecting')) return;
+  lastConnectedSession = sessionId;
   storeRefs.setConnectionStatus?.(sessionId, 'connecting');
   socket.send(JSON.stringify({ type: 'connect', serverId, sessionId }));
   socket.send(JSON.stringify({ type: 'fetch-git-info', serverId, sessionId }));
