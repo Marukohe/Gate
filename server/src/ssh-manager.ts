@@ -49,11 +49,13 @@ function buildClaudeCmd(resumeSessionId?: string | null, workingDir?: string | n
 
 export class SSHManager extends EventEmitter {
   private connections = new Map<string, SSHConnection>();
+  private configs = new Map<string, ServerConfig>();
 
   async connect(config: ServerConfig): Promise<void> {
     if (this.connections.has(config.id)) {
       await this.disconnect(config.id);
     }
+    this.configs.set(config.id, config);
 
     const client = new Client();
 
@@ -65,6 +67,7 @@ export class SSHManager extends EventEmitter {
       });
 
       client.on('error', (err) => {
+        this.connections.delete(config.id);
         this.emit('status', config.id, null, 'error', err.message);
         reject(err);
       });
@@ -93,28 +96,49 @@ export class SSHManager extends EventEmitter {
     });
   }
 
+  /** Reconnect using the last known config. */
+  private async reconnect(serverId: string): Promise<void> {
+    const config = this.configs.get(serverId);
+    if (!config) throw new Error(`No saved config for server ${serverId}`);
+    await this.connect(config);
+  }
+
   /** Launch Claude CLI in stream-json mode via SSH exec on a new channel. */
   async startClaude(serverId: string, sessionId: string, resumeClaudeSessionId?: string | null, workingDir?: string | null): Promise<void> {
-    const conn = this.connections.get(serverId);
-    if (!conn) throw new Error(`No connection for server ${serverId}`);
+    const cmd = buildClaudeCmd(resumeClaudeSessionId, workingDir);
 
-    // Close existing channel for this session if any
-    const existing = conn.channels.get(sessionId);
-    if (existing) {
-      existing.end();
-      conn.channels.delete(sessionId);
+    // Try exec, and if it fails (stale connection), reconnect and retry once
+    const execOnChannel = async (): Promise<ClientChannel> => {
+      const conn = this.connections.get(serverId);
+      if (!conn) throw new Error(`No connection for server ${serverId}`);
+
+      // Close existing channel for this session if any
+      const existing = conn.channels.get(sessionId);
+      if (existing) {
+        existing.end();
+        conn.channels.delete(sessionId);
+      }
+
+      return new Promise<ClientChannel>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Claude CLI launch timed out')), 15_000);
+        conn.client.exec(cmd, (err, ch) => {
+          clearTimeout(timeout);
+          if (err) return reject(err);
+          resolve(ch);
+        });
+      });
+    };
+
+    let channel: ClientChannel;
+    try {
+      channel = await execOnChannel();
+    } catch {
+      // Stale connection — reconnect and retry
+      await this.reconnect(serverId);
+      channel = await execOnChannel();
     }
 
-    const cmd = buildClaudeCmd(resumeClaudeSessionId, workingDir);
-    const channel = await new Promise<ClientChannel>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Claude CLI launch timed out')), 15_000);
-      conn.client.exec(cmd, (err, ch) => {
-        clearTimeout(timeout);
-        if (err) return reject(err);
-        resolve(ch);
-      });
-    });
-
+    const conn = this.connections.get(serverId)!;
     conn.channels.set(sessionId, channel);
 
     channel.on('data', (data: Buffer) => {

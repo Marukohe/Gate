@@ -39,9 +39,9 @@ const storeRefs = {
 let lastConnectedSession: string | null = null;
 
 function sendConnect(socket: WebSocket, serverId: string, sessionId: string) {
-  // Skip if we already connected/connecting this session
+  // Only skip if already fully connected — allow re-sending if stuck in 'connecting'
   const status = useSessionStore.getState().connectionStatus[sessionId];
-  if (sessionId === lastConnectedSession && (status === 'connected' || status === 'connecting')) return;
+  if (sessionId === lastConnectedSession && status === 'connected') return;
   lastConnectedSession = sessionId;
   storeRefs.setConnectionStatus?.(sessionId, 'connecting');
   socket.send(JSON.stringify({ type: 'connect', serverId, sessionId }));
