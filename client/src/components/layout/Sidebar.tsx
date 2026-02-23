@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, MoreVertical } from 'lucide-react';
+import { Plus, Pencil, Trash2, MoreVertical, Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useServerStore, type Server as ServerType } from '@/stores/server-store';
 import { useSessionStore } from '@/stores/session-store';
+import { useUIStore } from '@/stores/ui-store';
 import { cn } from '@/lib/utils';
 import { getInitials, getAvatarColor } from '@/lib/server-utils';
 
@@ -42,6 +43,8 @@ export function Sidebar({ onAddServer, onEditServer, onClose }: SidebarProps) {
   const activeSessionIds = useSessionStore((s) => s.activeSessionId);
   const connectionStatus = useSessionStore((s) => s.connectionStatus);
 
+  const darkMode = useUIStore((s) => s.darkMode);
+  const toggleDarkMode = useUIStore((s) => s.toggleDarkMode);
   const [deleteTarget, setDeleteTarget] = useState<ServerType | null>(null);
 
   const statusInfo = (serverId: string) => {
@@ -145,10 +148,13 @@ export function Sidebar({ onAddServer, onEditServer, onClose }: SidebarProps) {
             );
           })}
         </div>
-        <div className={cn('p-4', !isMobile && 'border-t')}>
-          <Button variant="outline" className="h-10 w-full justify-start gap-2" onClick={() => { onAddServer(); onClose?.(); }}>
+        <div className={cn('flex items-center gap-2 p-4', !isMobile && 'border-t')}>
+          <Button variant="outline" className="h-10 flex-1 justify-start gap-2" onClick={() => { onAddServer(); onClose?.(); }}>
             <Plus className="h-4 w-4" />
             Add Server
+          </Button>
+          <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" onClick={toggleDarkMode}>
+            {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
         </div>
       </div>

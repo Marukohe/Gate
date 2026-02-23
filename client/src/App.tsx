@@ -6,9 +6,15 @@ import { PlanModeOverlay } from '@/components/plan-mode/PlanModeOverlay';
 import { useServerStore, type Server } from '@/stores/server-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useChatStore } from '@/stores/chat-store';
+import { useUIStore } from '@/stores/ui-store';
 import { useWebSocket } from '@/hooks/use-websocket';
 
 function App() {
+  // Sync dark mode class on <html>
+  const darkMode = useUIStore((s) => s.darkMode);
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode);
+  }, [darkMode]);
   const [serverDialogOpen, setServerDialogOpen] = useState(false);
   const [editingServer, setEditingServer] = useState<Server | null>(null);
   const setServers = useServerStore((s) => s.setServers);
