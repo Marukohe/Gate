@@ -103,42 +103,55 @@ export class SSHManager extends EventEmitter {
     await this.connect(config);
   }
 
+  /** Quick ping to verify the SSH connection is still alive. */
+  private async checkAlive(serverId: string): Promise<boolean> {
+    const conn = this.connections.get(serverId);
+    if (!conn) return false;
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => resolve(false), 3_000);
+      conn.client.exec('echo 1', (err, ch) => {
+        clearTimeout(timeout);
+        if (err) return resolve(false);
+        ch.on('close', () => resolve(true));
+        ch.on('data', () => {});
+        ch.stderr.on('data', () => {});
+      });
+    });
+  }
+
+  /** Ensure the SSH connection for a server is alive, reconnecting if stale. */
+  async ensureConnected(serverId: string): Promise<void> {
+    if (this.connections.has(serverId)) {
+      const alive = await this.checkAlive(serverId);
+      if (alive) return;
+      // Stale — tear down and reconnect
+      this.connections.delete(serverId);
+    }
+    await this.reconnect(serverId);
+  }
+
   /** Launch Claude CLI in stream-json mode via SSH exec on a new channel. */
   async startClaude(serverId: string, sessionId: string, resumeClaudeSessionId?: string | null, workingDir?: string | null): Promise<void> {
-    const cmd = buildClaudeCmd(resumeClaudeSessionId, workingDir);
+    const conn = this.connections.get(serverId);
+    if (!conn) throw new Error(`No connection for server ${serverId}`);
 
-    // Try exec, and if it fails (stale connection), reconnect and retry once
-    const execOnChannel = async (): Promise<ClientChannel> => {
-      const conn = this.connections.get(serverId);
-      if (!conn) throw new Error(`No connection for server ${serverId}`);
-
-      // Close existing channel for this session if any
-      const existing = conn.channels.get(sessionId);
-      if (existing) {
-        existing.end();
-        conn.channels.delete(sessionId);
-      }
-
-      return new Promise<ClientChannel>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('Claude CLI launch timed out')), 15_000);
-        conn.client.exec(cmd, (err, ch) => {
-          clearTimeout(timeout);
-          if (err) return reject(err);
-          resolve(ch);
-        });
-      });
-    };
-
-    let channel: ClientChannel;
-    try {
-      channel = await execOnChannel();
-    } catch {
-      // Stale connection — reconnect and retry
-      await this.reconnect(serverId);
-      channel = await execOnChannel();
+    // Close existing channel for this session if any
+    const existing = conn.channels.get(sessionId);
+    if (existing) {
+      existing.end();
+      conn.channels.delete(sessionId);
     }
 
-    const conn = this.connections.get(serverId)!;
+    const cmd = buildClaudeCmd(resumeClaudeSessionId, workingDir);
+    const channel = await new Promise<ClientChannel>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Claude CLI launch timed out')), 10_000);
+      conn.client.exec(cmd, (err, ch) => {
+        clearTimeout(timeout);
+        if (err) return reject(err);
+        resolve(ch);
+      });
+    });
+
     conn.channels.set(sessionId, channel);
 
     channel.on('data', (data: Buffer) => {

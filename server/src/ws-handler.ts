@@ -140,7 +140,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
             connecting.add(sessionId);
 
             try {
-              // Ensure SSH connection exists
+              // Ensure SSH connection is alive (ping check + auto-reconnect if stale)
               const config: ServerConfig = {
                 id: server.id,
                 host: server.host,
@@ -153,6 +153,8 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
 
               if (!sshManager.isConnected(server.id)) {
                 await sshManager.connect(config);
+              } else {
+                await sshManager.ensureConnected(server.id);
               }
 
               // Resume previous Claude session if we have a session ID
