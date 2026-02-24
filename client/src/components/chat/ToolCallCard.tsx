@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/stores/chat-store';
 import { stripLineNumbers } from '@/lib/utils';
+import { CodeBlock } from './CodeBlock';
 
 interface ToolCallCardProps {
   message: ChatMessage;
@@ -13,6 +14,8 @@ interface ToolCallCardProps {
 export function ToolCallCard({ message }: ToolCallCardProps) {
   const isBashResult = message.type === 'tool_result' && message.toolName === 'bash';
   const [open, setOpen] = useState(isBashResult);
+  const content = stripLineNumbers(message.content);
+  const isDiff = /^diff --git /m.test(content);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="my-2 rounded-md border bg-muted/30">
@@ -22,7 +25,11 @@ export function ToolCallCard({ message }: ToolCallCardProps) {
         <span className="truncate text-muted-foreground">{message.toolDetail || message.content.slice(0, 80)}</span>
       </CollapsibleTrigger>
       <CollapsibleContent className="border-t px-3 py-2">
-        <pre className="whitespace-pre-wrap break-all text-xs">{stripLineNumbers(message.content)}</pre>
+        {isDiff ? (
+          <CodeBlock code={content} language="diff" />
+        ) : (
+          <pre className="whitespace-pre-wrap break-all text-xs">{content}</pre>
+        )}
       </CollapsibleContent>
     </Collapsible>
   );
