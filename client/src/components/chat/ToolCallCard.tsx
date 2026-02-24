@@ -5,7 +5,6 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/stores/chat-store';
 import { stripLineNumbers } from '@/lib/utils';
-import { CodeBlock } from './CodeBlock';
 
 interface ToolCallCardProps {
   message: ChatMessage;
@@ -26,7 +25,15 @@ export function ToolCallCard({ message }: ToolCallCardProps) {
       </CollapsibleTrigger>
       <CollapsibleContent className="border-t px-3 py-2">
         {isDiff ? (
-          <CodeBlock code={content} language="diff" />
+          <pre className="whitespace-pre-wrap break-all text-xs">
+            {content.split('\n').map((line, i) => {
+              let cls = '';
+              if (line.startsWith('+')) cls = 'text-green-600 dark:text-green-400';
+              else if (line.startsWith('-')) cls = 'text-red-600 dark:text-red-400';
+              else if (line.startsWith('@@')) cls = 'text-cyan-600 dark:text-cyan-400';
+              return <div key={i} className={cls}>{line}</div>;
+            })}
+          </pre>
         ) : (
           <pre className="whitespace-pre-wrap break-all text-xs">{content}</pre>
         )}
