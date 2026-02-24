@@ -27,11 +27,11 @@ export function ToolCallCard({ message }: ToolCallCardProps) {
         {isDiff ? (
           <pre className="whitespace-pre-wrap break-all text-xs">
             {content.split('\n').map((line, i) => {
-              let cls = '';
-              if (line.startsWith('+')) cls = 'text-green-600 dark:text-green-400';
-              else if (line.startsWith('-')) cls = 'text-red-600 dark:text-red-400';
-              else if (line.startsWith('@@')) cls = 'text-cyan-600 dark:text-cyan-400';
-              return <div key={i} className={cls}>{line}</div>;
+              let color: string | undefined;
+              if (line.startsWith('+')) color = '#16a34a';
+              else if (line.startsWith('-')) color = '#dc2626';
+              else if (line.startsWith('@@')) color = '#0891b2';
+              return <div key={i} style={color ? { color } : undefined}>{line}</div>;
             })}
           </pre>
         ) : (
