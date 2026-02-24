@@ -56,7 +56,16 @@ function ToolLineItem({ item, defaultOpen }: { item: MergedToolItem; defaultOpen
       </CollapsibleTrigger>
       <CollapsibleContent className="pl-9 pr-3 pb-1">
         <pre className="whitespace-pre-wrap text-xs text-muted-foreground max-h-60 overflow-y-auto">
-          {stripLineNumbers(content)}
+          {/^diff --git /m.test(content)
+            ? stripLineNumbers(content).split('\n').map((line, i) => {
+                let color: string | undefined;
+                if (line.startsWith('+')) color = '#16a34a';
+                else if (line.startsWith('-')) color = '#dc2626';
+                else if (line.startsWith('@@')) color = '#0891b2';
+                return <div key={i} style={color ? { color } : undefined}>{line}</div>;
+              })
+            : stripLineNumbers(content)
+          }
         </pre>
       </CollapsibleContent>
     </Collapsible>
