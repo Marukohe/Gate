@@ -25,7 +25,7 @@ function App() {
   const setSessions = useSessionStore((s) => s.setSessions);
   const setActiveSession = useSessionStore((s) => s.setActiveSession);
 
-  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand } = useWebSocket();
+  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript } = useWebSocket();
 
   useEffect(() => {
     fetch('/api/servers')
@@ -129,6 +129,11 @@ function App() {
     setActiveSession(activeServerId, sessionId);
   }, [activeServerId, activeSessionId, setActiveSession, connectToSession]);
 
+  const handleSyncTranscript = useCallback((sessionId: string) => {
+    if (!activeServerId) return;
+    syncTranscript(activeServerId, sessionId);
+  }, [activeServerId, syncTranscript]);
+
   return (
     <>
       <AppShell
@@ -140,6 +145,7 @@ function App() {
             onSelectSession={handleSelectSession}
             onListBranches={listBranches}
             onSwitchBranch={switchBranch}
+            onSyncTranscript={handleSyncTranscript}
           />
         }
         onAddServer={() => { setEditingServer(null); setServerDialogOpen(true); }}

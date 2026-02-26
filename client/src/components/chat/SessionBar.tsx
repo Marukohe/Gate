@@ -41,9 +41,10 @@ interface SessionBarProps {
   onSelectSession: (sessionId: string) => void;
   onListBranches: (serverId: string, sessionId: string) => void;
   onSwitchBranch: (serverId: string, sessionId: string, branch: string) => void;
+  onSyncTranscript: (sessionId: string) => void;
 }
 
-export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelectSession, onListBranches, onSwitchBranch }: SessionBarProps) {
+export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelectSession, onListBranches, onSwitchBranch, onSyncTranscript }: SessionBarProps) {
   const sessions = useSessionStore((s) => s.sessions[serverId]) ?? EMPTY_SESSIONS;
   const activeSessionId = useSessionStore((s) => s.activeSessionId[serverId]);
   const connectionStatus = useSessionStore((s) => s.connectionStatus);
@@ -59,6 +60,7 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
   const activePlanId = usePlanStore((s) => s.activePlanId);
   const togglePlanPanel = useUIStore((s) => s.togglePlanPanel);
   const planPanelOpen = useUIStore((s) => s.planPanelOpen);
+  const syncStatus = useUIStore((s) => s.syncStatus);
 
   const statusDot = (sessionId: string) => {
     const status = connectionStatus[sessionId];
@@ -163,6 +165,12 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
                       <DropdownMenuItem onClick={() => startRename(session)}>
                         Rename
                       </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={syncStatus[session.id]?.state === 'syncing'}
+                        onClick={() => onSyncTranscript(session.id)}
+                      >
+                        {syncStatus[session.id]?.state === 'syncing' ? 'Syncing...' : 'Sync'}
+                      </DropdownMenuItem>
                       {sessions.length > 1 && (
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
@@ -179,6 +187,12 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
             <ContextMenuContent>
               <ContextMenuItem onClick={() => startRename(session)}>
                 Rename
+              </ContextMenuItem>
+              <ContextMenuItem
+                disabled={syncStatus[session.id]?.state === 'syncing'}
+                onClick={() => onSyncTranscript(session.id)}
+              >
+                {syncStatus[session.id]?.state === 'syncing' ? 'Syncing...' : 'Sync'}
               </ContextMenuItem>
               {sessions.length > 1 && (
                 <ContextMenuItem

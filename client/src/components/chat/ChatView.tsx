@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useCallback } from 'react';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { SessionBar } from './SessionBar';
@@ -8,6 +8,7 @@ import { groupMessages } from './group-tools';
 import { useChatStore, type ChatMessage } from '@/stores/chat-store';
 import { useServerStore } from '@/stores/server-store';
 import { useSessionStore } from '@/stores/session-store';
+import { useUIStore } from '@/stores/ui-store';
 import { useSwipe } from '@/hooks/use-swipe';
 
 const EMPTY_MESSAGES: ChatMessage[] = [];
@@ -19,15 +20,18 @@ interface ChatViewProps {
   onSelectSession: (sessionId: string) => void;
   onListBranches: (serverId: string, sessionId: string) => void;
   onSwitchBranch: (serverId: string, sessionId: string, branch: string) => void;
+  onSyncTranscript: (sessionId: string) => void;
 }
 
-export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSession, onListBranches, onSwitchBranch }: ChatViewProps) {
+export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSession, onListBranches, onSwitchBranch, onSyncTranscript }: ChatViewProps) {
   const activeServerId = useServerStore((s) => s.activeServerId);
   const activeSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
   const sessions = useSessionStore((s) => activeServerId ? s.sessions[activeServerId] : undefined);
   const connectionStatus = useSessionStore((s) => activeSessionId ? s.connectionStatus[activeSessionId] : undefined);
   const connectionError = useSessionStore((s) => activeSessionId ? s.connectionError[activeSessionId] : undefined);
   const isConnected = connectionStatus === 'connected';
+  const syncStatus = useUIStore((s) => activeSessionId ? s.syncStatus[activeSessionId] : undefined);
+  const setSyncStatus = useUIStore((s) => s.setSyncStatus);
   const messages = useChatStore((s) => activeSessionId ? (s.messages[activeSessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES);
   const renderItems = useMemo(() => groupMessages(messages), [messages]);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -46,6 +50,15 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
     useCallback(() => switchSession(1), [switchSession]),   // swipe left → next
     useCallback(() => switchSession(-1), [switchSession]),  // swipe right → prev
   );
+
+  // Auto-dismiss sync status after 3 seconds
+  useEffect(() => {
+    if (!activeSessionId || !syncStatus) return;
+    if (syncStatus.state === 'done' || syncStatus.state === 'error') {
+      const timer = setTimeout(() => setSyncStatus(activeSessionId, { state: 'idle' }), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [activeSessionId, syncStatus, setSyncStatus]);
 
   // Scroll instant on session switch or initial mount, smooth on new messages
   const isInitialRef = useRef(true);
@@ -75,6 +88,7 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
         onSelectSession={onSelectSession}
         onListBranches={onListBranches}
         onSwitchBranch={onSwitchBranch}
+        onSyncTranscript={onSyncTranscript}
       />
       {connectionStatus === 'error' && connectionError && (
         <div className="flex items-center gap-2 border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">
@@ -85,6 +99,23 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
       {connectionStatus === 'connecting' && (
         <div className="border-b bg-muted px-4 py-2 text-center text-xs text-muted-foreground">
           Connecting...
+        </div>
+      )}
+      {syncStatus?.state === 'syncing' && (
+        <div className="flex items-center justify-center gap-2 border-b bg-muted px-4 py-2 text-xs text-muted-foreground">
+          <RefreshCw className="h-3 w-3 animate-spin" />
+          Syncing transcript...
+        </div>
+      )}
+      {syncStatus?.state === 'done' && (
+        <div className="border-b bg-green-500/10 px-4 py-2 text-center text-xs text-green-700 dark:text-green-400">
+          Synced {syncStatus.added} new message{syncStatus.added !== 1 ? 's' : ''} from transcript
+        </div>
+      )}
+      {syncStatus?.state === 'error' && (
+        <div className="flex items-center gap-2 border-b bg-destructive/10 px-4 py-2 text-xs text-destructive">
+          <AlertCircle className="h-3 w-3 shrink-0" />
+          Sync failed: {syncStatus.error}
         </div>
       )}
       <div className="flex-1 overflow-y-auto px-4" {...swipe}>

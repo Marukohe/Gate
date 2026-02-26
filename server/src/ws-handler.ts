@@ -2,10 +2,11 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { Server as HttpServer } from 'http';
 import { SSHManager, type ServerConfig } from './ssh-manager.js';
 import { StreamJsonParser, type ParsedMessage } from './stream-json-parser.js';
+import { parseTranscript } from './transcript-parser.js';
 import type { Database } from './db.js';
 
 interface ClientMessage {
-  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec';
+  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript';
   serverId: string;
   sessionId?: string;
   sessionName?: string;
@@ -16,7 +17,7 @@ interface ClientMessage {
 }
 
 interface ServerMessage {
-  type: 'message' | 'status' | 'history' | 'sessions' | 'git-info' | 'branches';
+  type: 'message' | 'status' | 'history' | 'sessions' | 'git-info' | 'branches' | 'sync-result';
   serverId: string;
   sessionId?: string | null;
   [key: string]: any;
@@ -303,12 +304,80 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
             broadcast(wss, { type: 'message', serverId: msg.serverId, sessionId: msg.sessionId, message: resultMessage });
             break;
           }
+
+          case 'sync-transcript': {
+            if (!msg.sessionId) return;
+            const syncSession = db.getSession(msg.sessionId);
+            if (!syncSession?.claudeSessionId) {
+              ws.send(JSON.stringify({ type: 'sync-result', serverId: msg.serverId, sessionId: msg.sessionId, success: false, error: 'No Claude session ID found. Start a conversation first.' }));
+              return;
+            }
+            if (!sshManager.isConnected(msg.serverId)) {
+              ws.send(JSON.stringify({ type: 'sync-result', serverId: msg.serverId, sessionId: msg.sessionId, success: false, error: 'Not connected to server' }));
+              return;
+            }
+
+            try {
+              // Find and read the JSONL transcript file on the remote server
+              const findCmd = `ls ~/.claude/projects/*/${syncSession.claudeSessionId}.jsonl 2>/dev/null | head -1`;
+              const { stdout: filePath } = await sshManager.runCommand(msg.serverId, null, findCmd);
+              const trimmedPath = filePath.trim();
+              if (!trimmedPath) {
+                ws.send(JSON.stringify({ type: 'sync-result', serverId: msg.serverId, sessionId: msg.sessionId, success: false, error: `Transcript file not found for session ${syncSession.claudeSessionId}` }));
+                return;
+              }
+
+              const { stdout: jsonlContent } = await sshManager.runCommand(msg.serverId, null, `cat '${trimmedPath}'`);
+              const transcriptMessages = parseTranscript(jsonlContent);
+
+              if (transcriptMessages.length === 0) {
+                ws.send(JSON.stringify({ type: 'sync-result', serverId: msg.serverId, sessionId: msg.sessionId, success: true, added: 0 }));
+                return;
+              }
+
+              // Build signature set from existing DB messages for dedup
+              const existing = db.getMessages(msg.sessionId, 10000);
+              const signatures = new Set<string>();
+              for (const m of existing) {
+                signatures.add(msgSignature(m.type, m.content));
+              }
+
+              // Find new messages not already in DB
+              const newMessages = transcriptMessages.filter(
+                (m) => !signatures.has(msgSignature(m.type, m.content)),
+              );
+
+              if (newMessages.length > 0) {
+                db.saveMessages(newMessages.map((m) => ({
+                  sessionId: msg.sessionId!,
+                  type: m.type,
+                  content: m.content,
+                  toolName: m.toolName,
+                  toolDetail: m.toolDetail,
+                  timestamp: m.timestamp,
+                })));
+              }
+
+              // Send full updated history to this client
+              const allMessages = db.getMessages(msg.sessionId!);
+              ws.send(JSON.stringify({ type: 'history', serverId: msg.serverId, sessionId: msg.sessionId, messages: allMessages }));
+              ws.send(JSON.stringify({ type: 'sync-result', serverId: msg.serverId, sessionId: msg.sessionId, success: true, added: newMessages.length }));
+            } catch (err: any) {
+              ws.send(JSON.stringify({ type: 'sync-result', serverId: msg.serverId, sessionId: msg.sessionId, success: false, error: err.message }));
+            }
+            break;
+          }
         }
       } catch (err: any) {
         ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: err.message }));
       }
     });
   });
+}
+
+/** Dedup signature: type + first 150 chars of content. */
+function msgSignature(type: string, content: string): string {
+  return `${type}|${content.slice(0, 150)}`;
 }
 
 function broadcast(wss: WebSocketServer, data: ServerMessage): void {

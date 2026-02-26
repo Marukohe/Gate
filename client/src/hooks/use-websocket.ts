@@ -3,6 +3,7 @@ import { useSessionStore } from '../stores/session-store';
 import { useChatStore } from '../stores/chat-store';
 import { usePlanModeStore } from '../stores/plan-mode-store';
 import { usePlanStore } from '../stores/plan-store';
+import { useUIStore } from '../stores/ui-store';
 
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -119,6 +120,16 @@ function setupSocket() {
           storeRefs.setBranches?.(data.sessionId, { current: data.current, local: data.local, remote: data.remote });
         }
         break;
+      case 'sync-result':
+        if (data.sessionId) {
+          const setSyncStatus = useUIStore.getState().setSyncStatus;
+          if (data.success) {
+            setSyncStatus(data.sessionId, { state: 'done', added: data.added ?? 0 });
+          } else {
+            setSyncStatus(data.sessionId, { state: 'error', error: data.error ?? 'Sync failed' });
+          }
+        }
+        break;
     }
   };
 
@@ -218,5 +229,11 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'exec', serverId, sessionId, command }));
   }, []);
 
-  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand };
+  const syncTranscript = useCallback((serverId: string, sessionId: string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    useUIStore.getState().setSyncStatus(sessionId, { state: 'syncing' });
+    ws.send(JSON.stringify({ type: 'sync-transcript', serverId, sessionId }));
+  }, []);
+
+  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript };
 }

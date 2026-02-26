@@ -51,6 +51,8 @@ export interface Database {
   updateSessionActivity(id: string): void;
   updateClaudeSessionId(id: string, claudeSessionId: string): void;
   saveMessage(input: CreateMessageInput): Message;
+  saveMessages(inputs: CreateMessageInput[]): Message[];
+  deleteMessages(sessionId: string): void;
   getMessages(sessionId: string, limit?: number): Message[];
   close(): void;
 }
@@ -176,6 +178,27 @@ export function createDb(dbPath: string): Database {
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(id, input.sessionId, input.type, input.content, input.toolName ?? null, input.toolDetail ?? null, input.timestamp);
       return { id, ...input };
+    },
+
+    saveMessages(inputs) {
+      const insert = db.prepare(`
+        INSERT INTO messages (id, sessionId, type, content, toolName, toolDetail, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      const tx = db.transaction((items: CreateMessageInput[]) => {
+        const results: Message[] = [];
+        for (const input of items) {
+          const id = randomUUID();
+          insert.run(id, input.sessionId, input.type, input.content, input.toolName ?? null, input.toolDetail ?? null, input.timestamp);
+          results.push({ id, ...input });
+        }
+        return results;
+      });
+      return tx(inputs);
+    },
+
+    deleteMessages(sessionId) {
+      db.prepare('DELETE FROM messages WHERE sessionId = ?').run(sessionId);
     },
 
     getMessages(sessionId, limit = 500) {
