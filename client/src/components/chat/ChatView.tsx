@@ -15,15 +15,16 @@ const EMPTY_MESSAGES: ChatMessage[] = [];
 
 interface ChatViewProps {
   onSend: (text: string) => void;
-  onCreateSession: (name: string, workingDir: string | null) => void;
+  onCreateSession: (name: string, workingDir: string | null, claudeSessionId?: string | null) => void;
   onDeleteSession: (sessionId: string) => void;
   onSelectSession: (sessionId: string) => void;
   onListBranches: (serverId: string, sessionId: string) => void;
   onSwitchBranch: (serverId: string, sessionId: string, branch: string) => void;
   onSyncTranscript: (sessionId: string) => void;
+  onListClaudeSessions?: (serverId: string, workingDir: string) => Promise<string[]>;
 }
 
-export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSession, onListBranches, onSwitchBranch, onSyncTranscript }: ChatViewProps) {
+export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSession, onListBranches, onSwitchBranch, onSyncTranscript, onListClaudeSessions }: ChatViewProps) {
   const activeServerId = useServerStore((s) => s.activeServerId);
   const activeSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
   const sessions = useSessionStore((s) => activeServerId ? s.sessions[activeServerId] : undefined);
@@ -89,6 +90,7 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
         onListBranches={onListBranches}
         onSwitchBranch={onSwitchBranch}
         onSyncTranscript={onSyncTranscript}
+        onListClaudeSessions={onListClaudeSessions}
       />
       {connectionStatus === 'error' && connectionError && (
         <div className="flex items-center gap-2 border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">

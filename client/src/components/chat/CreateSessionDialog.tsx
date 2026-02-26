@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Folder } from 'lucide-react';
+import { Folder, Loader2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -15,30 +15,59 @@ import { RemoteDirPicker, type BrowseResult } from '@/components/RemoteDirPicker
 interface CreateSessionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (name: string, workingDir: string | null) => void;
+  onSubmit: (name: string, workingDir: string | null, claudeSessionId?: string | null) => void;
   defaultName: string;
   defaultWorkingDir?: string;
   serverId: string;
+  onListClaudeSessions?: (serverId: string, workingDir: string) => Promise<string[]>;
 }
 
-export function CreateSessionDialog({ open, onOpenChange, onSubmit, defaultName, defaultWorkingDir, serverId }: CreateSessionDialogProps) {
+export function CreateSessionDialog({ open, onOpenChange, onSubmit, defaultName, defaultWorkingDir, serverId, onListClaudeSessions }: CreateSessionDialogProps) {
   const [name, setName] = useState(defaultName);
   const [workingDir, setWorkingDir] = useState(defaultWorkingDir ?? '');
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [claudeSessions, setClaudeSessions] = useState<string[]>([]);
+  const [selectedClaudeSession, setSelectedClaudeSession] = useState<string | null>(null);
+  const [loadingSessions, setLoadingSessions] = useState(false);
 
   useEffect(() => {
     if (open) {
       setName(defaultName);
       setWorkingDir(defaultWorkingDir ?? '');
+      setClaudeSessions([]);
+      setSelectedClaudeSession(null);
     }
   }, [open, defaultName, defaultWorkingDir]);
+
+  // Fetch Claude sessions when workingDir changes
+  useEffect(() => {
+    if (!open || !workingDir.trim() || !onListClaudeSessions) {
+      setClaudeSessions([]);
+      setSelectedClaudeSession(null);
+      return;
+    }
+    let cancelled = false;
+    setLoadingSessions(true);
+    onListClaudeSessions(serverId, workingDir.trim()).then((sessions) => {
+      if (!cancelled) {
+        setClaudeSessions(sessions);
+        setSelectedClaudeSession(null);
+        setLoadingSessions(false);
+      }
+    }).catch(() => {
+      if (!cancelled) { setClaudeSessions([]); setLoadingSessions(false); }
+    });
+    return () => { cancelled = true; };
+  }, [open, workingDir, serverId, onListClaudeSessions]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedName = name.trim() || defaultName;
-    onSubmit(trimmedName, workingDir.trim() || null);
+    onSubmit(trimmedName, workingDir.trim() || null, selectedClaudeSession);
     setName('');
     setWorkingDir('');
+    setClaudeSessions([]);
+    setSelectedClaudeSession(null);
     onOpenChange(false);
   };
 
@@ -108,6 +137,38 @@ export function CreateSessionDialog({ open, onOpenChange, onSubmit, defaultName,
                 </Button>
               </div>
             </div>
+            {(loadingSessions || claudeSessions.length > 0) && (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium">Claude session</span>
+                {loadingSessions ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Loading sessions...
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1 max-h-32 overflow-y-auto">
+                    <button
+                      type="button"
+                      className={`text-left text-xs px-2 py-1 rounded ${selectedClaudeSession === null ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
+                      onClick={() => setSelectedClaudeSession(null)}
+                    >
+                      New session
+                    </button>
+                    {claudeSessions.map((sid) => (
+                      <button
+                        key={sid}
+                        type="button"
+                        className={`text-left text-xs px-2 py-1 rounded font-mono truncate ${selectedClaudeSession === sid ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
+                        onClick={() => setSelectedClaudeSession(sid)}
+                        title={sid}
+                      >
+                        {sid}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel

@@ -6,7 +6,7 @@ import { parseTranscript } from './transcript-parser.js';
 import type { Database } from './db.js';
 
 interface ClientMessage {
-  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript';
+  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions';
   serverId: string;
   sessionId?: string;
   sessionName?: string;
@@ -14,10 +14,11 @@ interface ClientMessage {
   text?: string;
   branch?: string;
   command?: string;
+  claudeSessionId?: string;
 }
 
 interface ServerMessage {
-  type: 'message' | 'status' | 'history' | 'sessions' | 'git-info' | 'branches' | 'sync-result';
+  type: 'message' | 'status' | 'history' | 'sessions' | 'git-info' | 'branches' | 'sync-result' | 'claude-sessions';
   serverId: string;
   sessionId?: string | null;
   [key: string]: any;
@@ -214,6 +215,11 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
           case 'create-session': {
             const name = msg.sessionName || 'New Session';
             const session = db.createSession(msg.serverId, name, msg.workingDir || null);
+            // Pre-fill Claude session ID if binding to an existing terminal session
+            if (msg.claudeSessionId) {
+              db.updateClaudeSessionId(session.id, msg.claudeSessionId);
+              session.claudeSessionId = msg.claudeSessionId;
+            }
             const sessions = db.listSessions(msg.serverId);
             broadcast(wss, { type: 'sessions', serverId: msg.serverId, sessions });
             // Also tell the sender which session was created
@@ -302,6 +308,39 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
             db.saveMessage(resultMessage);
             db.updateSessionActivity(msg.sessionId);
             broadcast(wss, { type: 'message', serverId: msg.serverId, sessionId: msg.sessionId, message: resultMessage });
+            break;
+          }
+
+          case 'list-claude-sessions': {
+            if (!msg.workingDir) return;
+            if (!sshManager.isConnected(msg.serverId)) {
+              ws.send(JSON.stringify({ type: 'claude-sessions', serverId: msg.serverId, sessions: [] }));
+              return;
+            }
+
+            try {
+              // Resolve ~ to $HOME, then build project hash (replace / with -)
+              const resolveCmd = `cd "${msg.workingDir}" 2>/dev/null && pwd || echo "${msg.workingDir}"`;
+              const { stdout: resolved } = await sshManager.runCommand(msg.serverId, null, resolveCmd);
+              const absPath = resolved.trim();
+              const projectHash = absPath.replace(/\//g, '-');
+
+              // List JSONL transcript files sorted by mtime (newest first)
+              const lsCmd = `ls -t ~/.claude/projects/${projectHash}/*.jsonl 2>/dev/null`;
+              const { stdout: lsOutput } = await sshManager.runCommand(msg.serverId, null, lsCmd);
+
+              const sessionIds = lsOutput.trim().split('\n')
+                .filter(Boolean)
+                .map((f) => {
+                  const basename = f.split('/').pop() ?? '';
+                  return basename.replace('.jsonl', '');
+                })
+                .filter(Boolean);
+
+              ws.send(JSON.stringify({ type: 'claude-sessions', serverId: msg.serverId, sessions: sessionIds }));
+            } catch {
+              ws.send(JSON.stringify({ type: 'claude-sessions', serverId: msg.serverId, sessions: [] }));
+            }
             break;
           }
 

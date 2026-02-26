@@ -13,6 +13,9 @@ const MAX_RECONNECT_DELAY = 30000;
 // Queued connect request — sent when WS opens
 let pendingConnect: { serverId: string; sessionId: string } | null = null;
 
+// One-shot callback for claude-sessions response
+let claudeSessionsCallback: ((sessions: string[]) => void) | null = null;
+
 function resetBackoff() {
   reconnectDelay = 1000;
 }
@@ -130,6 +133,12 @@ function setupSocket() {
           }
         }
         break;
+      case 'claude-sessions':
+        if (claudeSessionsCallback) {
+          claudeSessionsCallback(data.sessions ?? []);
+          claudeSessionsCallback = null;
+        }
+        break;
     }
   };
 
@@ -198,9 +207,9 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'disconnect', serverId, sessionId }));
   }, []);
 
-  const createSession = useCallback((serverId: string, name: string, workingDir?: string | null) => {
+  const createSession = useCallback((serverId: string, name: string, workingDir?: string | null, claudeSessionId?: string | null) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'create-session', serverId, sessionName: name, workingDir: workingDir || undefined }));
+    ws.send(JSON.stringify({ type: 'create-session', serverId, sessionName: name, workingDir: workingDir || undefined, claudeSessionId: claudeSessionId || undefined }));
   }, []);
 
   const fetchGitInfo = useCallback((serverId: string, sessionId: string) => {
@@ -235,5 +244,15 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'sync-transcript', serverId, sessionId }));
   }, []);
 
-  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript };
+  const listClaudeSessions = useCallback((serverId: string, workingDir: string): Promise<string[]> => {
+    return new Promise((resolve) => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) { resolve([]); return; }
+      claudeSessionsCallback = resolve;
+      ws.send(JSON.stringify({ type: 'list-claude-sessions', serverId, workingDir }));
+      // Timeout fallback in case server never responds
+      setTimeout(() => { if (claudeSessionsCallback === resolve) { claudeSessionsCallback = null; resolve([]); } }, 10000);
+    });
+  }, []);
+
+  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listClaudeSessions };
 }

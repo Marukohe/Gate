@@ -36,15 +36,16 @@ const EMPTY_SESSIONS: Session[] = [];
 
 interface SessionBarProps {
   serverId: string;
-  onCreateSession: (name: string, workingDir: string | null) => void;
+  onCreateSession: (name: string, workingDir: string | null, claudeSessionId?: string | null) => void;
   onDeleteSession: (sessionId: string) => void;
   onSelectSession: (sessionId: string) => void;
   onListBranches: (serverId: string, sessionId: string) => void;
   onSwitchBranch: (serverId: string, sessionId: string, branch: string) => void;
   onSyncTranscript: (sessionId: string) => void;
+  onListClaudeSessions?: (serverId: string, workingDir: string) => Promise<string[]>;
 }
 
-export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelectSession, onListBranches, onSwitchBranch, onSyncTranscript }: SessionBarProps) {
+export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelectSession, onListBranches, onSwitchBranch, onSyncTranscript, onListClaudeSessions }: SessionBarProps) {
   const sessions = useSessionStore((s) => s.sessions[serverId]) ?? EMPTY_SESSIONS;
   const activeSessionId = useSessionStore((s) => s.activeSessionId[serverId]);
   const connectionStatus = useSessionStore((s) => s.connectionStatus);
@@ -237,6 +238,7 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
         defaultName={`Session ${sessions.length + 1}`}
         defaultWorkingDir={server?.defaultWorkingDir}
         serverId={serverId}
+        onListClaudeSessions={onListClaudeSessions}
       />
 
       {branchSessionId && (

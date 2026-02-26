@@ -25,7 +25,7 @@ function App() {
   const setSessions = useSessionStore((s) => s.setSessions);
   const setActiveSession = useSessionStore((s) => s.setActiveSession);
 
-  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript } = useWebSocket();
+  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listClaudeSessions } = useWebSocket();
 
   useEffect(() => {
     fetch('/api/servers')
@@ -109,9 +109,9 @@ function App() {
     sendInput(activeServerId, activeSessionId, text);
   }, [activeServerId, activeSessionId, sendInput, addMessage, execCommand]);
 
-  const handleCreateSession = useCallback((name: string, workingDir: string | null) => {
+  const handleCreateSession = useCallback((name: string, workingDir: string | null, claudeSessionId?: string | null) => {
     if (!activeServerId) return;
-    createSession(activeServerId, name, workingDir);
+    createSession(activeServerId, name, workingDir, claudeSessionId);
   }, [activeServerId, createSession]);
 
   const handleDeleteSession = useCallback((sessionId: string) => {
@@ -146,6 +146,7 @@ function App() {
             onListBranches={listBranches}
             onSwitchBranch={switchBranch}
             onSyncTranscript={handleSyncTranscript}
+            onListClaudeSessions={listClaudeSessions}
           />
         }
         onAddServer={() => { setEditingServer(null); setServerDialogOpen(true); }}
