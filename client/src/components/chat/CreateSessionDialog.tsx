@@ -146,10 +146,10 @@ export function CreateSessionDialog({ open, onOpenChange, onSubmit, defaultName,
                     Loading sessions...
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-1 max-h-32 overflow-y-auto">
+                  <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto rounded border p-1.5">
                     <button
                       type="button"
-                      className={`text-left text-xs px-2 py-1 rounded ${selectedClaudeSession === null ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
+                      className={`shrink-0 text-left text-xs px-2 py-1.5 rounded ${selectedClaudeSession === null ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-accent'}`}
                       onClick={() => setSelectedClaudeSession(null)}
                     >
                       New session
@@ -158,7 +158,7 @@ export function CreateSessionDialog({ open, onOpenChange, onSubmit, defaultName,
                       <button
                         key={sid}
                         type="button"
-                        className={`text-left text-xs px-2 py-1 rounded font-mono truncate ${selectedClaudeSession === sid ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
+                        className={`shrink-0 text-left text-xs px-2 py-1.5 rounded font-mono overflow-hidden text-ellipsis whitespace-nowrap ${selectedClaudeSession === sid ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-accent'}`}
                         onClick={() => setSelectedClaudeSession(sid)}
                         title={sid}
                       >

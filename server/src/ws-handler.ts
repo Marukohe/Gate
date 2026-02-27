@@ -313,20 +313,38 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
 
           case 'list-claude-sessions': {
             if (!msg.workingDir) return;
-            if (!sshManager.isConnected(msg.serverId)) {
+            const lsServer = db.getServer(msg.serverId);
+            if (!lsServer) {
+              console.log('[list-claude-sessions] server not found:', msg.serverId);
               ws.send(JSON.stringify({ type: 'claude-sessions', serverId: msg.serverId, sessions: [] }));
               return;
             }
 
             try {
-              // Resolve ~ to $HOME, then build project hash (replace / with -)
-              const resolveCmd = `cd "${msg.workingDir}" 2>/dev/null && pwd || echo "${msg.workingDir}"`;
+              // Ensure SSH is connected (dialog may open before any session connects)
+              if (!sshManager.isConnected(msg.serverId)) {
+                console.log('[list-claude-sessions] SSH not connected, auto-connecting...');
+                const config: ServerConfig = {
+                  id: lsServer.id,
+                  host: lsServer.host,
+                  port: lsServer.port,
+                  username: lsServer.username,
+                  authType: lsServer.authType as 'password' | 'privateKey',
+                  password: lsServer.password ?? undefined,
+                  privateKeyPath: lsServer.privateKeyPath ?? undefined,
+                };
+                await sshManager.connect(config);
+              }
+              // Resolve path to absolute — expand ~ to $HOME for shell safety
+              const dir = msg.workingDir.startsWith('~/') ? `$HOME/${msg.workingDir.slice(2)}` : msg.workingDir;
+              const resolveCmd = `cd "${dir}" 2>/dev/null && pwd || echo "${dir}"`;
               const { stdout: resolved } = await sshManager.runCommand(msg.serverId, null, resolveCmd);
               const absPath = resolved.trim();
-              const projectHash = absPath.replace(/\//g, '-');
+              const projectHash = absPath.replace(/[/_]/g, '-');
 
               // List JSONL transcript files sorted by mtime (newest first)
-              const lsCmd = `ls -t ~/.claude/projects/${projectHash}/*.jsonl 2>/dev/null`;
+              const lsCmd = `ls -t ~/.claude/projects/${projectHash}/*.jsonl 2>/dev/null | head -10`;
+              console.log('[list-claude-sessions] dir=%s hash=%s cmd=%s', msg.workingDir, projectHash, lsCmd);
               const { stdout: lsOutput } = await sshManager.runCommand(msg.serverId, null, lsCmd);
 
               const sessionIds = lsOutput.trim().split('\n')
@@ -337,8 +355,10 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
                 })
                 .filter(Boolean);
 
+              console.log('[list-claude-sessions] found %d sessions', sessionIds.length);
               ws.send(JSON.stringify({ type: 'claude-sessions', serverId: msg.serverId, sessions: sessionIds }));
-            } catch {
+            } catch (err: any) {
+              console.error('[list-claude-sessions] error:', err.message);
               ws.send(JSON.stringify({ type: 'claude-sessions', serverId: msg.serverId, sessions: [] }));
             }
             break;
