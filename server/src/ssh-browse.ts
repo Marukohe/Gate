@@ -15,130 +15,88 @@ export interface BrowseResult {
   directories: string[];
 }
 
-/**
- * List subdirectories at `dirPath` on a remote server via a temporary SSH connection.
- * Returns the resolved absolute path and sorted directory names.
- */
-/** Create a directory at `dirPath/name` on a remote server. Returns the resolved absolute path. */
-export async function createRemoteDirectory(config: BrowseConfig, parentPath: string, name: string): Promise<string> {
-  const client = new Client();
+// Reusable SSH connection cache — avoids reconnecting on every browse navigate
+const IDLE_TIMEOUT = 60_000;
+const pool = new Map<string, { client: Client; timer: ReturnType<typeof setTimeout> }>();
 
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        client.end();
-        reject(new Error('SSH connection timeout'));
-      }, 10_000);
-
-      client.on('ready', () => { clearTimeout(timeout); resolve(); });
-      client.on('error', (err) => { clearTimeout(timeout); reject(err); });
-
-      const connectConfig: ConnectConfig = {
-        host: config.host,
-        port: config.port,
-        username: config.username,
-      };
-
-      if (config.authType === 'password') {
-        connectConfig.password = config.password;
-      } else if (config.authType === 'privateKey' && config.privateKeyPath) {
-        connectConfig.privateKey = readFileSync(config.privateKeyPath);
-      }
-
-      client.connect(connectConfig);
-    });
-
-    let cdExpr: string;
-    if (parentPath === '~' || parentPath === '$HOME') {
-      cdExpr = 'cd $HOME';
-    } else if (parentPath.startsWith('~/')) {
-      cdExpr = `cd $HOME${parentPath.slice(1)}`;
-    } else {
-      cdExpr = `cd '${parentPath}'`;
-    }
-
-    const cmd = `${cdExpr} && mkdir '${name}' && cd '${name}' && pwd`;
-
-    const output = await new Promise<string>((resolve, reject) => {
-      client.exec(cmd, (err, channel) => {
-        if (err) return reject(err);
-        let stdout = '';
-        let stderr = '';
-        channel.on('data', (data: Buffer) => { stdout += data.toString(); });
-        channel.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
-        channel.on('close', (code: number) => {
-          if (code !== 0) return reject(new Error(stderr.trim() || `Exit code ${code}`));
-          resolve(stdout.trim());
-        });
-      });
-    });
-
-    return output;
-  } finally {
-    client.end();
-  }
+function cacheKey(config: BrowseConfig): string {
+  return `${config.username}@${config.host}:${config.port}`;
 }
 
-export async function listRemoteDirectory(config: BrowseConfig, dirPath: string): Promise<BrowseResult> {
+async function getClient(config: BrowseConfig): Promise<Client> {
+  const key = cacheKey(config);
+  const cached = pool.get(key);
+  if (cached) {
+    // Reset idle timer on reuse
+    clearTimeout(cached.timer);
+    cached.timer = setTimeout(() => { cached.client.end(); pool.delete(key); }, IDLE_TIMEOUT);
+    return cached.client;
+  }
+
   const client = new Client();
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => { client.end(); reject(new Error('SSH connection timeout')); }, 10_000);
+    client.on('ready', () => { clearTimeout(timeout); resolve(); });
+    client.on('error', (err) => { clearTimeout(timeout); pool.delete(key); reject(err); });
+    client.on('close', () => { pool.delete(key); });
 
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        client.end();
-        reject(new Error('SSH connection timeout'));
-      }, 10_000);
-
-      client.on('ready', () => { clearTimeout(timeout); resolve(); });
-      client.on('error', (err) => { clearTimeout(timeout); reject(err); });
-
-      const connectConfig: ConnectConfig = {
-        host: config.host,
-        port: config.port,
-        username: config.username,
-      };
-
-      if (config.authType === 'password') {
-        connectConfig.password = config.password;
-      } else if (config.authType === 'privateKey' && config.privateKeyPath) {
-        connectConfig.privateKey = readFileSync(config.privateKeyPath);
-      }
-
-      client.connect(connectConfig);
-    });
-
-    // Expand ~ to $HOME since single-quoted cd won't do tilde expansion;
-    // $HOME must remain unquoted so the shell resolves it.
-    let cdExpr: string;
-    if (dirPath === '~' || dirPath === '$HOME') {
-      cdExpr = 'cd $HOME';
-    } else if (dirPath.startsWith('~/')) {
-      cdExpr = `cd $HOME${dirPath.slice(1)}`;
-    } else {
-      cdExpr = `cd '${dirPath}'`;
+    const connectConfig: ConnectConfig = {
+      host: config.host,
+      port: config.port,
+      username: config.username,
+    };
+    if (config.authType === 'password') {
+      connectConfig.password = config.password;
+    } else if (config.authType === 'privateKey' && config.privateKeyPath) {
+      connectConfig.privateKey = readFileSync(config.privateKeyPath);
     }
-    // pwd gives the resolved absolute path; find lists immediate subdirectories
-    // Run directly via exec (no bash -lc wrapper) to avoid single-quote nesting issues
-    const cmd = `${cdExpr} && pwd && find . -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sed 's|^\\./||' | LC_ALL=C sort`;
+    client.connect(connectConfig);
+  });
 
-    const output = await new Promise<string>((resolve, reject) => {
-      client.exec(cmd, (err, channel) => {
-        if (err) return reject(err);
-        let stdout = '';
-        let stderr = '';
-        channel.on('data', (data: Buffer) => { stdout += data.toString(); });
-        channel.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
-        channel.on('close', (code: number) => {
-          if (code !== 0) return reject(new Error(stderr.trim() || `Exit code ${code}`));
-          resolve(stdout.trim());
-        });
+  const timer = setTimeout(() => { client.end(); pool.delete(key); }, IDLE_TIMEOUT);
+  pool.set(key, { client, timer });
+  return client;
+}
+
+function execCommand(client: Client, cmd: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    client.exec(cmd, (err, channel) => {
+      if (err) return reject(err);
+      let stdout = '';
+      let stderr = '';
+      channel.on('data', (data: Buffer) => { stdout += data.toString(); });
+      channel.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
+      channel.on('close', (code: number) => {
+        if (code !== 0) return reject(new Error(stderr.trim() || `Exit code ${code}`));
+        resolve(stdout.trim());
       });
     });
+  });
+}
 
-    const lines = output.split('\n').filter(Boolean);
-    if (lines.length === 0) throw new Error('Could not resolve directory');
-    return { path: lines[0], directories: lines.slice(1) };
-  } finally {
-    client.end();
-  }
+function buildCd(dirPath: string): string {
+  if (dirPath === '~' || dirPath === '$HOME') return 'cd $HOME';
+  if (dirPath.startsWith('~/')) return `cd $HOME${dirPath.slice(1)}`;
+  return `cd '${dirPath}'`;
+}
+
+/** Create a directory at `parentPath/name` on a remote server. Returns the resolved absolute path. */
+export async function createRemoteDirectory(config: BrowseConfig, parentPath: string, name: string): Promise<string> {
+  const client = await getClient(config);
+  const cdExpr = buildCd(parentPath);
+  return execCommand(client, `${cdExpr} && mkdir '${name}' && cd '${name}' && pwd`);
+}
+
+/**
+ * List subdirectories at `dirPath` on a remote server.
+ * Returns the resolved absolute path and sorted directory names.
+ */
+export async function listRemoteDirectory(config: BrowseConfig, dirPath: string): Promise<BrowseResult> {
+  const client = await getClient(config);
+  const cdExpr = buildCd(dirPath);
+  const cmd = `${cdExpr} && pwd && find . -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sed 's|^\\./||' | LC_ALL=C sort`;
+  const output = await execCommand(client, cmd);
+  const lines = output.split('\n').filter(Boolean);
+  if (lines.length === 0) throw new Error('Could not resolve directory');
+  return { path: lines[0], directories: lines.slice(1) };
 }
