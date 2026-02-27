@@ -171,10 +171,30 @@
     border-color: var(--border);
   }
 
-  table {
+  /* Table scroll mode — horizontal scroll, no wrap */
+  .table-scroll {
+    overflow-x: auto;
+  }
+  .table-scroll table {
+    width: max-content;
+    min-width: 100%;
+  }
+  .table-scroll td, .table-scroll th {
+    white-space: nowrap;
+  }
+
+  /* Table wrap mode — cells wrap text, no scroll */
+  .table-wrap table {
     width: 100%;
+    table-layout: fixed;
+  }
+  .table-wrap td, .table-wrap th {
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  table {
     border-collapse: collapse;
-    margin: 0.75em 0;
     font-size: 0.875em;
   }
   th, td {

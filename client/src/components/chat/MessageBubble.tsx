@@ -1,6 +1,7 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from './CodeBlock';
+import { ScrollableTable } from './ScrollableTable';
 import { cn, stripLineNumbers } from '@/lib/utils';
 import type { ChatMessage } from '@/stores/chat-store';
 
@@ -28,7 +29,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         {isUser ? (
           <p>{message.content}</p>
         ) : (
-          <div className="markdown-prose">
+          <div className="markdown-prose overflow-x-auto">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
@@ -38,7 +39,17 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                   if (match) {
                     return <CodeBlock code={code} language={match[1]} />;
                   }
+                  // Fenced code block without language (inside <pre>)
+                  if (code.includes('\n')) {
+                    return <CodeBlock code={code} language="text" />;
+                  }
                   return <code className="break-all rounded border border-border/40 bg-muted/70 px-1.5 py-0.5 text-[0.8125rem]" style={{ fontFamily: "'Fira Code', monospace" }} {...props}>{children}</code>;
+                },
+                pre({ children }) {
+                  return <>{children}</>;
+                },
+                table({ children }) {
+                  return <ScrollableTable>{children}</ScrollableTable>;
                 },
               }}
             >
