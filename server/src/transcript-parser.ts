@@ -77,6 +77,7 @@ function isSystemInjected(content: string): boolean {
   if (content.includes('<system-reminder>')) return true;
   if (content.startsWith('<command-name>')) return true;
   if (content.startsWith('<local-command-stdout>')) return true;
+  if (content.startsWith('<local-command-caveat>')) return true;
   return false;
 }
 
