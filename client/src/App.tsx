@@ -40,28 +40,36 @@ function App() {
       .catch(() => {});
   }, [setServers, setActiveServer]);
 
-  // Fetch sessions when server changes, auto-select first session
+  // Fetch sessions when server changes, auto-select first session.
+  // AbortController cancels stale fetches on rapid server switching.
   const prevServerRef = useRef<string | null>(null);
   useEffect(() => {
     if (!activeServerId) return;
     if (activeServerId === prevServerRef.current) return;
     prevServerRef.current = activeServerId;
 
-    fetch(`/api/servers/${activeServerId}/sessions`)
+    const controller = new AbortController();
+    const serverId = activeServerId;
+
+    fetch(`/api/servers/${serverId}/sessions`, { signal: controller.signal })
       .then((r) => r.ok ? r.json() : [])
       .then((sessionList: any[]) => {
-        setSessions(activeServerId, sessionList);
+        // Guard: discard if user already switched to another server
+        if (useServerStore.getState().activeServerId !== serverId) return;
+        setSessions(serverId, sessionList);
         if (sessionList.length > 0) {
           // Keep persisted session if it still exists, otherwise pick first
-          const persisted = useSessionStore.getState().activeSessionId[activeServerId];
+          const persisted = useSessionStore.getState().activeSessionId[serverId];
           if (!persisted || !sessionList.find((s: any) => s.id === persisted)) {
-            setActiveSession(activeServerId, sessionList[0].id);
+            setActiveSession(serverId, sessionList[0].id);
           }
         } else {
-          createSession(activeServerId, 'Default');
+          createSession(serverId, 'Default');
         }
       })
       .catch(() => {});
+
+    return () => controller.abort();
   }, [activeServerId, setSessions, setActiveSession, createSession]);
 
   // Auto-select newly created session (from WS 'session-created' event)

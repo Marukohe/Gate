@@ -103,6 +103,10 @@ export function createDb(dbPath: string): Database {
       toolDetail TEXT,
       timestamp INTEGER NOT NULL
     );
+
+    CREATE INDEX IF NOT EXISTS idx_sessions_serverId ON sessions(serverId);
+    CREATE INDEX IF NOT EXISTS idx_messages_sessionId ON messages(sessionId);
+    CREATE INDEX IF NOT EXISTS idx_messages_sessionId_timestamp ON messages(sessionId, timestamp);
   `);
 
   return {

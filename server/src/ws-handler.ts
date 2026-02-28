@@ -91,6 +91,15 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
   });
 
   wss.on('connection', (ws: WebSocket) => {
+    ws.on('close', () => {
+      // Parsers are keyed by sessionId (shared across clients), so no cleanup here.
+      // This handler prevents silent disconnects and enables future per-client tracking.
+    });
+
+    ws.on('error', (err) => {
+      console.error('[ws] client error:', err.message);
+    });
+
     ws.on('message', async (raw: Buffer) => {
       let msg: ClientMessage;
       try {

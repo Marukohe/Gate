@@ -73,3 +73,12 @@ setupWebSocket(httpServer, db);
 httpServer.listen(PORT, HOST, () => {
   console.log(`Server running on http://${HOST}:${PORT}`);
 });
+
+function shutdown() {
+  console.log('Shutting down...');
+  httpServer.close();
+  db.close();
+  process.exit(0);
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

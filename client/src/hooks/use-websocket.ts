@@ -38,8 +38,10 @@ const storeRefs = {
   processPlanModeMessage: null as null | ReturnType<typeof usePlanModeStore.getState>['processMessage'],
 };
 
-// Track the last session we sent a connect for so we don't spam the server
+// Track the last session/server we sent a connect for so we don't spam the server.
+// Reset on server switch to avoid skipping the first connect on a new server.
 let lastConnectedSession: string | null = null;
+let lastConnectedServer: string | null = null;
 
 function sendConnect(socket: WebSocket, serverId: string, sessionId: string) {
   // Only skip if already fully connected — allow re-sending if stuck in 'connecting'
@@ -173,6 +175,11 @@ export function useWebSocket() {
   }, []);
 
   const connectToSession = useCallback((serverId: string, sessionId: string) => {
+    // Clear stale guard when switching servers
+    if (serverId !== lastConnectedServer) {
+      lastConnectedSession = null;
+      lastConnectedServer = serverId;
+    }
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       // Queue — will be sent when WS opens
       pendingConnect = { serverId, sessionId };
