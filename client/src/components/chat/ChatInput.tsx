@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from 'react';
+import { useState, useRef, type KeyboardEvent } from 'react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { SendHorizontal } from 'lucide-react';
@@ -19,6 +19,9 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   const servers = useServerStore((s) => s.servers);
   const activeServer = servers.find((s) => s.id === activeServerId);
 
+  // Track IME composition state via events (more reliable than isComposing)
+  const composingRef = useRef(false);
+
   const handleSend = () => {
     const trimmed = value.trim();
     if (!trimmed) return;
@@ -27,7 +30,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !composingRef.current) {
       e.preventDefault();
       handleSend();
     }
@@ -53,6 +56,8 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
+          onCompositionStart={() => { composingRef.current = true; }}
+          onCompositionEnd={() => { setTimeout(() => { composingRef.current = false; }, 0); }}
           disabled={disabled}
           className="!min-h-10 !py-1.5 max-h-[200px] resize-none"
           rows={1}
