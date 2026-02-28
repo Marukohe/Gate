@@ -97,7 +97,8 @@ Server sends: `{ type: 'message'|'status'|'history', serverId, ... }`
 
 1. Use git frequently and meaningfully
 2. Follow **Conventional Commits**
-3. Keep `README.md`, `CLAUDE.md`, `SPEC.md`, `AGENT.md`, and `TODO.md` up to date
+3. Keep `README.md`, `README_CN.md`, `CLAUDE.md`, `SPEC.md`, `AGENT.md`, and `TODO.md` up to date
+   - **README has two languages**: `README.md` (English) and `README_CN.md` (Chinese). When updating one, always sync the other.
 4. Fix **all compiler warnings**
 5. Keep a clean, layered project structure
 6. Write high-quality comments that explain *why*, not *what*
