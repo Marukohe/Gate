@@ -74,8 +74,8 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
   const prevSessionRef = useRef(activeSessionId);
   useEffect(() => {
     const switched = prevSessionRef.current !== activeSessionId;
-    // If switched but messages haven't loaded yet, wait for history to arrive
-    if (switched && messages.length === 0) return;
+    // If messages haven't loaded yet (initial mount or session switch), wait for history
+    if ((isInitialRef.current || switched) && messages.length === 0) return;
     prevSessionRef.current = activeSessionId;
     if (isInitialRef.current || switched) {
       isInitialRef.current = false;
