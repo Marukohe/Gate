@@ -83,8 +83,7 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
   }
 
   return (
-    <div className="relative flex h-full flex-col">
-      <PlanModeOverlay activeSessionId={activeSessionId} onSendInput={onSendToSession} />
+    <div className="flex h-full flex-col">
       <SessionBar
         serverId={activeServerId}
         onCreateSession={onCreateSession}
@@ -123,22 +122,25 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
           Sync failed: {syncStatus.error}
         </div>
       )}
-      <div className="flex-1 overflow-y-auto px-4" {...swipe}>
-        <div className="mx-auto max-w-3xl py-4">
-          {messages.length === 0 && isConnected && (
-            <div className="py-12 text-center text-sm text-muted-foreground">
-              Waiting for Claude...
-            </div>
-          )}
-          {renderItems.map((item, i) =>
-            item.kind === 'single'
-              ? <MessageBubble key={item.message.id} message={item.message} />
-              : <ToolActivityBlock key={item.items[0]?.call.id ?? i} group={item} />
-          )}
-          <div ref={bottomRef} />
+      <div className="relative flex-1 flex flex-col overflow-hidden">
+        <PlanModeOverlay activeSessionId={activeSessionId} onSendInput={onSendToSession} />
+        <div className="flex-1 overflow-y-auto px-4" {...swipe}>
+          <div className="mx-auto max-w-3xl py-4">
+            {messages.length === 0 && isConnected && (
+              <div className="py-12 text-center text-sm text-muted-foreground">
+                Waiting for Claude...
+              </div>
+            )}
+            {renderItems.map((item, i) =>
+              item.kind === 'single'
+                ? <MessageBubble key={item.message.id} message={item.message} />
+                : <ToolActivityBlock key={item.items[0]?.call.id ?? i} group={item} />
+            )}
+            <div ref={bottomRef} />
+          </div>
         </div>
+        <ChatInput onSend={onSend} disabled={!isConnected} />
       </div>
-      <ChatInput onSend={onSend} disabled={!isConnected} />
     </div>
   );
 }
