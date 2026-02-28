@@ -1,6 +1,6 @@
 {
   "name": "@marukohe/gate",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Chat with Claude Code CLI on remote servers via SSH + tmux, from any device",
   "type": "module",
   "bin": {
