@@ -73,9 +73,18 @@ export const useSessionStore = create<SessionStore>()(
             delete activeUpdate[serverId];
           }
         }
+        // Clean up per-session metadata
+        const { [sessionId]: _cs, ...connectionStatus } = s.connectionStatus;
+        const { [sessionId]: _ce, ...connectionError } = s.connectionError;
+        const { [sessionId]: _gi, ...gitInfo } = s.gitInfo;
+        const { [sessionId]: _br, ...branches } = s.branches;
         return {
           sessions: { ...s.sessions, [serverId]: filtered },
           activeSessionId: activeUpdate,
+          connectionStatus,
+          connectionError,
+          gitInfo,
+          branches,
         };
       }),
 

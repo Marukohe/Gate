@@ -6,7 +6,7 @@ import { parseTranscript } from './transcript-parser.js';
 import type { Database } from './db.js';
 
 interface ClientMessage {
-  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions';
+  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions' | 'load-more';
   serverId: string;
   sessionId?: string;
   sessionName?: string;
@@ -15,10 +15,11 @@ interface ClientMessage {
   branch?: string;
   command?: string;
   claudeSessionId?: string;
+  beforeTimestamp?: number;
 }
 
 interface ServerMessage {
-  type: 'message' | 'status' | 'history' | 'sessions' | 'git-info' | 'branches' | 'sync-result' | 'claude-sessions';
+  type: 'message' | 'status' | 'history' | 'history-prepend' | 'sessions' | 'git-info' | 'branches' | 'sync-result' | 'claude-sessions';
   serverId: string;
   sessionId?: string | null;
   [key: string]: any;
@@ -136,9 +137,10 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
               return;
             }
 
-            // Send chat history to this client
+            // Send chat history to this client (last 100 messages)
             const messages = db.getMessages(session.id);
-            ws.send(JSON.stringify({ type: 'history', serverId: server.id, sessionId, messages }));
+            const totalCount = db.getMessageCount(session.id);
+            ws.send(JSON.stringify({ type: 'history', serverId: server.id, sessionId, messages, hasMore: totalCount > messages.length }));
 
             // If Claude is still running for this session, reuse it
             if (sshManager.hasActiveChannel(server.id, sessionId)) {
@@ -433,6 +435,19 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
             } catch (err: any) {
               ws.send(JSON.stringify({ type: 'sync-result', serverId: msg.serverId, sessionId: msg.sessionId, success: false, error: err.message }));
             }
+            break;
+          }
+
+          case 'load-more': {
+            if (!msg.sessionId || !msg.beforeTimestamp) return;
+            const olderMessages = db.getMessagesBefore(msg.sessionId, msg.beforeTimestamp);
+            ws.send(JSON.stringify({
+              type: 'history-prepend',
+              serverId: msg.serverId,
+              sessionId: msg.sessionId,
+              messages: olderMessages,
+              hasMore: olderMessages.length >= 100,
+            }));
             break;
           }
         }

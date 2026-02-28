@@ -35,6 +35,7 @@ const storeRefs = {
   setBranches: null as null | ReturnType<typeof useSessionStore.getState>['setBranches'],
   addMessage: null as null | ReturnType<typeof useChatStore.getState>['addMessage'],
   setHistory: null as null | ReturnType<typeof useChatStore.getState>['setHistory'],
+  prependMessages: null as null | ReturnType<typeof useChatStore.getState>['prependMessages'],
   processPlanModeMessage: null as null | ReturnType<typeof usePlanModeStore.getState>['processMessage'],
 };
 
@@ -88,7 +89,12 @@ function setupSocket() {
         break;
       case 'history':
         if (data.sessionId) {
-          storeRefs.setHistory?.(data.sessionId, data.messages);
+          storeRefs.setHistory?.(data.sessionId, data.messages, data.hasMore ?? false);
+        }
+        break;
+      case 'history-prepend':
+        if (data.sessionId) {
+          storeRefs.prependMessages?.(data.sessionId, data.messages, data.hasMore ?? false);
         }
         break;
       case 'sessions':
@@ -151,6 +157,7 @@ export function useWebSocket() {
   const setBranches = useSessionStore((s) => s.setBranches);
   const addMessage = useChatStore((s) => s.addMessage);
   const setHistory = useChatStore((s) => s.setHistory);
+  const prependMessages = useChatStore((s) => s.prependMessages);
   const processPlanModeMessage = usePlanModeStore((s) => s.processMessage);
 
   // Keep refs current so WebSocket handlers always use latest store functions
@@ -162,6 +169,7 @@ export function useWebSocket() {
   storeRefs.setBranches = setBranches;
   storeRefs.addMessage = addMessage;
   storeRefs.setHistory = setHistory;
+  storeRefs.prependMessages = prependMessages;
   storeRefs.processPlanModeMessage = processPlanModeMessage;
 
   useEffect(() => {
@@ -245,5 +253,10 @@ export function useWebSocket() {
     });
   }, []);
 
-  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listClaudeSessions };
+  const loadMoreMessages = useCallback((serverId: string, sessionId: string, beforeTimestamp: number) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'load-more', serverId, sessionId, beforeTimestamp }));
+  }, []);
+
+  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listClaudeSessions, loadMoreMessages };
 }

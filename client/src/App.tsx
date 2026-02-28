@@ -5,6 +5,7 @@ import { ServerDialog } from '@/components/server/ServerDialog';
 import { useServerStore, type Server } from '@/stores/server-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useChatStore } from '@/stores/chat-store';
+import { usePlanStore } from '@/stores/plan-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useWebSocket } from '@/hooks/use-websocket';
 
@@ -24,7 +25,7 @@ function App() {
   const setSessions = useSessionStore((s) => s.setSessions);
   const setActiveSession = useSessionStore((s) => s.setActiveSession);
 
-  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listClaudeSessions } = useWebSocket();
+  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listClaudeSessions, loadMoreMessages } = useWebSocket();
 
   useEffect(() => {
     fetch('/api/servers')
@@ -71,6 +72,15 @@ function App() {
 
     return () => controller.abort();
   }, [activeServerId, setSessions, setActiveSession, createSession]);
+
+  // Evict messages for other servers' sessions to save memory.
+  // Messages will be reloaded from DB when switching back.
+  useEffect(() => {
+    if (!activeServerId) return;
+    const currentSessions = useSessionStore.getState().sessions[activeServerId] ?? [];
+    const keepIds = new Set(currentSessions.map((s) => s.id));
+    useChatStore.getState().clearServerMessages(keepIds);
+  }, [activeServerId]);
 
   // Auto-select newly created session (from WS 'session-created' event)
   const sessions = useSessionStore((s) => activeServerId ? s.sessions[activeServerId] : undefined);
@@ -130,6 +140,11 @@ function App() {
   const handleDeleteSession = useCallback((sessionId: string) => {
     if (!activeServerId) return;
     deleteSession(activeServerId, sessionId);
+    // Clean up associated store data
+    useChatStore.getState().clearMessages(sessionId);
+    const planState = usePlanStore.getState();
+    const planId = planState.autoExtractedPlanIds[sessionId];
+    if (planId && planState.activePlanId === planId) planState.setActivePlan(null);
   }, [activeServerId, deleteSession]);
 
   const handleSelectSession = useCallback((sessionId: string) => {
@@ -147,6 +162,11 @@ function App() {
     syncTranscript(activeServerId, sessionId);
   }, [activeServerId, syncTranscript]);
 
+  const handleLoadMore = useCallback((beforeTimestamp: number) => {
+    if (!activeServerId || !activeSessionId) return;
+    loadMoreMessages(activeServerId, activeSessionId, beforeTimestamp);
+  }, [activeServerId, activeSessionId, loadMoreMessages]);
+
   return (
     <>
       <AppShell
@@ -161,6 +181,7 @@ function App() {
             onSyncTranscript={handleSyncTranscript}
             onListClaudeSessions={listClaudeSessions}
             onSendToSession={handleSendToSession}
+            onLoadMore={handleLoadMore}
           />
         }
         onAddServer={() => { setEditingServer(null); setServerDialogOpen(true); }}

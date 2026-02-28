@@ -54,6 +54,8 @@ export interface Database {
   saveMessages(inputs: CreateMessageInput[]): Message[];
   deleteMessages(sessionId: string): void;
   getMessages(sessionId: string, limit?: number): Message[];
+  getMessagesBefore(sessionId: string, beforeTimestamp: number, limit?: number): Message[];
+  getMessageCount(sessionId: string): number;
   close(): void;
 }
 
@@ -205,13 +207,26 @@ export function createDb(dbPath: string): Database {
       db.prepare('DELETE FROM messages WHERE sessionId = ?').run(sessionId);
     },
 
-    getMessages(sessionId, limit = 500) {
+    getMessages(sessionId, limit = 100) {
       // Subquery picks the N most-recent rows, outer query re-orders them chronologically
       return db.prepare(`
         SELECT * FROM (
           SELECT * FROM messages WHERE sessionId = ? ORDER BY timestamp DESC LIMIT ?
         ) ORDER BY timestamp ASC
       `).all(sessionId, limit) as Message[];
+    },
+
+    getMessagesBefore(sessionId, beforeTimestamp, limit = 100) {
+      return db.prepare(`
+        SELECT * FROM (
+          SELECT * FROM messages WHERE sessionId = ? AND timestamp < ? ORDER BY timestamp DESC LIMIT ?
+        ) ORDER BY timestamp ASC
+      `).all(sessionId, beforeTimestamp, limit) as Message[];
+    },
+
+    getMessageCount(sessionId) {
+      const row = db.prepare('SELECT COUNT(*) as count FROM messages WHERE sessionId = ?').get(sessionId) as { count: number };
+      return row.count;
     },
 
     close() {

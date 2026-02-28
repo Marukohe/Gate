@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useCallback } from 'react';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useRef, useCallback, useState } from 'react';
+import { AlertCircle, RefreshCw, ChevronUp } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { SessionBar } from './SessionBar';
@@ -26,9 +26,10 @@ interface ChatViewProps {
   onSyncTranscript: (sessionId: string) => void;
   onListClaudeSessions?: (serverId: string, workingDir: string) => Promise<string[]>;
   onSendToSession: (text: string, serverId: string, sessionId: string) => void;
+  onLoadMore: (beforeTimestamp: number) => void;
 }
 
-export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSession, onListBranches, onSwitchBranch, onSyncTranscript, onListClaudeSessions, onSendToSession }: ChatViewProps) {
+export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSession, onListBranches, onSwitchBranch, onSyncTranscript, onListClaudeSessions, onSendToSession, onLoadMore }: ChatViewProps) {
   const activeServerId = useServerStore((s) => s.activeServerId);
   const activeSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
   const sessions = useSessionStore((s) => activeServerId ? s.sessions[activeServerId] : undefined);
@@ -38,8 +39,11 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
   const syncStatus = useUIStore((s) => activeSessionId ? s.syncStatus[activeSessionId] : undefined);
   const setSyncStatus = useUIStore((s) => s.setSyncStatus);
   const messages = useChatStore((s) => activeSessionId ? (s.messages[activeSessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES);
+  const hasMore = useChatStore((s) => activeSessionId ? (s.hasMore[activeSessionId] ?? false) : false);
   const renderItems = useMemo(() => groupMessages(messages), [messages]);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // Swipe left/right to switch sessions
   const switchSession = useCallback((dir: -1 | 1) => {
@@ -70,11 +74,30 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
   const prevSessionRef = useRef(activeSessionId);
   useEffect(() => {
     const switched = prevSessionRef.current !== activeSessionId;
+    // If switched but messages haven't loaded yet, wait for history to arrive
+    if (switched && messages.length === 0) return;
     prevSessionRef.current = activeSessionId;
-    const behavior = isInitialRef.current || switched ? 'instant' : 'smooth';
-    isInitialRef.current = false;
-    bottomRef.current?.scrollIntoView({ behavior });
+    if (isInitialRef.current || switched) {
+      isInitialRef.current = false;
+      bottomRef.current?.scrollIntoView({ behavior: 'instant' });
+      return;
+    }
+    // Only auto-scroll on new messages if user is near the bottom
+    const el = scrollRef.current;
+    if (el) {
+      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+      if (nearBottom) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages, activeSessionId]);
+
+  // Preserve scroll position when prepending older messages
+  const prevMessageCountRef = useRef(0);
+  useEffect(() => {
+    if (loadingMore && messages.length > prevMessageCountRef.current) {
+      setLoadingMore(false);
+    }
+    prevMessageCountRef.current = messages.length;
+  }, [messages.length, loadingMore]);
 
   // Restore active plan when switching sessions/servers
   useEffect(() => {
@@ -99,6 +122,21 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
       }
     }
   }, [activeSessionId, messages]);
+
+  const handleLoadMore = useCallback(() => {
+    if (!messages.length || loadingMore) return;
+    const el = scrollRef.current;
+    const prevHeight = el?.scrollHeight ?? 0;
+    setLoadingMore(true);
+    onLoadMore(messages[0].timestamp);
+    // Restore scroll position after prepend
+    requestAnimationFrame(() => {
+      if (el) {
+        const newHeight = el.scrollHeight;
+        el.scrollTop += newHeight - prevHeight;
+      }
+    });
+  }, [messages, loadingMore, onLoadMore]);
 
   if (!activeServerId) {
     return (
@@ -150,8 +188,22 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
       )}
       <div className="relative flex-1 flex flex-col overflow-hidden">
         <PlanModeOverlay activeSessionId={activeSessionId} onSendInput={onSendToSession} />
-        <div className="flex-1 overflow-y-auto px-4" {...swipe}>
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4" {...swipe}>
           <div className="mx-auto max-w-3xl py-4">
+            {hasMore && (
+              <button
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="mx-auto mb-4 flex items-center gap-1 rounded-full border bg-muted/50 px-4 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
+              >
+                {loadingMore ? (
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                ) : (
+                  <ChevronUp className="h-3 w-3" />
+                )}
+                {loadingMore ? 'Loading...' : 'Load older messages'}
+              </button>
+            )}
             {messages.length === 0 && isConnected && (
               <div className="py-12 text-center text-sm text-muted-foreground">
                 Waiting for Claude...

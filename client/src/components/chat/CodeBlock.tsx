@@ -5,10 +5,23 @@ import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Button } from '@/components/ui/button';
 
+// Shared singleton observer — all CodeBlock instances reuse one MutationObserver
+const themeListeners = new Set<() => void>();
+let sharedObserver: MutationObserver | null = null;
+
 function subscribeToTheme(cb: () => void) {
-  const observer = new MutationObserver(cb);
-  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-  return () => observer.disconnect();
+  themeListeners.add(cb);
+  if (!sharedObserver) {
+    sharedObserver = new MutationObserver(() => themeListeners.forEach((fn) => fn()));
+    sharedObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  }
+  return () => {
+    themeListeners.delete(cb);
+    if (themeListeners.size === 0 && sharedObserver) {
+      sharedObserver.disconnect();
+      sharedObserver = null;
+    }
+  };
 }
 
 function getIsDark() {
