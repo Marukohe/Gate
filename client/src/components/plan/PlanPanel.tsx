@@ -91,7 +91,7 @@ export function PlanPanel({ onSendToChat }: PlanPanelProps) {
         </TabsContent>
       </Tabs>
       <div className="border-t p-4">
-        <Button size="sm" variant="outline" className="w-full" onClick={handleSendToClaudeForExecution}>
+        <Button size="lg" variant="outline" className="w-full" onClick={handleSendToClaudeForExecution}>
           Send to Claude for execution
         </Button>
       </div>

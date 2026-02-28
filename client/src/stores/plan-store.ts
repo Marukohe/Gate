@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { parseMarkdownChecklist } from '@/lib/plan-parser';
+import { uniqueId } from '@/lib/utils';
 import { useUIStore } from './ui-store';
 
 export interface PlanStep {
@@ -89,7 +90,7 @@ export const usePlanStore = create<PlanStore>((set, get) => ({
       }));
     } else {
       // Create a new plan
-      const planId = crypto.randomUUID();
+      const planId = uniqueId();
       const plan: Plan = {
         id: planId,
         sessionId,
@@ -122,7 +123,7 @@ export const usePlanStore = create<PlanStore>((set, get) => ({
       if (todos.length < 1) return;
 
       const steps: PlanStep[] = todos.map((t) => ({
-        id: crypto.randomUUID(),
+        id: uniqueId(),
         text: t.content,
         completed: t.status === 'completed',
       }));
@@ -144,7 +145,7 @@ export const usePlanStore = create<PlanStore>((set, get) => ({
           activePlanId: existingPlanId,
         }));
       } else {
-        const planId = crypto.randomUUID();
+        const planId = uniqueId();
         const plan: Plan = {
           id: planId,
           sessionId,
@@ -169,8 +170,8 @@ export const usePlanStore = create<PlanStore>((set, get) => ({
       }
 
       useUIStore.getState().setPlanPanelOpen(true);
-    } catch {
-      // Invalid JSON — ignore
+    } catch (e) {
+      console.warn('[plan-store] extractTodoWrite failed:', e);
     }
   },
 }));

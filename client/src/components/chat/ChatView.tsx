@@ -9,6 +9,8 @@ import { useChatStore, type ChatMessage } from '@/stores/chat-store';
 import { useServerStore } from '@/stores/server-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useUIStore } from '@/stores/ui-store';
+import { usePlanStore } from '@/stores/plan-store';
+import { usePlanModeStore } from '@/stores/plan-mode-store';
 import { useSwipe } from '@/hooks/use-swipe';
 import { PlanModeOverlay } from '@/components/plan-mode/PlanModeOverlay';
 
@@ -73,6 +75,23 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
     isInitialRef.current = false;
     bottomRef.current?.scrollIntoView({ behavior });
   }, [messages, activeSessionId]);
+
+  // Extract plans from messages (TodoWrite tool calls or assistant checklists)
+  useEffect(() => {
+    if (!activeSessionId || messages.length === 0) return;
+    const planPhase = usePlanModeStore.getState().phase;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.type === 'tool_call' && msg.toolName === 'TodoWrite') {
+        usePlanStore.getState().extractTodoWrite(activeSessionId, msg.content);
+        return;
+      }
+      if (msg.type === 'assistant' && msg.content && planPhase === 'idle') {
+        usePlanStore.getState().autoExtractPlan(activeSessionId, msg.content);
+        if (usePlanStore.getState().autoExtractedPlanIds[activeSessionId]) return;
+      }
+    }
+  }, [activeSessionId, messages]);
 
   if (!activeServerId) {
     return (

@@ -7,7 +7,7 @@ import { useUIStore } from '@/stores/ui-store';
 import { parseMarkdownChecklist } from '@/lib/plan-parser';
 import { CodeBlock } from '@/components/chat/CodeBlock';
 import { Button } from '@/components/ui/button';
-import { stripLineNumbers } from '@/lib/utils';
+import { stripLineNumbers, uniqueId } from '@/lib/utils';
 
 export function PlanModeDone() {
   const finalPlanContent = usePlanModeStore((s) => s.finalPlanContent);
@@ -22,7 +22,7 @@ export function PlanModeDone() {
     if (finalPlanContent && sessionId) {
       const { title, steps } = parseMarkdownChecklist(finalPlanContent);
       if (steps.length > 0) {
-        const planId = crypto.randomUUID();
+        const planId = uniqueId();
         addPlan(sessionId, {
           id: planId,
           sessionId,

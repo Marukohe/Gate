@@ -1,4 +1,5 @@
 import type { PlanStep } from '@/stores/plan-store';
+import { uniqueId } from '@/lib/utils';
 
 export function parseMarkdownChecklist(markdown: string): { title: string; steps: PlanStep[] } {
   const lines = markdown.split('\n');
@@ -19,7 +20,7 @@ export function parseMarkdownChecklist(markdown: string): { title: string; steps
     if (match) {
       const indent = line.search(/\S/);
       const step: PlanStep = {
-        id: crypto.randomUUID(),
+        id: uniqueId(),
         text: match[2],
         completed: match[1] !== ' ',
       };

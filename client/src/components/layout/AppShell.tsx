@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback } from 'react';
+import { type ReactNode, useCallback, useState, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { PlanPanel } from '@/components/plan/PlanPanel';
@@ -21,6 +21,15 @@ export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat }: 
 
   const closeSidebar = useCallback(() => setSidebarOpen(false), [setSidebarOpen]);
 
+  // Track mobile breakpoint so Sheet drawers only open below lg
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 1023px)').matches);
+  useEffect(() => {
+    const mql = window.matchMedia('(max-width: 1023px)');
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
+  }, []);
+
   return (
     <div className="flex h-dvh">
       {/* Desktop sidebar */}
@@ -29,7 +38,7 @@ export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat }: 
       </div>
 
       {/* Mobile sidebar — bottom sheet */}
-      <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+      <Sheet open={sidebarOpen && isMobile} onOpenChange={setSidebarOpen}>
         <SheetContent
           side="bottom"
           showCloseButton={false}
@@ -55,8 +64,7 @@ export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat }: 
           <div className="flex-1 overflow-hidden">
             {chatView}
           </div>
-
-          {/* Desktop plan panel */}
+          {/* Desktop plan panel — inside content area so border-t aligns with ChatInput */}
           {planPanelOpen && (
             <div className="hidden w-80 border-l lg:block">
               <PlanPanel onSendToChat={onSendToChat} />
@@ -66,7 +74,7 @@ export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat }: 
       </div>
 
       {/* Mobile plan panel drawer */}
-      <Sheet open={planPanelOpen} onOpenChange={setPlanPanelOpen}>
+      <Sheet open={planPanelOpen && isMobile} onOpenChange={setPlanPanelOpen}>
         <SheetContent side="right" className="w-80 p-0 lg:hidden">
           <SheetHeader className="sr-only">
             <SheetTitle>Plan</SheetTitle>
