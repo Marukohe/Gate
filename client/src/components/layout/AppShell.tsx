@@ -68,6 +68,9 @@ export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat }: 
       {/* Mobile plan panel drawer */}
       <Sheet open={planPanelOpen} onOpenChange={setPlanPanelOpen}>
         <SheetContent side="right" className="w-80 p-0 lg:hidden">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Plan</SheetTitle>
+          </SheetHeader>
           <PlanPanel onSendToChat={onSendToChat} />
         </SheetContent>
       </Sheet>
