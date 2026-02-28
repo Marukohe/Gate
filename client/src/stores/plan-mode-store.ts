@@ -81,6 +81,23 @@ export const usePlanModeStore = create<PlanModeStore>((set, get) => ({
       return;
     }
 
+    // Standalone AskUserQuestion outside plan mode — show question UI
+    if (state.phase === 'idle' && message.type === 'tool_call' && message.toolName === 'AskUserQuestion') {
+      const questions = parseQuestions(message.content);
+      if (questions.length > 0) {
+        set({
+          phase: 'question',
+          serverId,
+          sessionId,
+          currentQuestions: questions,
+          selectedAnswers: {},
+          toolCallCount: 0,
+          lastToolName: 'AskUserQuestion',
+        });
+        return;
+      }
+    }
+
     // Ignore messages when idle or for a different session
     if (state.phase === 'idle') return;
     if (state.sessionId !== sessionId) return;
@@ -219,17 +236,30 @@ export const usePlanModeStore = create<PlanModeStore>((set, get) => ({
       }
     }
     const answer = lines.join('\n') || 'Continue';
-    // Always go back to active — the answer is being sent to Claude and
-    // planning will continue. Clear finalPlanContent since whatever Claude
-    // generated while we were frozen in question phase was based on the
-    // auto-resolved answer, not the user's actual choice.
-    set({
-      phase: 'active',
-      currentQuestions: [],
-      selectedAnswers: {},
-      finalPlanContent: null,
-      progressMessages: [],
-    });
+    const isStandalone = state.toolCallCount === 0;
+    if (isStandalone) {
+      // Standalone question (not in plan mode) — dismiss entirely
+      set({
+        phase: 'idle',
+        serverId: null,
+        sessionId: null,
+        toolCallCount: 0,
+        lastToolName: null,
+        progressMessages: [],
+        currentQuestions: [],
+        selectedAnswers: {},
+        finalPlanContent: null,
+      });
+    } else {
+      // Plan mode question — go back to active planning
+      set({
+        phase: 'active',
+        currentQuestions: [],
+        selectedAnswers: {},
+        finalPlanContent: null,
+        progressMessages: [],
+      });
+    }
     return answer;
   },
 

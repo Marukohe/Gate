@@ -29,6 +29,7 @@ interface PlanStore {
   toggleStep: (sessionId: string, planId: string, stepId: string) => void;
   setActivePlan: (planId: string | null) => void;
   autoExtractPlan: (sessionId: string, content: string) => void;
+  extractTodoWrite: (sessionId: string, jsonContent: string) => void;
 }
 
 function toggleStepInList(steps: PlanStep[], stepId: string): PlanStep[] {
@@ -113,5 +114,63 @@ export const usePlanStore = create<PlanStore>((set, get) => ({
     }
 
     useUIStore.getState().setPlanPanelOpen(true);
+  },
+  extractTodoWrite: (sessionId, jsonContent) => {
+    try {
+      const parsed = JSON.parse(jsonContent);
+      const todos: { content: string; status: string }[] = parsed.todos ?? [];
+      if (todos.length < 1) return;
+
+      const steps: PlanStep[] = todos.map((t) => ({
+        id: crypto.randomUUID(),
+        text: t.content,
+        completed: t.status === 'completed',
+      }));
+      const title = 'Task Progress';
+
+      const state = get();
+      const existingPlanId = state.autoExtractedPlanIds[sessionId];
+
+      if (existingPlanId) {
+        set((s) => ({
+          plans: {
+            ...s.plans,
+            [sessionId]: (s.plans[sessionId] ?? []).map((p) =>
+              p.id === existingPlanId
+                ? { ...p, title, steps, content: jsonContent, updatedAt: Date.now() }
+                : p
+            ),
+          },
+          activePlanId: existingPlanId,
+        }));
+      } else {
+        const planId = crypto.randomUUID();
+        const plan: Plan = {
+          id: planId,
+          sessionId,
+          title,
+          content: jsonContent,
+          steps,
+          status: 'active',
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        set((s) => ({
+          plans: {
+            ...s.plans,
+            [sessionId]: [...(s.plans[sessionId] ?? []), plan],
+          },
+          activePlanId: planId,
+          autoExtractedPlanIds: {
+            ...s.autoExtractedPlanIds,
+            [sessionId]: planId,
+          },
+        }));
+      }
+
+      useUIStore.getState().setPlanPanelOpen(true);
+    } catch {
+      // Invalid JSON — ignore
+    }
   },
 }));

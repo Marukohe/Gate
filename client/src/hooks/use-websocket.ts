@@ -82,6 +82,10 @@ function setupSocket() {
           if (data.message.type === 'assistant' && usePlanModeStore.getState().phase === 'idle') {
             usePlanStore.getState().autoExtractPlan(data.sessionId, data.message.content);
           }
+          // Extract TodoWrite tool calls into plan panel
+          if (data.message.type === 'tool_call' && data.message.toolName === 'TodoWrite') {
+            usePlanStore.getState().extractTodoWrite(data.sessionId, data.message.content);
+          }
         }
         break;
       case 'status':
@@ -92,11 +96,16 @@ function setupSocket() {
       case 'history':
         if (data.sessionId) {
           storeRefs.setHistory?.(data.sessionId, data.messages);
-          // Scan history backwards for the most recent assistant checklist
+          // Scan history backwards for the most recent plan source
           if (Array.isArray(data.messages)) {
             const planStore = usePlanStore.getState();
             for (let i = data.messages.length - 1; i >= 0; i--) {
               const msg = data.messages[i];
+              // TodoWrite takes priority — use the last one
+              if (msg.type === 'tool_call' && msg.toolName === 'TodoWrite') {
+                planStore.extractTodoWrite(data.sessionId, msg.content);
+                break;
+              }
               if (msg.type === 'assistant' && msg.content) {
                 planStore.autoExtractPlan(data.sessionId, msg.content);
                 if (usePlanStore.getState().autoExtractedPlanIds[data.sessionId]) break;
