@@ -2,6 +2,8 @@ import express from 'express';
 import { createServer } from 'http';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import os from 'os';
+import fs from 'fs';
 import { createDb } from './db.js';
 import { createServerRoutes } from './routes/servers.js';
 import { setupWebSocket } from './ws-handler.js';
@@ -15,7 +17,9 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 app.use(express.json());
 
-const dbPath = path.resolve(__dirname, '../data/gate.db');
+const dataDir = process.env.GATE_DATA_DIR || path.join(os.homedir(), '.gate');
+fs.mkdirSync(dataDir, { recursive: true });
+const dbPath = path.join(dataDir, 'gate.db');
 const db = createDb(dbPath);
 
 app.get('/api/health', (_req, res) => {

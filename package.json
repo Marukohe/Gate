@@ -1,6 +1,16 @@
 {
-  "name": "gate",
-  "private": true,
+  "name": "@marukohe/gate",
+  "version": "0.1.0",
+  "description": "Chat with Claude Code CLI on remote servers via SSH + tmux, from any device",
+  "type": "module",
+  "bin": {
+    "gate": "bin/gate.js"
+  },
+  "files": [
+    "bin/",
+    "server/dist/",
+    "client/dist/"
+  ],
   "workspaces": [
     "client",
     "server"
@@ -10,9 +20,25 @@
     "dev:server": "npm run dev --workspace=server",
     "dev:client": "npm run dev --workspace=client",
     "build": "npm run build --workspace=client && npm run build --workspace=server",
-    "start": "npm run start --workspace=server"
+    "start": "npm run start --workspace=server",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.6.2",
+    "express": "^5.2.1",
+    "ssh2": "^1.17.0",
+    "uuid": "^13.0.0",
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Marukohe/gate.git"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
   }
 }
