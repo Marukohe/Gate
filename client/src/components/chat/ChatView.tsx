@@ -76,6 +76,13 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
     bottomRef.current?.scrollIntoView({ behavior });
   }, [messages, activeSessionId]);
 
+  // Restore active plan when switching sessions/servers
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const knownPlanId = usePlanStore.getState().autoExtractedPlanIds[activeSessionId];
+    usePlanStore.getState().setActivePlan(knownPlanId ?? null);
+  }, [activeSessionId]);
+
   // Extract plans from messages (TodoWrite tool calls or assistant checklists)
   useEffect(() => {
     if (!activeSessionId || messages.length === 0) return;
