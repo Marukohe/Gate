@@ -69,6 +69,18 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
     }
   }, [activeSessionId, syncStatus, setSyncStatus]);
 
+  // Track whether user is near the bottom via scroll events (before new messages arrive)
+  const isNearBottomRef = useRef(true);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
+
   // Scroll instant on session switch or initial mount, smooth on new messages
   const isInitialRef = useRef(true);
   const prevSessionRef = useRef(activeSessionId);
@@ -79,14 +91,13 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
     prevSessionRef.current = activeSessionId;
     if (isInitialRef.current || switched) {
       isInitialRef.current = false;
+      isNearBottomRef.current = true;
       bottomRef.current?.scrollIntoView({ behavior: 'instant' });
       return;
     }
-    // Only auto-scroll on new messages if user is near the bottom
-    const el = scrollRef.current;
-    if (el) {
-      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
-      if (nearBottom) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Only auto-scroll on new messages if user was near the bottom before the update
+    if (isNearBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, activeSessionId]);
 
