@@ -21,15 +21,31 @@ Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──�
   </tr>
 </table>
 
-## Features
+## Key Features
 
-- **Remote Claude Code access** — connect to any server via SSH, manage multiple tmux sessions
-- **Structured chat view** — terminal output is parsed into assistant messages, tool calls (collapsible), and results with syntax-highlighted code blocks
-- **Multi-session** — run separate Claude sessions per project/server, switch with tabs or swipe gestures
-- **Plan panel** — automatically extracts markdown checklists from Claude's output into an editable sidebar
-- **Persistent history** — chat messages are stored in SQLite and restored on reconnect
-- **Responsive design** — 3-column desktop layout, bottom-sheet drawers on mobile, safe-area support for notched phones
-- **Git integration** — view current branch, switch branches, all from the session bar
+### Access Claude Code from Any Device
+Connect to Claude Code CLI running on remote servers via SSH + tmux. Start a coding session on your desktop, then pick it up on your phone while on the go — your sessions persist across devices.
+
+### Bind to Existing Terminal Sessions
+Already have Claude Code running in a terminal? Gate can attach to it. When creating a session, Gate lists existing Claude Code JSONL transcripts from the remote server and lets you resume any of them — no need to start from scratch.
+
+### Structured Chat Interface
+Raw terminal output is parsed into a clean chat UI: assistant messages with full markdown rendering, collapsible tool call cards, syntax-highlighted code blocks with copy button, and scrollable/wrappable tables.
+
+### Multi-Server, Multi-Session
+Manage multiple remote servers, each with multiple Claude sessions. Switch between sessions with tabs or swipe gestures on mobile. Each session tracks its own working directory, git branch, and chat history.
+
+### Plan Tracking Panel
+Gate automatically extracts markdown checklists from Claude's output into a dedicated plan panel. View progress at a glance, check off completed steps, or edit plans directly.
+
+### Transcript Sync
+Manually sync Claude Code's JSONL transcript to catch up on messages produced outside Gate (e.g., from a direct terminal session). The parser reconstructs the full conversation from the transcript file.
+
+### Mobile-First Responsive Design
+Three-column layout on desktop (sidebar + chat + plan panel), drawer-based navigation on tablet, and fullscreen chat with bottom sheets and swipe gestures on mobile. Safe-area support for notched phones.
+
+### Persistent History
+All chat messages are stored in SQLite and restored on reconnect. Browse previous conversations even after server restarts.
 
 ## Quick Start
 
