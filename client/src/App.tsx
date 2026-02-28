@@ -70,7 +70,11 @@ function App() {
       })
       .catch(() => {});
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      // Reset so aborted fetches can retry (e.g. React StrictMode double-mount)
+      prevServerRef.current = null;
+    };
   }, [activeServerId, setSessions, setActiveSession, createSession]);
 
   // Evict messages for other servers' sessions to save memory.
