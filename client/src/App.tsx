@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ChatView } from '@/components/chat/ChatView';
 import { ServerDialog } from '@/components/server/ServerDialog';
-import { PlanModeOverlay } from '@/components/plan-mode/PlanModeOverlay';
 import { useServerStore, type Server } from '@/stores/server-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useChatStore } from '@/stores/chat-store';
@@ -109,6 +108,12 @@ function App() {
     sendInput(activeServerId, activeSessionId, text);
   }, [activeServerId, activeSessionId, sendInput, addMessage, execCommand]);
 
+  // Explicit session-targeted send — used by plan mode to avoid stale activeSessionId
+  const handleSendToSession = useCallback((text: string, serverId: string, sessionId: string) => {
+    addMessage(sessionId, { type: 'user', content: text, timestamp: Date.now() });
+    sendInput(serverId, sessionId, text);
+  }, [sendInput, addMessage]);
+
   const handleCreateSession = useCallback((name: string, workingDir: string | null, claudeSessionId?: string | null) => {
     if (!activeServerId) return;
     createSession(activeServerId, name, workingDir, claudeSessionId);
@@ -147,6 +152,7 @@ function App() {
             onSwitchBranch={switchBranch}
             onSyncTranscript={handleSyncTranscript}
             onListClaudeSessions={listClaudeSessions}
+            onSendToSession={handleSendToSession}
           />
         }
         onAddServer={() => { setEditingServer(null); setServerDialogOpen(true); }}
@@ -158,7 +164,6 @@ function App() {
         onOpenChange={(open) => { setServerDialogOpen(open); if (!open) setEditingServer(null); }}
         editServer={editingServer}
       />
-      <PlanModeOverlay onSendInput={handleSend} />
     </>
   );
 }

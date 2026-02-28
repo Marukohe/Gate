@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 interface PlanModeQuestionProps {
-  onSendInput: (text: string) => void;
+  onSendInput: (text: string, serverId: string, sessionId: string) => void;
 }
 
 export function PlanModeQuestion({ onSendInput }: PlanModeQuestionProps) {
@@ -15,10 +15,14 @@ export function PlanModeQuestion({ onSendInput }: PlanModeQuestionProps) {
   const deselectAnswer = usePlanModeStore((s) => s.deselectAnswer);
   const submitAnswers = usePlanModeStore((s) => s.submitAnswers);
   const dismiss = usePlanModeStore((s) => s.dismiss);
+  const serverId = usePlanModeStore((s) => s.serverId);
+  const sessionId = usePlanModeStore((s) => s.sessionId);
 
   const handleSubmit = () => {
     const answer = submitAnswers();
-    onSendInput(answer);
+    if (serverId && sessionId) {
+      onSendInput(answer, serverId, sessionId);
+    }
   };
 
   const hasAnySelection = Object.values(selectedAnswers).some((arr) => arr.length > 0);

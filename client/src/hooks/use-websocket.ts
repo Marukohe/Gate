@@ -77,7 +77,7 @@ function setupSocket() {
       case 'message':
         if (data.sessionId) {
           storeRefs.addMessage?.(data.sessionId, data.message);
-          storeRefs.processPlanModeMessage?.(data.sessionId, data.message);
+          storeRefs.processPlanModeMessage?.(data.serverId, data.sessionId, data.message);
           // Auto-extract plans from assistant messages with checklists
           if (data.message.type === 'assistant' && usePlanModeStore.getState().phase === 'idle') {
             usePlanStore.getState().autoExtractPlan(data.sessionId, data.message.content);

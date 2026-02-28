@@ -10,6 +10,7 @@ import { useServerStore } from '@/stores/server-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useSwipe } from '@/hooks/use-swipe';
+import { PlanModeOverlay } from '@/components/plan-mode/PlanModeOverlay';
 
 const EMPTY_MESSAGES: ChatMessage[] = [];
 
@@ -22,9 +23,10 @@ interface ChatViewProps {
   onSwitchBranch: (serverId: string, sessionId: string, branch: string) => void;
   onSyncTranscript: (sessionId: string) => void;
   onListClaudeSessions?: (serverId: string, workingDir: string) => Promise<string[]>;
+  onSendToSession: (text: string, serverId: string, sessionId: string) => void;
 }
 
-export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSession, onListBranches, onSwitchBranch, onSyncTranscript, onListClaudeSessions }: ChatViewProps) {
+export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSession, onListBranches, onSwitchBranch, onSyncTranscript, onListClaudeSessions, onSendToSession }: ChatViewProps) {
   const activeServerId = useServerStore((s) => s.activeServerId);
   const activeSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
   const sessions = useSessionStore((s) => activeServerId ? s.sessions[activeServerId] : undefined);
@@ -81,7 +83,8 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
+      <PlanModeOverlay activeSessionId={activeSessionId} onSendInput={onSendToSession} />
       <SessionBar
         serverId={activeServerId}
         onCreateSession={onCreateSession}
