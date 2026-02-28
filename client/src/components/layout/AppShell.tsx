@@ -66,20 +66,30 @@ export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat }: 
           </div>
           {/* Desktop plan panel — inside content area so border-t aligns with ChatInput */}
           {planPanelOpen && (
-            <div className="hidden w-80 border-l lg:block">
+            <div className="hidden w-80 shrink-0 overflow-hidden border-l lg:block">
               <PlanPanel onSendToChat={onSendToChat} />
             </div>
           )}
         </div>
       </div>
 
-      {/* Mobile plan panel drawer */}
+      {/* Mobile plan panel — bottom sheet */}
       <Sheet open={planPanelOpen && isMobile} onOpenChange={setPlanPanelOpen}>
-        <SheetContent side="right" className="w-80 p-0 lg:hidden">
+        <SheetContent
+          side="bottom"
+          showCloseButton={false}
+          className="rounded-t-2xl px-0 pb-[env(safe-area-inset-bottom)] lg:hidden"
+        >
+          {/* Drag handle */}
+          <div className="flex justify-center pt-2 pb-1">
+            <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
+          </div>
           <SheetHeader className="sr-only">
             <SheetTitle>Plan</SheetTitle>
           </SheetHeader>
-          <PlanPanel onSendToChat={onSendToChat} />
+          <div className="max-h-[60dvh] overflow-hidden">
+            <PlanPanel onSendToChat={onSendToChat} />
+          </div>
         </SheetContent>
       </Sheet>
     </div>

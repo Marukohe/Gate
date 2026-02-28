@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlanStepItem } from './PlanStepItem';
 import { usePlanStore, type Plan } from '@/stores/plan-store';
 import { useServerStore } from '@/stores/server-store';
@@ -60,7 +59,7 @@ export function PlanPanel({ onSendToChat }: PlanPanelProps) {
   const totalCount = activePlan.steps.length;
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col overflow-hidden">
       <div className="border-b p-4">
         <h3 className="font-semibold">{activePlan.title}</h3>
         <p className="text-xs text-muted-foreground">{completedCount}/{totalCount} steps completed</p>
@@ -71,7 +70,7 @@ export function PlanPanel({ onSendToChat }: PlanPanelProps) {
           <TabsTrigger value="edit" className="flex-1" onClick={handleEditStart}>Edit</TabsTrigger>
         </TabsList>
         <TabsContent value="view" className="flex-1 overflow-hidden">
-          <ScrollArea className="h-full px-4 pb-4">
+          <div className="h-full overflow-y-auto px-4 pb-4">
             {activePlan.steps.map((step) => (
               <PlanStepItem
                 key={step.id}
@@ -79,7 +78,7 @@ export function PlanPanel({ onSendToChat }: PlanPanelProps) {
                 onToggle={(stepId) => activeSessionId && toggleStep(activeSessionId, activePlan.id, stepId)}
               />
             ))}
-          </ScrollArea>
+          </div>
         </TabsContent>
         <TabsContent value="edit" className="flex flex-1 flex-col gap-2 p-4">
           <Textarea

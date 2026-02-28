@@ -10,13 +10,13 @@ interface PlanStepItemProps {
 export function PlanStepItem({ step, onToggle }: PlanStepItemProps) {
   return (
     <div>
-      <div className="flex items-start gap-2 py-1">
+      <div className="flex min-w-0 items-start gap-2 py-1">
         <Checkbox
           checked={step.completed}
           onCheckedChange={() => onToggle(step.id)}
           className="mt-0.5"
         />
-        <span className={cn('text-sm', step.completed && 'text-muted-foreground line-through')}>
+        <span className={cn('flex-1 min-w-0 break-words text-sm', step.completed && 'text-muted-foreground line-through')}>
           {step.text}
         </span>
       </div>
