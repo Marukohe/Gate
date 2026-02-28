@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { parseMarkdownChecklist } from '@/lib/plan-parser';
 import { uniqueId } from '@/lib/utils';
-import { useUIStore } from './ui-store';
 
 export interface PlanStep {
   id: string;
@@ -113,8 +112,6 @@ export const usePlanStore = create<PlanStore>((set, get) => ({
         },
       }));
     }
-
-    useUIStore.getState().setPlanPanelOpen(true);
   },
   extractTodoWrite: (sessionId, jsonContent) => {
     try {
@@ -168,8 +165,6 @@ export const usePlanStore = create<PlanStore>((set, get) => ({
           },
         }));
       }
-
-      useUIStore.getState().setPlanPanelOpen(true);
     } catch (e) {
       console.warn('[plan-store] extractTodoWrite failed:', e);
     }
