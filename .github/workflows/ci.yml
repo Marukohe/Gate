@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check server
+        run: npx tsc --noEmit
+        working-directory: server
+
+      - name: Run server tests
+        run: npx vitest run
+        working-directory: server
+
+      - name: Build client & server
+        run: npm run build
+
+      - name: Verify npm package contents
+        run: npm pack --dry-run 2>&1 | grep -E 'client/dist/index.html|server/dist/index.js|bin/gate.js'
