@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { parseMarkdownChecklist } from '@/lib/plan-parser';
 import { uniqueId } from '@/lib/utils';
 
@@ -40,7 +41,9 @@ function toggleStepInList(steps: PlanStep[], stepId: string): PlanStep[] {
   });
 }
 
-export const usePlanStore = create<PlanStore>((set, get) => ({
+export const usePlanStore = create<PlanStore>()(
+  persist(
+  (set, get) => ({
   plans: {},
   activePlanId: null,
   autoExtractedPlanIds: {},
@@ -169,4 +172,13 @@ export const usePlanStore = create<PlanStore>((set, get) => ({
       console.warn('[plan-store] extractTodoWrite failed:', e);
     }
   },
-}));
+}),
+  {
+    name: 'plan-store',
+    // Persist plans and mappings; activePlanId is restored per-session in ChatView
+    partialize: (state) => ({
+      plans: state.plans,
+      autoExtractedPlanIds: state.autoExtractedPlanIds,
+    }),
+  },
+));

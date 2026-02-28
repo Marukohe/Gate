@@ -106,9 +106,21 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
     usePlanStore.getState().setActivePlan(knownPlanId ?? null);
   }, [activeSessionId]);
 
-  // Extract plans from messages (TodoWrite tool calls or assistant checklists)
+  // Extract plans from messages (TodoWrite tool calls or assistant checklists).
+  // Only scan the latest messages — if the session already has a plan and no
+  // newer plan-bearing message exists in the current window, keep the existing plan.
+  const prevExtractLenRef = useRef<Record<string, number>>({});
   useEffect(() => {
     if (!activeSessionId || messages.length === 0) return;
+    const prevLen = prevExtractLenRef.current[activeSessionId] ?? 0;
+    prevExtractLenRef.current[activeSessionId] = messages.length;
+
+    const hasExistingPlan = !!usePlanStore.getState().autoExtractedPlanIds[activeSessionId];
+
+    // If plan already exists and no new messages arrived, skip re-extraction.
+    // This prevents losing plans when history is reloaded with fewer messages.
+    if (hasExistingPlan && messages.length <= prevLen) return;
+
     const planPhase = usePlanModeStore.getState().phase;
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
