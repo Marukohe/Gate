@@ -64,11 +64,17 @@ app.use('/api/servers', createServerRoutes(db));
 
 // Serve built client in production
 const clientDist = path.resolve(__dirname, '../../client/dist');
-app.use(express.static(clientDist));
-app.get('/{*path}', (_req, res, next) => {
-  if (_req.path.startsWith('/api')) return next();
-  res.sendFile(path.join(clientDist, 'index.html'));
-});
+const clientIndexPath = path.join(clientDist, 'index.html');
+if (fs.existsSync(clientIndexPath)) {
+  app.use(express.static(clientDist));
+  app.get('/{*path}', (_req, res, next) => {
+    if (_req.path.startsWith('/api')) return next();
+    res.sendFile(clientIndexPath);
+  });
+} else {
+  console.warn(`Warning: client build not found at ${clientDist}`);
+  console.warn('Run "npm run build" first, or use "npm run dev" for development.');
+}
 
 const httpServer = createServer(app);
 
