@@ -36,12 +36,35 @@ Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──�
 
 ### Prerequisites
 
-- Node.js >= 20
+- Node.js >= 18
 - A remote server with SSH access and [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed
 - tmux on the remote server
 - **Claude Code logged in on the remote server** — SSH into the server and run `claude` once to complete authentication before using Gate
 
-### Install & Run
+### Install via npm (recommended)
+
+```bash
+npm i -g @marukohe/gate
+gate
+```
+
+Open `http://localhost:3001` in your browser. Data is stored in `~/.gate/`.
+
+CLI options:
+
+```bash
+gate --port 8080          # custom port (default: 3001)
+gate --host 127.0.0.1     # bind address (default: 0.0.0.0)
+gate --data-dir /my/data  # custom data directory (default: ~/.gate)
+```
+
+### Add a Server
+
+Open the app → click **Add Server** → fill in your SSH credentials (password or private key). Set a default working directory for new sessions.
+
+## Development
+
+### Setup
 
 ```bash
 git clone https://github.com/Marukohe/Gate.git gate
@@ -52,11 +75,7 @@ npm run dev
 
 The client runs on `http://localhost:5173` (proxies API/WS to the server on port 3001).
 
-### Add a Server
-
-Open the app → click **Add Server** → fill in your SSH credentials (password or private key). Set a default working directory for new sessions.
-
-## Scripts
+### Scripts
 
 | Command | Description |
 |---------|-------------|

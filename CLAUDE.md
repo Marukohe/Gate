@@ -45,6 +45,26 @@ cd server && npx vitest run src/parser.test.ts
 cd server && npx tsc --noEmit
 ```
 
+## Deployment
+
+Published as `@marukohe/gate` on npm. Users install globally:
+
+```bash
+npm i -g @marukohe/gate
+gate                        # starts on http://0.0.0.0:3001
+gate --port 8080            # custom port
+gate --data-dir /custom     # custom data directory (default: ~/.gate)
+```
+
+Data (SQLite DB) is stored in `~/.gate/gate.db` by default, shared between dev and production modes.
+
+To publish a new version:
+
+```bash
+npm version patch           # bump version
+npm publish --access public # build + publish to npm
+```
+
 ## Key Modules
 
 **Server:**
@@ -77,7 +97,7 @@ Server sends: `{ type: 'message'|'status'|'history', serverId, ... }`
 
 1. Use git frequently and meaningfully
 2. Follow **Conventional Commits**
-3. Keep `README.md`, `SPEC.md`, `AGENT.md`, and `TODO.md` up to date
+3. Keep `README.md`, `CLAUDE.md`, `SPEC.md`, `AGENT.md`, and `TODO.md` up to date
 4. Fix **all compiler warnings**
 5. Keep a clean, layered project structure
 6. Write high-quality comments that explain *why*, not *what*
