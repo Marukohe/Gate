@@ -1,5 +1,7 @@
 # Gate
 
+[English](README.md) | [中文](README_CN.md)
+
 **Gate** opens a portal to [Claude Code](https://docs.anthropic.com/en/docs/claude-code) on remote servers — code from anywhere, on any device.
 
 Waiting in line, on the couch, on the train — pull out your phone and pick up right where you left off. Gate bridges your browser to Claude Code CLI sessions over SSH + tmux, so your coding environment is always one tap away.
