@@ -43,8 +43,8 @@ function shellCd(dir: string): string {
 function buildClaudeCmd(resumeSessionId?: string | null, workingDir?: string | null): string {
   const resumeFlag = resumeSessionId ? ` --resume '${resumeSessionId}'` : '';
   const cdPrefix = workingDir ? `${shellCd(workingDir)} && ` : '';
-  // Use double quotes for bash -lc to allow single quotes inside (--resume id)
-  return `bash -lc "${cdPrefix}claude -p${resumeFlag} ${CLAUDE_BASE_ARGS}"`;
+  // Use $SHELL so the user's login shell loads their PATH from .zshrc/.bashrc
+  return `$SHELL -lc "${cdPrefix}claude -p${resumeFlag} ${CLAUDE_BASE_ARGS}"`;
 }
 
 export class SSHManager extends EventEmitter {
@@ -206,7 +206,7 @@ export class SSHManager extends EventEmitter {
     if (!conn) throw new Error(`No connection for server ${serverId}`);
 
     const cdPrefix = workingDir ? `${shellCd(workingDir)} && ` : 'cd $HOME && ';
-    const cmd = `bash -lc "${cdPrefix}${command.replace(/"/g, '\\"')}"`;
+    const cmd = `$SHELL -lc "${cdPrefix}${command.replace(/"/g, '\\"')}"`;
 
     return new Promise((resolve, reject) => {
       conn.client.exec(cmd, (err, channel) => {
