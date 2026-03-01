@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, MoreVertical, Moon, Sun } from 'lucide-react';
+import { Plus, Pencil, Trash2, MoreVertical, Moon, Sun, Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
@@ -11,7 +11,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
@@ -26,6 +29,7 @@ import {
 import { useServerStore, type Server as ServerType } from '@/stores/server-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useUIStore } from '@/stores/ui-store';
+import { requestNotificationPermission } from '@/lib/notification';
 import { cn } from '@/lib/utils';
 import { getInitials, getAvatarColor } from '@/lib/server-utils';
 
@@ -45,6 +49,12 @@ export function Sidebar({ onAddServer, onEditServer, onClose }: SidebarProps) {
 
   const darkMode = useUIStore((s) => s.darkMode);
   const toggleDarkMode = useUIStore((s) => s.toggleDarkMode);
+  const notifyBrowser = useUIStore((s) => s.notifyBrowser);
+  const notifyToast = useUIStore((s) => s.notifyToast);
+  const notifySound = useUIStore((s) => s.notifySound);
+  const setNotifyBrowser = useUIStore((s) => s.setNotifyBrowser);
+  const setNotifyToast = useUIStore((s) => s.setNotifyToast);
+  const setNotifySound = useUIStore((s) => s.setNotifySound);
   const [deleteTarget, setDeleteTarget] = useState<ServerType | null>(null);
 
   const statusInfo = (serverId: string) => {
@@ -148,12 +158,45 @@ export function Sidebar({ onAddServer, onEditServer, onClose }: SidebarProps) {
             );
           })}
         </div>
-        <div className={cn('flex items-center gap-2 p-4', !isMobile && 'border-t')}>
-          <Button variant="outline" className="h-10 flex-1 justify-start gap-2" onClick={() => { onAddServer(); onClose?.(); }}>
+        <div className={cn('flex items-center justify-end gap-1 px-2 py-3 sm:px-3 sm:py-4', !isMobile && 'border-t')}>
+          <Button variant="outline" className="h-10 gap-1 px-3" onClick={() => { onAddServer(); onClose?.(); }}>
             <Plus className="h-4 w-4" />
-            Add Server
+            Server
           </Button>
-          <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" onClick={toggleDarkMode}>
+          <div className="flex-1" />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className={cn('h-10 w-10', (notifyBrowser || notifyToast || notifySound) && 'text-primary')}>
+                <Bell className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem
+                checked={notifyToast}
+                onCheckedChange={(checked) => setNotifyToast(!!checked)}
+              >
+                In-app toast
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={notifyBrowser}
+                onCheckedChange={(checked) => {
+                  setNotifyBrowser(!!checked);
+                  if (checked) requestNotificationPermission();
+                }}
+              >
+                Browser notification
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={notifySound}
+                onCheckedChange={(checked) => setNotifySound(!!checked)}
+              >
+                Sound
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button variant="ghost" size="icon" className="h-10 w-10" onClick={toggleDarkMode}>
             {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
         </div>

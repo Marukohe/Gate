@@ -1,8 +1,10 @@
 import { useEffect, useCallback } from 'react';
 import { useSessionStore } from '../stores/session-store';
+import { useServerStore } from '../stores/server-store';
 import { useChatStore } from '../stores/chat-store';
 import { usePlanModeStore } from '../stores/plan-mode-store';
 import { useUIStore } from '../stores/ui-store';
+import { triggerTaskNotification } from '../lib/notification';
 
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -80,6 +82,18 @@ function setupSocket() {
         if (data.sessionId) {
           storeRefs.addMessage?.(data.sessionId, data.message);
           storeRefs.processPlanModeMessage?.(data.serverId, data.sessionId, data.message);
+          // Notify on task completion in background sessions
+          if (data.message.type === 'system' && data.message.subType === 'result') {
+            const activeServerId = useServerStore.getState().activeServerId;
+            const activeSessionId = activeServerId ? useSessionStore.getState().activeSessionId[activeServerId] : null;
+            const isBackground = data.sessionId !== activeSessionId || document.hidden;
+            if (isBackground) {
+              const server = useServerStore.getState().servers.find((s) => s.id === data.serverId);
+              const sessions = useSessionStore.getState().sessions[data.serverId] ?? [];
+              const session = sessions.find((s) => s.id === data.sessionId);
+              triggerTaskNotification(server?.name ?? data.serverId, session?.name ?? data.sessionId);
+            }
+          }
         }
         break;
       case 'status':

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Toaster } from 'sonner';
 import { AppShell } from '@/components/layout/AppShell';
 import { ChatView } from '@/components/chat/ChatView';
 import { ServerDialog } from '@/components/server/ServerDialog';
@@ -197,6 +198,7 @@ function App() {
         onOpenChange={(open) => { setServerDialogOpen(open); if (!open) setEditingServer(null); }}
         editServer={editingServer}
       />
+      <Toaster position="top-right" theme={darkMode ? 'dark' : 'light'} richColors />
     </>
   );
 }
