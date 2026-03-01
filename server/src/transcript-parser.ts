@@ -78,6 +78,7 @@ function isSystemInjected(content: string): boolean {
   if (content.startsWith('<command-name>')) return true;
   if (content.startsWith('<local-command-stdout>')) return true;
   if (content.startsWith('<local-command-caveat>')) return true;
+  if (content.includes('<task-notification>')) return true;
   return false;
 }
 
