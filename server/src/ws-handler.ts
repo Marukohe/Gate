@@ -91,10 +91,33 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
     parser.feed(data);
   });
 
+  // Periodically clean up parsers for sessions that no longer have active SSH channels.
+  // Catches cases where clients disconnect without sending an explicit 'disconnect' message.
+  const parserCleanupInterval = setInterval(() => {
+    for (const [sessionId, parser] of parsers) {
+      // Keep parser if any SSH connection still has an active channel for this session
+      let hasChannel = false;
+      // Check all servers — sessionId is globally unique
+      for (const server of db.listServers()) {
+        if (sshManager.hasActiveChannel(server.id, sessionId)) {
+          hasChannel = true;
+          break;
+        }
+      }
+      if (!hasChannel) {
+        parser.flush();
+        parsers.delete(sessionId);
+      }
+    }
+  }, 60_000);
+
+  // Clean up interval when server shuts down
+  wss.on('close', () => clearInterval(parserCleanupInterval));
+
   wss.on('connection', (ws: WebSocket) => {
     ws.on('close', () => {
-      // Parsers are keyed by sessionId (shared across clients), so no cleanup here.
-      // This handler prevents silent disconnects and enables future per-client tracking.
+      // Parsers are keyed by sessionId (shared across clients), so no per-client cleanup.
+      // Stale parsers are cleaned up by the periodic interval above.
     });
 
     ws.on('error', (err) => {

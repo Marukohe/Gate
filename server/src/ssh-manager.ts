@@ -108,11 +108,18 @@ export class SSHManager extends EventEmitter {
     const conn = this.connections.get(serverId);
     if (!conn) return false;
     return new Promise((resolve) => {
-      const timeout = setTimeout(() => resolve(false), 3_000);
-      conn.client.exec('echo 1', (err, ch) => {
+      let settled = false;
+      const done = (result: boolean) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timeout);
-        if (err) return resolve(false);
-        ch.on('close', () => resolve(true));
+        resolve(result);
+      };
+      const timeout = setTimeout(() => done(false), 3_000);
+      conn.client.exec('echo 1', (err, ch) => {
+        if (err) return done(false);
+        ch.on('close', () => done(true));
+        ch.on('error', () => done(false));
         ch.on('data', () => {});
         ch.stderr.on('data', () => {});
       });
@@ -163,6 +170,14 @@ export class SSHManager extends EventEmitter {
     });
 
     channel.on('close', () => {
+      channel.removeAllListeners();
+      conn.channels.delete(sessionId);
+      this.emit('status', serverId, sessionId, 'disconnected');
+    });
+
+    channel.on('error', (err: Error) => {
+      console.error(`[ssh] channel error for ${serverId}:${sessionId}:`, err.message);
+      channel.removeAllListeners();
       conn.channels.delete(sessionId);
       this.emit('status', serverId, sessionId, 'disconnected');
     });
@@ -214,19 +229,28 @@ export class SSHManager extends EventEmitter {
         let stdout = '';
         let stderr = '';
         let exitCode = 0;
+        let settled = false;
+
+        const finish = (result: { stdout: string; stderr: string; exitCode: number } | null, error?: Error) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          channel.removeAllListeners();
+          if (error) reject(error); else resolve(result!);
+        };
 
         const timeout = setTimeout(() => {
           channel.close();
-          reject(new Error('Command timed out after 30 seconds'));
+          finish(null, new Error('Command timed out after 30 seconds'));
         }, 30_000);
 
         channel.on('data', (data: Buffer) => { stdout += data.toString(); });
         channel.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
         channel.on('close', (code: number) => {
-          clearTimeout(timeout);
           exitCode = code ?? 0;
-          resolve({ stdout, stderr, exitCode });
+          finish({ stdout, stderr, exitCode });
         });
+        channel.on('error', (err: Error) => finish(null, err));
       });
     });
   }
@@ -252,9 +276,17 @@ export class SSHManager extends EventEmitter {
       conn.client.exec(cmd, (err, channel) => {
         if (err) return reject(err);
         let stdout = '';
+        let settled = false;
+        const done = (result: string | null, error?: Error) => {
+          if (settled) return;
+          settled = true;
+          channel.removeAllListeners();
+          if (error) reject(error); else resolve(result!);
+        };
         channel.on('data', (data: Buffer) => { stdout += data.toString(); });
-        channel.on('close', () => resolve(stdout.trim()));
-        channel.stderr.on('data', () => {}); // ignore stderr
+        channel.on('close', () => done(stdout.trim()));
+        channel.on('error', (err: Error) => done(null, err));
+        channel.stderr.on('data', () => {});
       });
     });
   }
