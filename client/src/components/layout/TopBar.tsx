@@ -10,7 +10,7 @@ export function TopBar() {
   const toggleDarkMode = useUIStore((s) => s.toggleDarkMode);
 
   return (
-    <div className="flex h-10 items-center border-b px-4 lg:hidden">
+    <div className="flex items-center border-b px-4 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] lg:hidden">
       <span className="text-sm font-medium">{activeServer?.name ?? 'Gate'}</span>
       <div className="flex-1" />
       <button onClick={toggleDarkMode} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground transition-colors">

@@ -1,4 +1,4 @@
-import { useState, useRef, type KeyboardEvent } from 'react';
+import { useState, useRef, useCallback, type KeyboardEvent } from 'react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { SendHorizontal } from 'lucide-react';
@@ -36,6 +36,11 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     }
   };
 
+  // iOS PWA: keyboard dismiss can leave viewport offset, reset scroll position
+  const handleBlur = useCallback(() => {
+    setTimeout(() => window.scrollTo(0, 0), 100);
+  }, []);
+
   return (
     <div className="border-t px-2 py-3 sm:p-4">
       <div className="flex items-end gap-2">
@@ -56,6 +61,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
+          onBlur={handleBlur}
           onCompositionStart={() => { composingRef.current = true; }}
           onCompositionEnd={() => { setTimeout(() => { composingRef.current = false; }, 0); }}
           disabled={disabled}

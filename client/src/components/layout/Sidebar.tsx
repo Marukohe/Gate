@@ -29,7 +29,8 @@ import {
 import { useServerStore, type Server as ServerType } from '@/stores/server-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useUIStore } from '@/stores/ui-store';
-import { requestNotificationPermission } from '@/lib/notification';
+import { requestNotificationPermission, ensureAudioContext } from '@/lib/notification';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getInitials, getAvatarColor } from '@/lib/server-utils';
 
@@ -86,7 +87,7 @@ export function Sidebar({ onAddServer, onEditServer, onClose }: SidebarProps) {
         isMobile ? 'w-full' : 'h-full w-52 border-r',
       )}>
         {!isMobile && (
-          <div className="px-3 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          <div className="px-3 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-xs font-medium text-muted-foreground uppercase tracking-wider">
             Servers
           </div>
         )}
@@ -181,16 +182,29 @@ export function Sidebar({ onAddServer, onEditServer, onClose }: SidebarProps) {
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={notifyBrowser}
-                onCheckedChange={(checked) => {
+                onCheckedChange={async (checked) => {
+                  if (checked) {
+                    if (!('Notification' in window)) {
+                      toast.error('Browser notifications are not supported');
+                      return;
+                    }
+                    const granted = await requestNotificationPermission();
+                    if (!granted) {
+                      toast.error('Notification permission denied. Check browser settings.');
+                      return;
+                    }
+                  }
                   setNotifyBrowser(!!checked);
-                  if (checked) requestNotificationPermission();
                 }}
               >
                 Browser notification
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={notifySound}
-                onCheckedChange={(checked) => setNotifySound(!!checked)}
+                onCheckedChange={(checked) => {
+                  setNotifySound(!!checked);
+                  if (checked) ensureAudioContext();
+                }}
               >
                 Sound
               </DropdownMenuCheckboxItem>

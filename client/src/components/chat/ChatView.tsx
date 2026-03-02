@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useCallback, useState } from 'react';
-import { AlertCircle, RefreshCw, ChevronUp } from 'lucide-react';
+import { AlertCircle, RefreshCw, ChevronUp, Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { SessionBar } from './SessionBar';
@@ -161,10 +162,16 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
     });
   }, [messages, loadingMore, onLoadMore]);
 
+  const toggleSidebar = useUIStore((s) => s.toggleSidebar);
+
   if (!activeServerId) {
     return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
-        Select a server to start
+      <div className="flex h-full flex-col items-center justify-center gap-4 text-muted-foreground">
+        <p>Select a server to start</p>
+        <Button variant="outline" className="gap-1 lg:hidden" onClick={toggleSidebar}>
+          <Plus className="h-4 w-4" />
+          Add Server
+        </Button>
       </div>
     );
   }

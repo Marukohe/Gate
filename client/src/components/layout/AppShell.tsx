@@ -31,7 +31,7 @@ export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat }: 
   }, []);
 
   return (
-    <div className="flex h-dvh">
+    <div className="flex h-full">
       {/* Desktop sidebar */}
       <div className="hidden lg:block">
         <Sidebar onAddServer={onAddServer} onEditServer={onEditServer} />

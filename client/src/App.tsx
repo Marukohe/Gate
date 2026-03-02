@@ -15,6 +15,9 @@ function App() {
   const darkMode = useUIStore((s) => s.darkMode);
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
+    // Sync theme-color meta to avoid iOS PWA status bar flash on input method switch
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', darkMode ? '#0f172a' : '#ffffff');
   }, [darkMode]);
   const [serverDialogOpen, setServerDialogOpen] = useState(false);
   const [editingServer, setEditingServer] = useState<Server | null>(null);
