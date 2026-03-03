@@ -32,7 +32,7 @@ npm run dev
 # Client only (port 5173, proxies /api and /ws to server)
 npm run dev:client
 
-# Server only (port 3001)
+# Server only (port 3030)
 npm run dev:server
 
 # Run all server tests
@@ -51,7 +51,7 @@ Published as `@marukohe/gate` on npm. Users install globally:
 
 ```bash
 npm i -g @marukohe/gate
-gate                        # starts on http://0.0.0.0:3001
+gate                        # starts on http://0.0.0.0:3030
 gate --port 8080            # custom port
 gate --data-dir /custom     # custom data directory (default: ~/.gate)
 ```

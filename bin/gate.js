@@ -6,7 +6,7 @@ import path from 'node:path';
 
 const { values } = parseArgs({
   options: {
-    port: { type: 'string', short: 'p', default: '3001' },
+    port: { type: 'string', short: 'p', default: '3030' },
     host: { type: 'string', short: 'h', default: '0.0.0.0' },
     'data-dir': { type: 'string', short: 'd' },
     help: { type: 'boolean', default: false },
@@ -19,7 +19,7 @@ if (values.help) {
 Usage: gate [options]
 
 Options:
-  -p, --port <port>        Port to listen on (default: 3001)
+  -p, --port <port>        Port to listen on (default: 3030)
   -h, --host <host>        Host to bind to (default: 0.0.0.0)
   -d, --data-dir <path>    Data directory for database (default: ~/.gate)
       --help               Show this help message

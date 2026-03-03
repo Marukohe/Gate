@@ -12,7 +12,7 @@ import { listRemoteDirectory, createRemoteDirectory } from './ssh-browse.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3001;
+const PORT = Number(process.env.PORT) || 3030;
 const HOST = process.env.HOST || '0.0.0.0';
 
 app.use(express.json());

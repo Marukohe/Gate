@@ -50,12 +50,12 @@ npm i -g @marukohe/gate
 gate
 ```
 
-Open `http://localhost:3001` in your browser. Data is stored in `~/.gate/`.
+Open `http://localhost:3030` in your browser. Data is stored in `~/.gate/`.
 
 CLI options:
 
 ```bash
-gate --port 8080          # custom port (default: 3001)
+gate --port 8080          # custom port (default: 3030)
 gate --host 127.0.0.1     # bind address (default: 0.0.0.0)
 gate --data-dir /my/data  # custom data directory (default: ~/.gate)
 ```
@@ -75,7 +75,7 @@ npm install
 npm run dev
 ```
 
-The client runs on `http://localhost:5173` (proxies API/WS to the server on port 3001).
+The client runs on `http://localhost:5173` (proxies API/WS to the server on port 3030).
 
 ### Scripts
 
@@ -83,7 +83,7 @@ The client runs on `http://localhost:5173` (proxies API/WS to the server on port
 |---------|-------------|
 | `npm run dev` | Start client + server in parallel |
 | `npm run dev:client` | Vite dev server only (port 5173) |
-| `npm run dev:server` | Express + WS server only (port 3001) |
+| `npm run dev:server` | Express + WS server only (port 3030) |
 | `npm run build` | Build both client and server |
 | `npm run start` | Start production server |
 | `cd server && npx vitest run` | Run server tests |

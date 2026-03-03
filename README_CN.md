@@ -50,12 +50,12 @@ npm i -g @marukohe/gate
 gate
 ```
 
-在浏览器中打开 `http://localhost:3001`。数据存储在 `~/.gate/`。
+在浏览器中打开 `http://localhost:3030`。数据存储在 `~/.gate/`。
 
 CLI 选项：
 
 ```bash
-gate --port 8080          # 自定义端口（默认 3001）
+gate --port 8080          # 自定义端口（默认 3030）
 gate --host 127.0.0.1     # 绑定地址（默认 0.0.0.0）
 gate --data-dir /my/data  # 自定义数据目录（默认 ~/.gate）
 ```
@@ -75,7 +75,7 @@ npm install
 npm run dev
 ```
 
-客户端运行在 `http://localhost:5173`（API/WS 代理到 3001 端口的服务端）。
+客户端运行在 `http://localhost:5173`（API/WS 代理到 3030 端口的服务端）。
 
 ### 脚本
 
@@ -83,7 +83,7 @@ npm run dev
 |------|------|
 | `npm run dev` | 同时启动客户端和服务端 |
 | `npm run dev:client` | 仅启动 Vite 开发服务器（5173 端口） |
-| `npm run dev:server` | 仅启动 Express + WS 服务端（3001 端口） |
+| `npm run dev:server` | 仅启动 Express + WS 服务端（3030 端口） |
 | `npm run build` | 构建客户端和服务端 |
 | `npm run start` | 启动生产环境服务端 |
 | `cd server && npx vitest run` | 运行服务端测试 |
