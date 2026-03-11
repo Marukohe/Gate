@@ -3,13 +3,15 @@ import remarkGfm from 'remark-gfm';
 import { CodeBlock } from './CodeBlock';
 import { ScrollableTable } from './ScrollableTable';
 import { cn, stripLineNumbers } from '@/lib/utils';
+import { getProviderStyle } from '@/lib/provider-colors';
 import type { ChatMessage } from '@/stores/chat-store';
 
 interface MessageBubbleProps {
   message: ChatMessage;
+  provider?: string | null;
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({ message, provider }: MessageBubbleProps) {
   if (message.type === 'system') {
     return (
       <div className="my-2 text-center text-xs text-muted-foreground">{message.content}</div>
@@ -17,6 +19,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   }
 
   const isUser = message.type === 'user';
+  const providerStyle = !isUser ? getProviderStyle(provider) : null;
 
   return (
     <div className={cn('my-2 flex', isUser ? 'justify-end' : 'justify-start')}>
@@ -24,7 +27,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         'max-w-[85%] min-w-0 overflow-hidden rounded-lg px-4 py-2 text-sm',
         isUser
           ? 'bg-primary text-primary-foreground'
-          : 'bg-muted'
+          : providerStyle?.bg || 'bg-muted'
       )}>
         {isUser ? (
           <p>{message.content}</p>

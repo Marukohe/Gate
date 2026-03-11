@@ -15,6 +15,10 @@ const toolIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   WebFetch: Globe,
   WebSearch: Globe,
   Task: Zap,
+  // Codex raw tool names (server parser emits these before normalization)
+  command_execution: Terminal,
+  file_change: Pencil,
+  web_search: Globe,
 };
 
 function getToolIcon(name?: string) {

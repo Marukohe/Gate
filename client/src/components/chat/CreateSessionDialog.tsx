@@ -15,17 +15,24 @@ import { RemoteDirPicker, type BrowseResult } from '@/components/RemoteDirPicker
 interface CreateSessionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (name: string, workingDir: string | null, claudeSessionId?: string | null) => void;
+  onSubmit: (name: string, workingDir: string | null, claudeSessionId?: string | null, provider?: string) => void;
   defaultName: string;
   defaultWorkingDir?: string;
   serverId: string;
   onListClaudeSessions?: (serverId: string, workingDir: string) => Promise<string[]>;
+  onListCliSessions?: (serverId: string, workingDir: string, provider: string) => Promise<string[]>;
 }
 
-export function CreateSessionDialog({ open, onOpenChange, onSubmit, defaultName, defaultWorkingDir, serverId, onListClaudeSessions }: CreateSessionDialogProps) {
+const providerOptions = [
+  { name: 'claude', label: 'Claude' },
+  { name: 'codex', label: 'Codex' },
+];
+
+export function CreateSessionDialog({ open, onOpenChange, onSubmit, defaultName, defaultWorkingDir, serverId, onListClaudeSessions, onListCliSessions }: CreateSessionDialogProps) {
   const [name, setName] = useState(defaultName);
   const [workingDir, setWorkingDir] = useState(defaultWorkingDir ?? '');
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [provider, setProvider] = useState('claude');
   const [claudeSessions, setClaudeSessions] = useState<string[]>([]);
   const [selectedClaudeSession, setSelectedClaudeSession] = useState<string | null>(null);
   const [loadingSessions, setLoadingSessions] = useState(false);
@@ -34,21 +41,23 @@ export function CreateSessionDialog({ open, onOpenChange, onSubmit, defaultName,
     if (open) {
       setName(defaultName);
       setWorkingDir(defaultWorkingDir ?? '');
+      setProvider('claude');
       setClaudeSessions([]);
       setSelectedClaudeSession(null);
     }
   }, [open, defaultName, defaultWorkingDir]);
 
-  // Fetch Claude sessions when workingDir changes
+  // Fetch CLI sessions when workingDir or provider changes
   useEffect(() => {
-    if (!open || !workingDir.trim() || !onListClaudeSessions) {
+    const listFn = onListCliSessions ?? (onListClaudeSessions ? (sid: string, dir: string, _p: string) => onListClaudeSessions(sid, dir) : null);
+    if (!open || !workingDir.trim() || !listFn) {
       setClaudeSessions([]);
       setSelectedClaudeSession(null);
       return;
     }
     let cancelled = false;
     setLoadingSessions(true);
-    onListClaudeSessions(serverId, workingDir.trim()).then((sessions) => {
+    listFn(serverId, workingDir.trim(), provider).then((sessions) => {
       if (!cancelled) {
         setClaudeSessions(sessions);
         setSelectedClaudeSession(null);
@@ -58,14 +67,15 @@ export function CreateSessionDialog({ open, onOpenChange, onSubmit, defaultName,
       if (!cancelled) { setClaudeSessions([]); setLoadingSessions(false); }
     });
     return () => { cancelled = true; };
-  }, [open, workingDir, serverId, onListClaudeSessions]);
+  }, [open, workingDir, serverId, provider, onListClaudeSessions, onListCliSessions]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedName = name.trim() || defaultName;
-    onSubmit(trimmedName, workingDir.trim() || null, selectedClaudeSession);
+    onSubmit(trimmedName, workingDir.trim() || null, selectedClaudeSession, provider);
     setName('');
     setWorkingDir('');
+    setProvider('claude');
     setClaudeSessions([]);
     setSelectedClaudeSession(null);
     onOpenChange(false);
@@ -104,7 +114,7 @@ export function CreateSessionDialog({ open, onOpenChange, onSubmit, defaultName,
         <DialogContent>
           <DialogHeader>
             <DialogTitle>New Session</DialogTitle>
-            <DialogDescription>Create a new Claude session.</DialogDescription>
+            <DialogDescription>Create a new CLI session.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
@@ -115,6 +125,21 @@ export function CreateSessionDialog({ open, onOpenChange, onSubmit, defaultName,
                 placeholder={defaultName}
                 autoFocus
               />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium">Provider</span>
+              <div className="flex gap-2">
+                {providerOptions.map((p) => (
+                  <button
+                    key={p.name}
+                    type="button"
+                    className={`flex-1 rounded border px-3 py-1.5 text-xs font-medium transition-colors ${provider === p.name ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-muted hover:bg-accent'}`}
+                    onClick={() => setProvider(p.name)}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="flex flex-col gap-1.5">
               <span className="text-sm font-medium">Working directory</span>
@@ -139,7 +164,7 @@ export function CreateSessionDialog({ open, onOpenChange, onSubmit, defaultName,
             </div>
             {(loadingSessions || claudeSessions.length > 0) && (
               <div className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium">Claude session</span>
+                <span className="text-sm font-medium">{providerOptions.find((p) => p.name === provider)?.label ?? 'CLI'} session</span>
                 {loadingSessions ? (
                   <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
                     <Loader2 className="h-3 w-3 animate-spin" />

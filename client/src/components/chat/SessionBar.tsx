@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { CreateSessionDialog } from './CreateSessionDialog';
 import { BranchSwitcher } from './BranchSwitcher';
+import { ProviderSwitcher } from './ProviderSwitcher';
 import { useSessionStore, type Session } from '@/stores/session-store';
 import { useServerStore } from '@/stores/server-store';
 import { usePlanStore } from '@/stores/plan-store';
@@ -36,16 +37,17 @@ const EMPTY_SESSIONS: Session[] = [];
 
 interface SessionBarProps {
   serverId: string;
-  onCreateSession: (name: string, workingDir: string | null, claudeSessionId?: string | null) => void;
+  onCreateSession: (name: string, workingDir: string | null, claudeSessionId?: string | null, provider?: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onSelectSession: (sessionId: string) => void;
   onListBranches: (serverId: string, sessionId: string) => void;
   onSwitchBranch: (serverId: string, sessionId: string, branch: string) => void;
   onSyncTranscript: (sessionId: string) => void;
   onListClaudeSessions?: (serverId: string, workingDir: string) => Promise<string[]>;
+  onListCliSessions?: (serverId: string, workingDir: string, provider: string) => Promise<string[]>;
 }
 
-export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelectSession, onListBranches, onSwitchBranch, onSyncTranscript, onListClaudeSessions }: SessionBarProps) {
+export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelectSession, onListBranches, onSwitchBranch, onSyncTranscript, onListClaudeSessions, onListCliSessions }: SessionBarProps) {
   const sessions = useSessionStore((s) => s.sessions[serverId]) ?? EMPTY_SESSIONS;
   const activeSessionId = useSessionStore((s) => s.activeSessionId[serverId]);
   const connectionStatus = useSessionStore((s) => s.connectionStatus);
@@ -215,6 +217,8 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
           <Plus className="h-3.5 w-3.5" />
         </Button>
 
+        <ProviderSwitcher />
+
         {activePlanId && (
           <>
             <div className="flex-1" />
@@ -239,6 +243,7 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
         defaultWorkingDir={server?.defaultWorkingDir}
         serverId={serverId}
         onListClaudeSessions={onListClaudeSessions}
+        onListCliSessions={onListCliSessions}
       />
 
       {branchSessionId && (
