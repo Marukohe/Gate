@@ -6,7 +6,7 @@ import type { ProviderRegistry } from './providers/registry.js';
 import type { Database } from './db.js';
 
 interface ClientMessage {
-  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions' | 'load-more';
+  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions' | 'load-more' | 'switch-provider';
   serverId: string;
   sessionId?: string;
   sessionName?: string;
@@ -473,6 +473,100 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               messages: olderMessages,
               hasMore: olderMessages.length >= 100,
             }));
+            break;
+          }
+
+          case 'switch-provider': {
+            if (!msg.sessionId || !msg.provider) return;
+            const spSession = db.getSession(msg.sessionId);
+            if (!spSession) return;
+
+            const currentProviderName = spSession.provider ?? 'claude';
+            const currentProvider = registry.get(currentProviderName);
+            const targetProvider = registry.get(msg.provider);
+            if (!currentProvider || !targetProvider) {
+              ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: `Unknown provider: ${msg.provider}` }));
+              return;
+            }
+
+            try {
+              // Step 1: Request summary from current CLI (if connected)
+              let summary = '';
+              if (sshManager.hasActiveChannel(msg.serverId, msg.sessionId)) {
+                const summaryPrompt = currentProvider.requestSummary();
+                sshManager.sendInput(msg.serverId, msg.sessionId, currentProvider.formatInput(summaryPrompt));
+
+                // Wait for assistant response with timeout
+                summary = await new Promise<string>((resolve) => {
+                  const spParser = parsers.get(msg.sessionId!);
+                  const timeout = setTimeout(() => resolve(''), 15_000);
+                  const handler = (message: ParsedMessage) => {
+                    if (message.type === 'assistant') {
+                      clearTimeout(timeout);
+                      spParser?.removeListener('message', handler);
+                      resolve(message.content);
+                    }
+                  };
+                  spParser?.on('message', handler);
+                  if (!spParser) { clearTimeout(timeout); resolve(''); }
+                });
+              }
+
+              // Fallback: use recent messages from DB
+              if (!summary) {
+                const recentMessages = db.getMessages(msg.sessionId, 20);
+                summary = recentMessages
+                  .filter((m) => m.type === 'assistant' || m.type === 'user')
+                  .map((m) => `${m.type}: ${m.content}`)
+                  .join('\n')
+                  .slice(0, 2000);
+              }
+
+              // Step 2: Disconnect current CLI
+              const spParser = parsers.get(msg.sessionId);
+              if (spParser) { spParser.flush(); parsers.delete(msg.sessionId); }
+              sshManager.stopSession(msg.serverId, msg.sessionId);
+
+              // Step 3: Update session provider in DB
+              db.updateSessionProvider(msg.sessionId, msg.provider);
+
+              // Step 4: Insert system message about the switch
+              const switchMsg = {
+                sessionId: msg.sessionId,
+                type: 'system' as const,
+                content: `Switched from ${currentProviderName} to ${msg.provider}. Context synced.`,
+                timestamp: Date.now(),
+                provider: msg.provider,
+              };
+              db.saveMessage(switchMsg);
+              broadcast(wss, { type: 'message', serverId: msg.serverId, sessionId: msg.sessionId, message: switchMsg });
+
+              // Step 5: Launch new CLI with context
+              const spServer = db.getServer(msg.serverId);
+              if (!spServer) return;
+
+              // Ensure SSH connected
+              if (!sshManager.isConnected(msg.serverId)) {
+                const config: ServerConfig = {
+                  id: spServer.id, host: spServer.host, port: spServer.port,
+                  username: spServer.username, authType: spServer.authType as 'password' | 'privateKey',
+                  password: spServer.password ?? undefined,
+                  privateKeyPath: spServer.privateKeyPath ?? undefined,
+                };
+                await sshManager.connect(config);
+              }
+
+              const cmd = targetProvider.buildCommand({
+                workingDir: spSession.workingDir ?? undefined,
+                initialContext: summary || undefined,
+              });
+              await sshManager.startCLI(msg.serverId, msg.sessionId, cmd);
+
+              broadcast(wss, { type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'connected' });
+            } catch (err: any) {
+              console.error('[switch-provider] error:', err.message);
+              ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: err.message }));
+            }
             break;
           }
         }
