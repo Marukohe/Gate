@@ -19,6 +19,8 @@ export interface Session {
   serverId: string;
   name: string;
   claudeSessionId: string | null;
+  cliSessionId: string | null;
+  provider: string;
   workingDir: string | null;
   createdAt: number;
   lastActiveAt: number;
@@ -32,6 +34,7 @@ export interface Message {
   toolName?: string;
   toolDetail?: string;
   timestamp: number;
+  provider?: string | null;
 }
 
 export type CreateServerInput = Omit<Server, 'id' | 'createdAt'>;
@@ -43,13 +46,15 @@ export interface Database {
   listServers(): Server[];
   updateServer(id: string, updates: Partial<CreateServerInput>): void;
   deleteServer(id: string): void;
-  createSession(serverId: string, name: string, workingDir?: string | null): Session;
+  createSession(serverId: string, name: string, workingDir?: string | null, provider?: string): Session;
   getSession(id: string): Session | undefined;
   listSessions(serverId: string): Session[];
   deleteSession(id: string): void;
   renameSession(id: string, name: string): void;
   updateSessionActivity(id: string): void;
   updateClaudeSessionId(id: string, claudeSessionId: string): void;
+  updateCliSessionId(id: string, cliSessionId: string): void;
+  updateSessionProvider(id: string, provider: string): void;
   saveMessage(input: CreateMessageInput): Message;
   saveMessages(inputs: CreateMessageInput[]): Message[];
   deleteMessages(sessionId: string): void;
@@ -70,6 +75,10 @@ export function createDb(dbPath: string): Database {
   try { db.exec("ALTER TABLE sessions ADD COLUMN name TEXT DEFAULT 'Default'"); } catch { /* already exists */ }
   try { db.exec('ALTER TABLE sessions ADD COLUMN workingDir TEXT'); } catch { /* already exists */ }
   try { db.exec('ALTER TABLE servers ADD COLUMN defaultWorkingDir TEXT'); } catch { /* already exists */ }
+  try { db.exec("ALTER TABLE sessions ADD COLUMN provider TEXT DEFAULT 'claude'"); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE sessions ADD COLUMN cliSessionId TEXT'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE messages ADD COLUMN provider TEXT'); } catch { /* already exists */ }
+  try { db.exec('UPDATE sessions SET cliSessionId = claudeSessionId WHERE cliSessionId IS NULL AND claudeSessionId IS NOT NULL'); } catch { /* ignore */ }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS servers (
@@ -91,6 +100,8 @@ export function createDb(dbPath: string): Database {
       tmuxSession TEXT NOT NULL DEFAULT '',
       name TEXT NOT NULL DEFAULT 'Default',
       claudeSessionId TEXT,
+      cliSessionId TEXT,
+      provider TEXT DEFAULT 'claude',
       workingDir TEXT,
       createdAt INTEGER NOT NULL,
       lastActiveAt INTEGER NOT NULL
@@ -103,7 +114,8 @@ export function createDb(dbPath: string): Database {
       content TEXT NOT NULL,
       toolName TEXT,
       toolDetail TEXT,
-      timestamp INTEGER NOT NULL
+      timestamp INTEGER NOT NULL,
+      provider TEXT
     );
 
     CREATE INDEX IF NOT EXISTS idx_sessions_serverId ON sessions(serverId);
@@ -142,15 +154,16 @@ export function createDb(dbPath: string): Database {
       db.prepare('DELETE FROM servers WHERE id = ?').run(id);
     },
 
-    createSession(serverId, name, workingDir?) {
+    createSession(serverId, name, workingDir?, provider?) {
       const id = randomUUID();
       const now = Date.now();
       const dir = workingDir ?? null;
+      const prov = provider ?? 'claude';
       db.prepare(`
-        INSERT INTO sessions (id, serverId, name, tmuxSession, workingDir, createdAt, lastActiveAt)
-        VALUES (?, ?, ?, '', ?, ?, ?)
-      `).run(id, serverId, name, dir, now, now);
-      return { id, serverId, name, claudeSessionId: null, workingDir: dir, createdAt: now, lastActiveAt: now };
+        INSERT INTO sessions (id, serverId, name, tmuxSession, workingDir, provider, createdAt, lastActiveAt)
+        VALUES (?, ?, ?, '', ?, ?, ?, ?)
+      `).run(id, serverId, name, dir, prov, now, now);
+      return { id, serverId, name, claudeSessionId: null, cliSessionId: null, provider: prov, workingDir: dir, createdAt: now, lastActiveAt: now };
     },
 
     getSession(id) {
@@ -174,28 +187,36 @@ export function createDb(dbPath: string): Database {
     },
 
     updateClaudeSessionId(id, claudeSessionId) {
-      db.prepare('UPDATE sessions SET claudeSessionId = ? WHERE id = ?').run(claudeSessionId, id);
+      db.prepare('UPDATE sessions SET claudeSessionId = ?, cliSessionId = ? WHERE id = ?').run(claudeSessionId, claudeSessionId, id);
+    },
+
+    updateCliSessionId(id, cliSessionId) {
+      db.prepare('UPDATE sessions SET cliSessionId = ? WHERE id = ?').run(cliSessionId, id);
+    },
+
+    updateSessionProvider(id, provider) {
+      db.prepare('UPDATE sessions SET provider = ?, cliSessionId = NULL WHERE id = ?').run(provider, id);
     },
 
     saveMessage(input) {
       const id = randomUUID();
       db.prepare(`
-        INSERT INTO messages (id, sessionId, type, content, toolName, toolDetail, timestamp)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(id, input.sessionId, input.type, input.content, input.toolName ?? null, input.toolDetail ?? null, input.timestamp);
+        INSERT INTO messages (id, sessionId, type, content, toolName, toolDetail, timestamp, provider)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, input.sessionId, input.type, input.content, input.toolName ?? null, input.toolDetail ?? null, input.timestamp, input.provider ?? null);
       return { id, ...input };
     },
 
     saveMessages(inputs) {
       const insert = db.prepare(`
-        INSERT INTO messages (id, sessionId, type, content, toolName, toolDetail, timestamp)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (id, sessionId, type, content, toolName, toolDetail, timestamp, provider)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const tx = db.transaction((items: CreateMessageInput[]) => {
         const results: Message[] = [];
         for (const input of items) {
           const id = randomUUID();
-          insert.run(id, input.sessionId, input.type, input.content, input.toolName ?? null, input.toolDetail ?? null, input.timestamp);
+          insert.run(id, input.sessionId, input.type, input.content, input.toolName ?? null, input.toolDetail ?? null, input.timestamp, input.provider ?? null);
           results.push({ id, ...input });
         }
         return results;

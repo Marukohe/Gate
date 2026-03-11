@@ -18,9 +18,6 @@ interface SSHConnection {
   channels: Map<string, ClientChannel>;  // sessionId → channel
 }
 
-const CLAUDE_BASE_ARGS =
-  '--output-format stream-json --input-format stream-json --verbose --dangerously-skip-permissions';
-
 export interface GitInfo {
   branch: string;
   worktree: string;
@@ -38,13 +35,6 @@ function shellCd(dir: string): string {
     return `cd $HOME${dir.slice(1)}`;
   }
   return `cd '${dir}'`;
-}
-
-function buildClaudeCmd(resumeSessionId?: string | null, workingDir?: string | null): string {
-  const resumeFlag = resumeSessionId ? ` --resume '${resumeSessionId}'` : '';
-  const cdPrefix = workingDir ? `${shellCd(workingDir)} && ` : '';
-  // Use $SHELL so the user's login shell loads their PATH from .zshrc/.bashrc
-  return `$SHELL -lc "${cdPrefix}claude -p${resumeFlag} ${CLAUDE_BASE_ARGS}"`;
 }
 
 export class SSHManager extends EventEmitter {
@@ -137,8 +127,8 @@ export class SSHManager extends EventEmitter {
     await this.reconnect(serverId);
   }
 
-  /** Launch Claude CLI in stream-json mode via SSH exec on a new channel. */
-  async startClaude(serverId: string, sessionId: string, resumeClaudeSessionId?: string | null, workingDir?: string | null): Promise<void> {
+  /** Launch a CLI tool via SSH exec on a new channel. The caller provides the full command. */
+  async startCLI(serverId: string, sessionId: string, command: string): Promise<void> {
     const conn = this.connections.get(serverId);
     if (!conn) throw new Error(`No connection for server ${serverId}`);
 
@@ -149,9 +139,9 @@ export class SSHManager extends EventEmitter {
       conn.channels.delete(sessionId);
     }
 
-    const cmd = buildClaudeCmd(resumeClaudeSessionId, workingDir);
+    const cmd = command;
     const channel = await new Promise<ClientChannel>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Claude CLI launch timed out')), 10_000);
+      const timeout = setTimeout(() => reject(new Error('CLI launch timed out')), 10_000);
       conn.client.exec(cmd, (err, ch) => {
         clearTimeout(timeout);
         if (err) return reject(err);
@@ -183,18 +173,14 @@ export class SSHManager extends EventEmitter {
     });
   }
 
-  /** Write a user message to Claude's stdin as a JSON line. */
-  sendInput(serverId: string, sessionId: string, text: string): void {
+  /** Write pre-formatted input to the CLI's stdin. The provider is responsible for formatting. */
+  sendInput(serverId: string, sessionId: string, formattedInput: string): void {
     const conn = this.connections.get(serverId);
     const channel = conn?.channels.get(sessionId);
     if (!channel) {
       throw new Error(`No active channel for server ${serverId} session ${sessionId}`);
     }
-    const msg = JSON.stringify({
-      type: 'user',
-      message: { role: 'user', content: text },
-    });
-    channel.write(msg + '\n');
+    channel.write(formattedInput);
   }
 
   /** Write raw text to the channel stdin (for CLI prompts that bypass stream-json). */
