@@ -10,6 +10,7 @@ import { setupWebSocket } from './ws-handler.js';
 import { listRemoteDirectory, createRemoteDirectory } from './ssh-browse.js';
 import { ProviderRegistry } from './providers/registry.js';
 import { ClaudeProvider } from './providers/claude/index.js';
+import { CodexProvider } from './providers/codex/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -80,6 +81,7 @@ if (fs.existsSync(clientIndexPath)) {
 
 const registry = new ProviderRegistry();
 registry.register(new ClaudeProvider());
+registry.register(new CodexProvider());
 registry.setDefault('claude');
 
 const httpServer = createServer(app);
