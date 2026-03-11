@@ -21,17 +21,58 @@ describe('CodexProvider', () => {
     expect(cmd).toContain('abc-123');
   });
 
-  it('builds command with initial context', () => {
+  it('builds resume command with prompt using base64', () => {
+    const cmd = provider.buildCommand({
+      resumeSessionId: 'abc-123',
+      initialContext: 'Follow-up prompt',
+    });
+    const b64 = Buffer.from('Follow-up prompt').toString('base64');
+    expect(cmd).toContain(`GATE_CTX='${b64}'`);
+    expect(cmd).toContain("resume 'abc-123'");
+    expect(cmd).toContain('base64 -d');
+  });
+
+  it('builds command with initial context using base64', () => {
     const cmd = provider.buildCommand({
       workingDir: '~/p',
       initialContext: 'Previous context',
     });
-    expect(cmd).toContain('Previous context');
+    const b64 = Buffer.from('Previous context').toString('base64');
+    expect(cmd).toContain(`GATE_CTX='${b64}'`);
+    expect(cmd).toContain('base64 -d');
+  });
+
+  it('safely encodes shell-special characters in context', () => {
+    const cmd = provider.buildCommand({
+      initialContext: 'Fix $HOME and `backtick` issues',
+    });
+    // Should not contain the raw text (it is base64-encoded)
+    expect(cmd).not.toContain('$HOME');
+    expect(cmd).toContain('GATE_CTX');
+    expect(cmd).toContain('base64 -d');
   });
 
   it('builds command with default prompt when no context', () => {
     const cmd = provider.buildCommand({});
     expect(cmd).toContain('You are ready. Wait for instructions.');
+  });
+
+  it('uses a non-interactive shell for all launch variants', () => {
+    const commands = [
+      provider.buildCommand({}),
+      provider.buildCommand({ workingDir: '~/project' }),
+      provider.buildCommand({ resumeSessionId: 'abc-123' }),
+      provider.buildCommand({
+        resumeSessionId: 'abc-123',
+        initialContext: 'Follow-up prompt',
+      }),
+      provider.buildCommand({ initialContext: 'Previous context' }),
+    ];
+
+    for (const cmd of commands) {
+      expect(cmd).toContain('$SHELL -lc');
+      expect(cmd).not.toContain('$SHELL -ic');
+    }
   });
 
   it('formats input as plain text with newline', () => {

@@ -14,6 +14,16 @@ function shellCd(dir: string): string {
   return `cd '${dir}'`;
 }
 
+function shellPrompt(prompt: string): { envPrefix: string; arg: string } {
+  // Base64-encode to safely pass arbitrary text through two shell levels
+  // (sshd shell -> $SHELL -lc). Base64 only contains [A-Za-z0-9+/=].
+  const b64 = Buffer.from(prompt).toString('base64');
+  return {
+    envPrefix: `export GATE_CTX='${b64}' && `,
+    arg: ` \\"\\$(printf '%s' \\$GATE_CTX | base64 -d)\\"`,
+  };
+}
+
 export class CodexProvider implements CLIProvider {
   readonly name = 'codex';
 
@@ -25,13 +35,15 @@ export class CodexProvider implements CLIProvider {
     const cdPrefix = opts.workingDir
       ? `${shellCd(opts.workingDir)} && `
       : '';
+    const prompt = opts.initialContext ? shellPrompt(opts.initialContext) : null;
+
     if (opts.resumeSessionId) {
-      return `$SHELL -lc "${cdPrefix}codex exec --json resume '${opts.resumeSessionId}'"`;
+      return `$SHELL -lc "${prompt?.envPrefix ?? ''}${cdPrefix}codex exec --json resume '${opts.resumeSessionId}'${prompt?.arg ?? ''}"`;
     }
-    const prompt = opts.initialContext
-      ? opts.initialContext.replace(/"/g, '\\"').replace(/\n/g, '\\n')
-      : 'You are ready. Wait for instructions.';
-    return `$SHELL -lc "${cdPrefix}codex exec --json --full-auto \\"${prompt}\\""`;
+    if (opts.initialContext) {
+      return `$SHELL -lc "${prompt!.envPrefix}${cdPrefix}codex exec --json --full-auto${prompt!.arg}"`;
+    }
+    return `$SHELL -lc "${cdPrefix}codex exec --json --full-auto \\"You are ready. Wait for instructions.\\""`;
   }
 
   formatInput(text: string): string {

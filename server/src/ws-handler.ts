@@ -40,8 +40,14 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
   const sshManager = new SSHManager();
   const parsers = new Map<string, OutputParser>(); // keyed by sessionId
   const connecting = new Set<string>(); // sessionIds currently being connected
+  // Sessions using non-stdin providers (e.g. Codex): CLI is launched per-message,
+  // so channel close is expected and should NOT broadcast 'disconnected'.
+  const perMessageSessions = new Set<string>();
 
   sshManager.on('status', (serverId: string, sessionId: string | null, status: string, error?: string) => {
+    if (status === 'disconnected' && sessionId && perMessageSessions.has(sessionId)) {
+      return; // suppress — CLI exited normally after finishing its turn
+    }
     broadcast(wss, { type: 'status', serverId, sessionId, status, error });
   });
 
@@ -122,10 +128,29 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
     }
   }, 60_000);
 
-  // Clean up interval when server shuts down
-  wss.on('close', () => clearInterval(parserCleanupInterval));
+  // WebSocket ping/pong keepalive — prevents idle disconnects from browsers/proxies
+  const PING_INTERVAL = 30_000;
+  const pingInterval = setInterval(() => {
+    for (const client of wss.clients) {
+      if ((client as any).isAlive === false) {
+        client.terminate();
+        continue;
+      }
+      (client as any).isAlive = false;
+      client.ping();
+    }
+  }, PING_INTERVAL);
+
+  // Clean up intervals when server shuts down
+  wss.on('close', () => {
+    clearInterval(parserCleanupInterval);
+    clearInterval(pingInterval);
+  });
 
   wss.on('connection', (ws: WebSocket) => {
+    (ws as any).isAlive = true;
+    ws.on('pong', () => { (ws as any).isAlive = true; });
+
     ws.on('close', () => {
       // Parsers are keyed by sessionId (shared across clients), so no per-client cleanup.
       // Stale parsers are cleaned up by the periodic interval above.
@@ -206,11 +231,20 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
 
               // Build CLI command via provider and launch
               const provider = getProvider(db, registry, sessionId);
-              const cmd = provider.buildCommand({
-                resumeSessionId: session.cliSessionId ?? session.claudeSessionId ?? undefined,
-                workingDir: session.workingDir ?? undefined,
-              });
-              await sshManager.startCLI(server.id, sessionId, cmd);
+              const caps = provider.getCapabilities();
+
+              if (caps.supportsStdin) {
+                // Interactive providers (e.g. Claude): launch once, keep running
+                const cmd = provider.buildCommand({
+                  resumeSessionId: session.cliSessionId ?? session.claudeSessionId ?? undefined,
+                  workingDir: session.workingDir ?? undefined,
+                });
+                await sshManager.startCLI(server.id, sessionId, cmd);
+              } else {
+                // Per-message providers (e.g. Codex): don't launch yet,
+                // CLI will be started on each 'input' message
+                perMessageSessions.add(sessionId);
+              }
               ws.send(JSON.stringify({ type: 'status', serverId: server.id, sessionId, status: 'connected' }));
             } finally {
               connecting.delete(sessionId);
@@ -230,9 +264,8 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
           case 'input': {
             if (!msg.text || !msg.sessionId) return;
             const inputProvider = getProvider(db, registry, msg.sessionId);
-            sshManager.sendInput(msg.serverId, msg.sessionId, inputProvider.formatInput(msg.text));
 
-            // Persist user message to DB
+            // Persist user message to DB first
             db.saveMessage({
               sessionId: msg.sessionId,
               type: 'user',
@@ -240,6 +273,52 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               timestamp: Date.now(),
             });
             db.updateSessionActivity(msg.sessionId);
+
+            const inputCaps = inputProvider.getCapabilities();
+            if (inputCaps.supportsStdin && sshManager.hasActiveChannel(msg.serverId, msg.sessionId)) {
+              // Interactive provider with running CLI: write to stdin
+              sshManager.sendInput(msg.serverId, msg.sessionId, inputProvider.formatInput(msg.text));
+            } else {
+              // Per-message provider (e.g. Codex) or dead channel: launch new CLI
+              // Clean up previous parser so a fresh one is created for the new process
+              const oldParser = parsers.get(msg.sessionId);
+              if (oldParser) { oldParser.flush(); parsers.delete(msg.sessionId); }
+
+              const inputSession = db.getSession(msg.sessionId);
+              const resumeId = inputSession?.cliSessionId ?? inputSession?.claudeSessionId ?? undefined;
+              const cmd = inputProvider.buildCommand({
+                resumeSessionId: resumeId,
+                workingDir: inputSession?.workingDir ?? undefined,
+                // Non-stdin providers (e.g. Codex) must receive every turn as a CLI prompt.
+                initialContext: inputCaps.supportsStdin ? undefined : msg.text,
+              });
+
+              perMessageSessions.add(msg.sessionId);
+
+              // Ensure SSH is connected before launching
+              if (!sshManager.isConnected(msg.serverId)) {
+                const server = db.getServer(msg.serverId);
+                if (server) {
+                  await sshManager.connect({
+                    id: server.id, host: server.host, port: server.port,
+                    username: server.username, authType: server.authType as 'password' | 'privateKey',
+                    password: server.password ?? undefined, privateKeyPath: server.privateKeyPath ?? undefined,
+                  });
+                }
+              }
+
+              await sshManager.startCLI(msg.serverId, msg.sessionId, cmd);
+
+              // Interactive providers need the first message sent after the process starts.
+              if (inputCaps.supportsStdin) {
+                // Small delay for CLI to initialize before writing stdin
+                setTimeout(() => {
+                  try {
+                    sshManager.sendInput(msg.serverId, msg.sessionId!, inputProvider.formatInput(msg.text!));
+                  } catch { /* channel may have closed */ }
+                }, 500);
+              }
+            }
             break;
           }
 
@@ -248,6 +327,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               const parser = parsers.get(msg.sessionId);
               if (parser) parser.flush();
               parsers.delete(msg.sessionId);
+              perMessageSessions.delete(msg.sessionId);
               sshManager.stopSession(msg.serverId, msg.sessionId);
             } else {
               // Disconnect all sessions for this server
@@ -256,6 +336,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                 const parser = parsers.get(s.id);
                 if (parser) parser.flush();
                 parsers.delete(s.id);
+                perMessageSessions.delete(s.id);
               }
               await sshManager.disconnect(msg.serverId);
             }
@@ -284,6 +365,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             const parser = parsers.get(msg.sessionId);
             if (parser) parser.flush();
             parsers.delete(msg.sessionId);
+            perMessageSessions.delete(msg.sessionId);
             // Delete from DB (cascade deletes messages)
             db.deleteSession(msg.sessionId);
             const sessions = db.listSessions(msg.serverId);
@@ -561,6 +643,19 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                 initialContext: summary || undefined,
               });
               await sshManager.startCLI(msg.serverId, msg.sessionId, cmd);
+              if (targetProvider.getCapabilities().supportsStdin && summary) {
+                setTimeout(() => {
+                  try {
+                    sshManager.sendInput(
+                      msg.serverId,
+                      msg.sessionId!,
+                      targetProvider.formatInput(summary),
+                    );
+                  } catch {
+                    /* channel may have closed */
+                  }
+                }, 500);
+              }
 
               broadcast(wss, { type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'connected' });
             } catch (err: any) {
