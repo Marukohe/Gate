@@ -32,6 +32,7 @@ Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──�
 - **Live plan tracking** — Checklists auto-extracted from Claude's output into a side panel. Check off steps, edit plans, send them back for execution.
 - **Transcript sync** — Catch up on work done outside Gate by syncing the JSONL transcript from the remote server.
 - **Responsive everywhere** — Three-column desktop, drawers on tablet, bottom sheets and swipe gestures on mobile. Notch-safe.
+- **Multi-CLI support** — Works with Claude Code and OpenAI Codex CLI. Switch between CLI tools within a session with automatic context sync.
 - **Persistent history** — SQLite-backed chat history survives reconnects and server restarts.
 
 ## Quick Start
