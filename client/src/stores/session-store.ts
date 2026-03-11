@@ -6,6 +6,8 @@ export interface Session {
   serverId: string;
   name: string;
   claudeSessionId: string | null;
+  cliSessionId: string | null;
+  provider: string;
   workingDir: string | null;
   createdAt: number;
   lastActiveAt: number;

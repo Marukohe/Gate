@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { ClaudeStreamParser } from '../providers/claude/parser.js';
-import type { ParsedMessage } from '../providers/types.js';
+import { ClaudeStreamParser } from '../../../providers/claude/parser.js';
+import type { ParsedMessage } from '../../../providers/types.js';
 
 function collect(parser: ClaudeStreamParser): ParsedMessage[] {
   const msgs: ParsedMessage[] = [];

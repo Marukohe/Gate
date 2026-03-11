@@ -1,4 +1,5 @@
-import type { ParsedMessage } from './stream-json-parser.js';
+import type { ParsedMessage } from '../types.js';
+import { summarizeToolInput } from './parser.js';
 
 /**
  * Parses a Claude Code JSONL transcript file into Gate-compatible messages.
@@ -11,7 +12,7 @@ import type { ParsedMessage } from './stream-json-parser.js';
  * Each assistant entry may contain a single content block (text, tool_use, or thinking).
  * Thinking blocks are skipped.
  */
-export function parseTranscript(jsonlContent: string): ParsedMessage[] {
+export function parseClaudeTranscript(jsonlContent: string): ParsedMessage[] {
   const messages: ParsedMessage[] = [];
 
   for (const line of jsonlContent.split('\n')) {
@@ -80,20 +81,4 @@ function isSystemInjected(content: string): boolean {
   if (content.startsWith('<local-command-caveat>')) return true;
   if (content.includes('<task-notification>')) return true;
   return false;
-}
-
-function summarizeToolInput(name: string | undefined, input: any): string {
-  if (!name || !input) return '';
-  switch (name) {
-    case 'Bash': return input.command ?? '';
-    case 'Read': return input.file_path ?? '';
-    case 'Write': return input.file_path ?? '';
-    case 'Edit': return input.file_path ?? '';
-    case 'Glob': return input.pattern ?? '';
-    case 'Grep': return input.pattern ?? '';
-    case 'WebFetch': return input.url ?? '';
-    case 'WebSearch': return input.query ?? '';
-    case 'Task': return input.description ?? '';
-    default: return '';
-  }
 }

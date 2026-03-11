@@ -8,6 +8,9 @@ import { createDb } from './db.js';
 import { createServerRoutes } from './routes/servers.js';
 import { setupWebSocket } from './ws-handler.js';
 import { listRemoteDirectory, createRemoteDirectory } from './ssh-browse.js';
+import { ProviderRegistry } from './providers/registry.js';
+import { ClaudeProvider } from './providers/claude/index.js';
+import { CodexProvider } from './providers/codex/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -76,9 +79,14 @@ if (fs.existsSync(clientIndexPath)) {
   console.warn('Run "npm run build" first, or use "npm run dev" for development.');
 }
 
+const registry = new ProviderRegistry();
+registry.register(new ClaudeProvider());
+registry.register(new CodexProvider());
+registry.setDefault('claude');
+
 const httpServer = createServer(app);
 
-setupWebSocket(httpServer, db);
+setupWebSocket(httpServer, db, registry);
 
 httpServer.listen(PORT, HOST, () => {
   console.log(`Server running on http://${HOST}:${PORT}`);

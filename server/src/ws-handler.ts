@@ -1,12 +1,12 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Server as HttpServer } from 'http';
 import { SSHManager, type ServerConfig } from './ssh-manager.js';
-import { StreamJsonParser, type ParsedMessage } from './stream-json-parser.js';
-import { parseTranscript } from './transcript-parser.js';
+import type { ParsedMessage, CLIProvider, OutputParser } from './providers/types.js';
+import type { ProviderRegistry } from './providers/registry.js';
 import type { Database } from './db.js';
 
 interface ClientMessage {
-  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions' | 'load-more';
+  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions' | 'load-more' | 'switch-provider';
   serverId: string;
   sessionId?: string;
   sessionName?: string;
@@ -16,6 +16,7 @@ interface ClientMessage {
   command?: string;
   claudeSessionId?: string;
   beforeTimestamp?: number;
+  provider?: string;
 }
 
 interface ServerMessage {
@@ -25,10 +26,19 @@ interface ServerMessage {
   [key: string]: any;
 }
 
-export function setupWebSocket(httpServer: HttpServer, db: Database): void {
+/** Look up the CLIProvider for a session, falling back to default. */
+function getProvider(db: Database, registry: ProviderRegistry, sessionId: string): CLIProvider {
+  const session = db.getSession(sessionId);
+  const providerName = session?.provider ?? 'claude';
+  const provider = registry.get(providerName);
+  if (!provider) throw new Error(`Unknown provider: ${providerName}`);
+  return provider;
+}
+
+export function setupWebSocket(httpServer: HttpServer, db: Database, registry: ProviderRegistry): void {
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
   const sshManager = new SSHManager();
-  const parsers = new Map<string, StreamJsonParser>(); // keyed by sessionId
+  const parsers = new Map<string, OutputParser>(); // keyed by sessionId
   const connecting = new Set<string>(); // sessionIds currently being connected
 
   sshManager.on('status', (serverId: string, sessionId: string | null, status: string, error?: string) => {
@@ -56,7 +66,8 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
 
     let parser = parsers.get(sessionId);
     if (!parser) {
-      parser = new StreamJsonParser();
+      const provider = getProvider(db, registry, sessionId);
+      parser = provider.createParser();
       parsers.set(sessionId, parser);
 
       parser.on('message', (message: ParsedMessage) => {
@@ -69,12 +80,12 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
         db.saveMessage({ sessionId, ...message });
         db.updateSessionActivity(sessionId);
 
-        // Save Claude's session ID so we can --resume later
-        if (message.type === 'system' && message.subType === 'init') {
-          const sid = parser!.getSessionId();
-          if (sid) {
-            db.updateClaudeSessionId(sessionId, sid);
-          }
+        // Save CLI session ID so we can --resume later
+        const cliSid = provider.extractSessionId(message);
+        if (cliSid) {
+          db.updateCliSessionId(sessionId, cliSid);
+          // Also update legacy field for backward compat
+          db.updateClaudeSessionId(sessionId, cliSid);
         }
 
         // Refresh git info after Claude completes a turn (may have changed git state)
@@ -193,9 +204,13 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
                 await sshManager.ensureConnected(server.id);
               }
 
-              // Resume previous Claude session if we have a session ID
-              const resumeId = session.claudeSessionId ?? null;
-              await sshManager.startClaude(server.id, sessionId, resumeId, session.workingDir);
+              // Build CLI command via provider and launch
+              const provider = getProvider(db, registry, sessionId);
+              const cmd = provider.buildCommand({
+                resumeSessionId: session.cliSessionId ?? session.claudeSessionId ?? undefined,
+                workingDir: session.workingDir ?? undefined,
+              });
+              await sshManager.startCLI(server.id, sessionId, cmd);
               ws.send(JSON.stringify({ type: 'status', serverId: server.id, sessionId, status: 'connected' }));
             } finally {
               connecting.delete(sessionId);
@@ -214,7 +229,8 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
 
           case 'input': {
             if (!msg.text || !msg.sessionId) return;
-            sshManager.sendInput(msg.serverId, msg.sessionId, msg.text);
+            const inputProvider = getProvider(db, registry, msg.sessionId);
+            sshManager.sendInput(msg.serverId, msg.sessionId, inputProvider.formatInput(msg.text));
 
             // Persist user message to DB
             db.saveMessage({
@@ -369,25 +385,18 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
                 };
                 await sshManager.connect(config);
               }
-              // Resolve path to absolute — expand ~ to $HOME for shell safety
-              const dir = msg.workingDir.startsWith('~/') ? `$HOME/${msg.workingDir.slice(2)}` : msg.workingDir;
-              const resolveCmd = `cd "${dir}" 2>/dev/null && pwd || echo "${dir}"`;
-              const { stdout: resolved } = await sshManager.runCommand(msg.serverId, null, resolveCmd);
-              const absPath = resolved.trim();
-              const projectHash = absPath.replace(/[/_]/g, '-');
 
-              // List JSONL transcript files sorted by mtime (newest first)
-              const lsCmd = `ls -t ~/.claude/projects/${projectHash}/*.jsonl 2>/dev/null | head -10`;
-              console.log('[list-claude-sessions] dir=%s hash=%s cmd=%s', msg.workingDir, projectHash, lsCmd);
-              const { stdout: lsOutput } = await sshManager.runCommand(msg.serverId, null, lsCmd);
+              // Use provider to list remote sessions
+              const providerName = msg.provider ?? 'claude';
+              const lsProvider = registry.get(providerName);
+              if (!lsProvider) {
+                ws.send(JSON.stringify({ type: 'claude-sessions', serverId: msg.serverId, sessions: [] }));
+                return;
+              }
 
-              const sessionIds = lsOutput.trim().split('\n')
-                .filter(Boolean)
-                .map((f) => {
-                  const basename = f.split('/').pop() ?? '';
-                  return basename.replace('.jsonl', '');
-                })
-                .filter(Boolean);
+              const runCommand = async (command: string) => sshManager.runCommand(msg.serverId, null, command);
+              const remoteSessions = await lsProvider.listRemoteSessions(runCommand, msg.workingDir);
+              const sessionIds = remoteSessions.map((s) => s.id);
 
               console.log('[list-claude-sessions] found %d sessions', sessionIds.length);
               ws.send(JSON.stringify({ type: 'claude-sessions', serverId: msg.serverId, sessions: sessionIds }));
@@ -401,8 +410,9 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
           case 'sync-transcript': {
             if (!msg.sessionId) return;
             const syncSession = db.getSession(msg.sessionId);
-            if (!syncSession?.claudeSessionId) {
-              ws.send(JSON.stringify({ type: 'sync-result', serverId: msg.serverId, sessionId: msg.sessionId, success: false, error: 'No Claude session ID found. Start a conversation first.' }));
+            const syncCliSessionId = syncSession?.cliSessionId ?? syncSession?.claudeSessionId;
+            if (!syncCliSessionId) {
+              ws.send(JSON.stringify({ type: 'sync-result', serverId: msg.serverId, sessionId: msg.sessionId, success: false, error: 'No CLI session ID found. Start a conversation first.' }));
               return;
             }
             if (!sshManager.isConnected(msg.serverId)) {
@@ -411,17 +421,9 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
             }
 
             try {
-              // Find and read the JSONL transcript file on the remote server
-              const findCmd = `ls ~/.claude/projects/*/${syncSession.claudeSessionId}.jsonl 2>/dev/null | head -1`;
-              const { stdout: filePath } = await sshManager.runCommand(msg.serverId, null, findCmd);
-              const trimmedPath = filePath.trim();
-              if (!trimmedPath) {
-                ws.send(JSON.stringify({ type: 'sync-result', serverId: msg.serverId, sessionId: msg.sessionId, success: false, error: `Transcript file not found for session ${syncSession.claudeSessionId}` }));
-                return;
-              }
-
-              const { stdout: jsonlContent } = await sshManager.runCommand(msg.serverId, null, `cat '${trimmedPath}'`);
-              const transcriptMessages = parseTranscript(jsonlContent);
+              const syncProvider = getProvider(db, registry, msg.sessionId);
+              const runCommand = async (command: string) => sshManager.runCommand(msg.serverId, null, command);
+              const transcriptMessages = await syncProvider.syncTranscript(runCommand, syncCliSessionId, syncSession?.workingDir ?? undefined);
 
               if (transcriptMessages.length === 0) {
                 ws.send(JSON.stringify({ type: 'sync-result', serverId: msg.serverId, sessionId: msg.sessionId, success: true, added: 0 }));
@@ -471,6 +473,100 @@ export function setupWebSocket(httpServer: HttpServer, db: Database): void {
               messages: olderMessages,
               hasMore: olderMessages.length >= 100,
             }));
+            break;
+          }
+
+          case 'switch-provider': {
+            if (!msg.sessionId || !msg.provider) return;
+            const spSession = db.getSession(msg.sessionId);
+            if (!spSession) return;
+
+            const currentProviderName = spSession.provider ?? 'claude';
+            const currentProvider = registry.get(currentProviderName);
+            const targetProvider = registry.get(msg.provider);
+            if (!currentProvider || !targetProvider) {
+              ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: `Unknown provider: ${msg.provider}` }));
+              return;
+            }
+
+            try {
+              // Step 1: Request summary from current CLI (if connected)
+              let summary = '';
+              if (sshManager.hasActiveChannel(msg.serverId, msg.sessionId)) {
+                const summaryPrompt = currentProvider.requestSummary();
+                sshManager.sendInput(msg.serverId, msg.sessionId, currentProvider.formatInput(summaryPrompt));
+
+                // Wait for assistant response with timeout
+                summary = await new Promise<string>((resolve) => {
+                  const spParser = parsers.get(msg.sessionId!);
+                  const timeout = setTimeout(() => resolve(''), 15_000);
+                  const handler = (message: ParsedMessage) => {
+                    if (message.type === 'assistant') {
+                      clearTimeout(timeout);
+                      spParser?.removeListener('message', handler);
+                      resolve(message.content);
+                    }
+                  };
+                  spParser?.on('message', handler);
+                  if (!spParser) { clearTimeout(timeout); resolve(''); }
+                });
+              }
+
+              // Fallback: use recent messages from DB
+              if (!summary) {
+                const recentMessages = db.getMessages(msg.sessionId, 20);
+                summary = recentMessages
+                  .filter((m) => m.type === 'assistant' || m.type === 'user')
+                  .map((m) => `${m.type}: ${m.content}`)
+                  .join('\n')
+                  .slice(0, 2000);
+              }
+
+              // Step 2: Disconnect current CLI
+              const spParser = parsers.get(msg.sessionId);
+              if (spParser) { spParser.flush(); parsers.delete(msg.sessionId); }
+              sshManager.stopSession(msg.serverId, msg.sessionId);
+
+              // Step 3: Update session provider in DB
+              db.updateSessionProvider(msg.sessionId, msg.provider);
+
+              // Step 4: Insert system message about the switch
+              const switchMsg = {
+                sessionId: msg.sessionId,
+                type: 'system' as const,
+                content: `Switched from ${currentProviderName} to ${msg.provider}. Context synced.`,
+                timestamp: Date.now(),
+                provider: msg.provider,
+              };
+              db.saveMessage(switchMsg);
+              broadcast(wss, { type: 'message', serverId: msg.serverId, sessionId: msg.sessionId, message: switchMsg });
+
+              // Step 5: Launch new CLI with context
+              const spServer = db.getServer(msg.serverId);
+              if (!spServer) return;
+
+              // Ensure SSH connected
+              if (!sshManager.isConnected(msg.serverId)) {
+                const config: ServerConfig = {
+                  id: spServer.id, host: spServer.host, port: spServer.port,
+                  username: spServer.username, authType: spServer.authType as 'password' | 'privateKey',
+                  password: spServer.password ?? undefined,
+                  privateKeyPath: spServer.privateKeyPath ?? undefined,
+                };
+                await sshManager.connect(config);
+              }
+
+              const cmd = targetProvider.buildCommand({
+                workingDir: spSession.workingDir ?? undefined,
+                initialContext: summary || undefined,
+              });
+              await sshManager.startCLI(msg.serverId, msg.sessionId, cmd);
+
+              broadcast(wss, { type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'connected' });
+            } catch (err: any) {
+              console.error('[switch-provider] error:', err.message);
+              ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: err.message }));
+            }
             break;
           }
         }

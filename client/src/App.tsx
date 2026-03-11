@@ -29,7 +29,7 @@ function App() {
   const setSessions = useSessionStore((s) => s.setSessions);
   const setActiveSession = useSessionStore((s) => s.setActiveSession);
 
-  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listClaudeSessions, loadMoreMessages } = useWebSocket();
+  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, loadMoreMessages } = useWebSocket();
 
   useEffect(() => {
     fetch('/api/servers')
@@ -140,9 +140,9 @@ function App() {
     sendInput(serverId, sessionId, text);
   }, [sendInput, addMessage]);
 
-  const handleCreateSession = useCallback((name: string, workingDir: string | null, claudeSessionId?: string | null) => {
+  const handleCreateSession = useCallback((name: string, workingDir: string | null, claudeSessionId?: string | null, provider?: string) => {
     if (!activeServerId) return;
-    createSession(activeServerId, name, workingDir, claudeSessionId);
+    createSession(activeServerId, name, workingDir, claudeSessionId, provider);
   }, [activeServerId, createSession]);
 
   const handleDeleteSession = useCallback((sessionId: string) => {
@@ -188,6 +188,7 @@ function App() {
             onSwitchBranch={switchBranch}
             onSyncTranscript={handleSyncTranscript}
             onListClaudeSessions={listClaudeSessions}
+            onListCliSessions={listCliSessions}
             onSendToSession={handleSendToSession}
             onLoadMore={handleLoadMore}
           />

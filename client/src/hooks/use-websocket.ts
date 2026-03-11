@@ -14,8 +14,8 @@ const MAX_RECONNECT_DELAY = 30000;
 // Queued connect request — sent when WS opens
 let pendingConnect: { serverId: string; sessionId: string } | null = null;
 
-// One-shot callback for claude-sessions response
-let claudeSessionsCallback: ((sessions: string[]) => void) | null = null;
+// One-shot callback for cli-sessions / claude-sessions response
+let cliSessionsCallback: ((sessions: string[]) => void) | null = null;
 
 function resetBackoff() {
   reconnectDelay = 1000;
@@ -139,10 +139,11 @@ function setupSocket() {
           }
         }
         break;
+      case 'cli-sessions':
       case 'claude-sessions':
-        if (claudeSessionsCallback) {
-          claudeSessionsCallback(data.sessions ?? []);
-          claudeSessionsCallback = null;
+        if (cliSessionsCallback) {
+          cliSessionsCallback(data.sessions ?? []);
+          cliSessionsCallback = null;
         }
         break;
     }
@@ -220,9 +221,9 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'disconnect', serverId, sessionId }));
   }, []);
 
-  const createSession = useCallback((serverId: string, name: string, workingDir?: string | null, claudeSessionId?: string | null) => {
+  const createSession = useCallback((serverId: string, name: string, workingDir?: string | null, claudeSessionId?: string | null, provider?: string) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'create-session', serverId, sessionName: name, workingDir: workingDir || undefined, claudeSessionId: claudeSessionId || undefined }));
+    ws.send(JSON.stringify({ type: 'create-session', serverId, sessionName: name, workingDir: workingDir || undefined, claudeSessionId: claudeSessionId || undefined, provider: provider || undefined }));
   }, []);
 
   const fetchGitInfo = useCallback((serverId: string, sessionId: string) => {
@@ -257,20 +258,30 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'sync-transcript', serverId, sessionId }));
   }, []);
 
-  const listClaudeSessions = useCallback((serverId: string, workingDir: string): Promise<string[]> => {
+  const switchProvider = useCallback((serverId: string, sessionId: string, provider: string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'switch-provider', serverId, sessionId, provider }));
+  }, []);
+
+  const listCliSessions = useCallback((serverId: string, workingDir: string, provider: string = 'claude'): Promise<string[]> => {
     return new Promise((resolve) => {
       if (!ws || ws.readyState !== WebSocket.OPEN) { resolve([]); return; }
-      claudeSessionsCallback = resolve;
-      ws.send(JSON.stringify({ type: 'list-claude-sessions', serverId, workingDir }));
+      cliSessionsCallback = resolve;
+      ws.send(JSON.stringify({ type: 'list-cli-sessions', serverId, workingDir, provider }));
       // Timeout fallback in case server never responds
-      setTimeout(() => { if (claudeSessionsCallback === resolve) { claudeSessionsCallback = null; resolve([]); } }, 10000);
+      setTimeout(() => { if (cliSessionsCallback === resolve) { cliSessionsCallback = null; resolve([]); } }, 10000);
     });
   }, []);
+
+  // Backward-compatible alias
+  const listClaudeSessions = useCallback((serverId: string, workingDir: string): Promise<string[]> => {
+    return listCliSessions(serverId, workingDir, 'claude');
+  }, [listCliSessions]);
 
   const loadMoreMessages = useCallback((serverId: string, sessionId: string, beforeTimestamp: number) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: 'load-more', serverId, sessionId, beforeTimestamp }));
   }, []);
 
-  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listClaudeSessions, loadMoreMessages };
+  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, loadMoreMessages };
 }

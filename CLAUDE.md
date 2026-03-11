@@ -9,7 +9,11 @@ Gate is a responsive web app for "vibe coding" — chat with Claude Code CLI run
 ## Architecture
 
 ```
-Browser (React) <--WebSocket--> Node.js Backend <--SSH--> Remote Server (tmux + claude)
+Browser (React) <--WebSocket--> Node.js Backend <--SSH--> Remote Server (CLI tools)
+                                     │
+                              Provider Layer
+                              ┌──────┼──────┐
+                              Claude  Codex  ...
 ```
 
 - **Monorepo** with npm workspaces: `client/` and `server/`
@@ -73,6 +77,10 @@ npm publish --access public # build + publish to npm
 - `server/src/parser.ts` — State machine that incrementally parses Claude Code terminal output into `ParsedMessage` objects (types: assistant, user, tool_call, tool_result, system)
 - `server/src/ws-handler.ts` — WebSocket server that bridges browser clients to SSH sessions, wires parser output to broadcast
 - `server/src/routes/servers.ts` — REST CRUD for server configurations
+- `server/src/providers/types.ts` — CLIProvider interface, OutputParser abstract class, ParsedMessage type
+- `server/src/providers/registry.ts` — Provider registration and lookup
+- `server/src/providers/claude/` — Claude Code CLI provider (parser, transcript, command building)
+- `server/src/providers/codex/` — OpenAI Codex CLI provider (parser, transcript, command building)
 
 **Client:**
 - `client/src/stores/` — Zustand stores: server-store, chat-store, plan-store, ui-store
@@ -85,7 +93,10 @@ npm publish --access public # build + publish to npm
 ## WebSocket Protocol
 
 Client sends: `{ type: 'connect'|'input'|'disconnect', serverId, text?, tmuxSession? }`
+Client sends: `{ type: 'switch-provider', serverId, sessionId, provider }`
+Client sends: `{ type: 'list-cli-sessions', serverId, workingDir, provider }`
 Server sends: `{ type: 'message'|'status'|'history', serverId, ... }`
+Server sends: `{ type: 'cli-sessions', serverId, sessions }`
 
 ## Responsive Breakpoints
 

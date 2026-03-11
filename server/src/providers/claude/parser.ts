@@ -1,13 +1,5 @@
-import { EventEmitter } from 'events';
-
-export interface ParsedMessage {
-  type: 'assistant' | 'user' | 'tool_call' | 'tool_result' | 'system';
-  subType?: string;
-  content: string;
-  toolName?: string;
-  toolDetail?: string;
-  timestamp: number;
-}
+import { OutputParser } from '../types.js';
+import type { ParsedMessage } from '../types.js';
 
 /**
  * Parses NDJSON output from `claude -p --output-format stream-json --verbose`.
@@ -17,9 +9,9 @@ export interface ParsedMessage {
  *   - {type:"assistant", message:{role:"assistant", content:[...]}, session_id, ...}
  *   - {type:"user", message:{role:"user", content:".." | [{type:"tool_result",...}]}, ...}
  *   - {type:"result", total_cost_usd, duration_ms, num_turns, ...}
- *   - {type:"rate_limit_event", ...} → ignored
+ *   - {type:"rate_limit_event", ...} — ignored
  */
-export class StreamJsonParser extends EventEmitter {
+export class ClaudeStreamParser extends OutputParser {
   private buffer = '';
   private sessionId: string | null = null;
 
@@ -61,7 +53,7 @@ export class StreamJsonParser extends EventEmitter {
     return this.sessionId;
   }
 
-  // ── Event dispatch ──────────────────────────────────────────────
+  // -- Event dispatch --------------------------------------------------------
 
   private processEvent(obj: any): void {
     // System init: {type:"system", subtype:"init", session_id}
@@ -148,7 +140,7 @@ export class StreamJsonParser extends EventEmitter {
   }
 }
 
-function summarizeToolInput(name: string | undefined, input: any): string {
+export function summarizeToolInput(name: string | undefined, input: any): string {
   if (!name || !input) return '';
   switch (name) {
     case 'Bash': return input.command ?? '';

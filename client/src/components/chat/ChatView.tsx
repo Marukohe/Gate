@@ -19,23 +19,29 @@ const EMPTY_MESSAGES: ChatMessage[] = [];
 
 interface ChatViewProps {
   onSend: (text: string) => void;
-  onCreateSession: (name: string, workingDir: string | null, claudeSessionId?: string | null) => void;
+  onCreateSession: (name: string, workingDir: string | null, claudeSessionId?: string | null, provider?: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onSelectSession: (sessionId: string) => void;
   onListBranches: (serverId: string, sessionId: string) => void;
   onSwitchBranch: (serverId: string, sessionId: string, branch: string) => void;
   onSyncTranscript: (sessionId: string) => void;
   onListClaudeSessions?: (serverId: string, workingDir: string) => Promise<string[]>;
+  onListCliSessions?: (serverId: string, workingDir: string, provider: string) => Promise<string[]>;
   onSendToSession: (text: string, serverId: string, sessionId: string) => void;
   onLoadMore: (beforeTimestamp: number) => void;
 }
 
-export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSession, onListBranches, onSwitchBranch, onSyncTranscript, onListClaudeSessions, onSendToSession, onLoadMore }: ChatViewProps) {
+export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSession, onListBranches, onSwitchBranch, onSyncTranscript, onListClaudeSessions, onListCliSessions, onSendToSession, onLoadMore }: ChatViewProps) {
   const activeServerId = useServerStore((s) => s.activeServerId);
   const activeSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
   const sessions = useSessionStore((s) => activeServerId ? s.sessions[activeServerId] : undefined);
   const connectionStatus = useSessionStore((s) => activeSessionId ? s.connectionStatus[activeSessionId] : undefined);
   const connectionError = useSessionStore((s) => activeSessionId ? s.connectionError[activeSessionId] : undefined);
+  const activeSession = useSessionStore((s) => {
+    if (!activeServerId) return undefined;
+    const list = s.sessions[activeServerId];
+    return list?.find((sess) => sess.id === activeSessionId);
+  });
   const isConnected = connectionStatus === 'connected';
   const syncStatus = useUIStore((s) => activeSessionId ? s.syncStatus[activeSessionId] : undefined);
   const setSyncStatus = useUIStore((s) => s.setSyncStatus);
@@ -187,6 +193,7 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
         onSwitchBranch={onSwitchBranch}
         onSyncTranscript={onSyncTranscript}
         onListClaudeSessions={onListClaudeSessions}
+        onListCliSessions={onListCliSessions}
       />
       {connectionStatus === 'error' && connectionError && (
         <div className="flex items-center gap-2 border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">
@@ -241,7 +248,7 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
             )}
             {renderItems.map((item, i) =>
               item.kind === 'single'
-                ? <MessageBubble key={item.message.id} message={item.message} />
+                ? <MessageBubble key={item.message.id} message={item.message} provider={activeSession?.provider} />
                 : <ToolActivityBlock key={item.items[0]?.call.id ?? i} group={item} />
             )}
             <div ref={bottomRef} />
