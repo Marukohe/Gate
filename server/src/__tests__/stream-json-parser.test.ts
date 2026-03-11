@@ -1,15 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { StreamJsonParser, type ParsedMessage } from '../stream-json-parser.js';
+import { ClaudeStreamParser } from '../providers/claude/parser.js';
+import type { ParsedMessage } from '../providers/types.js';
 
-function collect(parser: StreamJsonParser): ParsedMessage[] {
+function collect(parser: ClaudeStreamParser): ParsedMessage[] {
   const msgs: ParsedMessage[] = [];
   parser.on('message', (m: ParsedMessage) => msgs.push(m));
   return msgs;
 }
 
-describe('StreamJsonParser', () => {
+describe('ClaudeStreamParser', () => {
   it('parses system init event', () => {
-    const parser = new StreamJsonParser();
+    const parser = new ClaudeStreamParser();
     const msgs = collect(parser);
     parser.feed('{"type":"system","subtype":"init","session_id":"abc-123"}\n');
     expect(msgs).toHaveLength(1);
@@ -20,7 +21,7 @@ describe('StreamJsonParser', () => {
   });
 
   it('parses assistant text message (wrapped format)', () => {
-    const parser = new StreamJsonParser();
+    const parser = new ClaudeStreamParser();
     const msgs = collect(parser);
     parser.feed(JSON.stringify({
       type: 'assistant',
@@ -36,7 +37,7 @@ describe('StreamJsonParser', () => {
   });
 
   it('parses assistant tool_use message', () => {
-    const parser = new StreamJsonParser();
+    const parser = new ClaudeStreamParser();
     const msgs = collect(parser);
     parser.feed(JSON.stringify({
       type: 'assistant',
@@ -58,7 +59,7 @@ describe('StreamJsonParser', () => {
   });
 
   it('parses mixed text + tool_use in one assistant message', () => {
-    const parser = new StreamJsonParser();
+    const parser = new ClaudeStreamParser();
     const msgs = collect(parser);
     parser.feed(JSON.stringify({
       type: 'assistant',
@@ -79,7 +80,7 @@ describe('StreamJsonParser', () => {
   });
 
   it('parses user text echo (wrapped format)', () => {
-    const parser = new StreamJsonParser();
+    const parser = new ClaudeStreamParser();
     const msgs = collect(parser);
     parser.feed(JSON.stringify({
       type: 'user',
@@ -91,7 +92,7 @@ describe('StreamJsonParser', () => {
   });
 
   it('parses tool_result message (wrapped format)', () => {
-    const parser = new StreamJsonParser();
+    const parser = new ClaudeStreamParser();
     const msgs = collect(parser);
     parser.feed(JSON.stringify({
       type: 'user',
@@ -110,7 +111,7 @@ describe('StreamJsonParser', () => {
   });
 
   it('parses result summary with duration and turns', () => {
-    const parser = new StreamJsonParser();
+    const parser = new ClaudeStreamParser();
     const msgs = collect(parser);
     parser.feed('{"type":"result","total_cost_usd":0.0102,"duration_ms":2415,"num_turns":1}\n');
     expect(msgs).toHaveLength(1);
@@ -122,7 +123,7 @@ describe('StreamJsonParser', () => {
   });
 
   it('parses result summary without cost', () => {
-    const parser = new StreamJsonParser();
+    const parser = new ClaudeStreamParser();
     const msgs = collect(parser);
     parser.feed('{"type":"result","duration_ms":12000}\n');
     expect(msgs).toHaveLength(1);
@@ -132,7 +133,7 @@ describe('StreamJsonParser', () => {
   });
 
   it('buffers incomplete lines across feed() calls', () => {
-    const parser = new StreamJsonParser();
+    const parser = new ClaudeStreamParser();
     const msgs = collect(parser);
     parser.feed('{"type":"assistant","mes');
     expect(msgs).toHaveLength(0);
@@ -142,7 +143,7 @@ describe('StreamJsonParser', () => {
   });
 
   it('handles multiple lines in a single feed()', () => {
-    const parser = new StreamJsonParser();
+    const parser = new ClaudeStreamParser();
     const msgs = collect(parser);
     parser.feed(
       JSON.stringify({ type: 'user', message: { role: 'user', content: 'q1' } }) + '\n' +
@@ -154,7 +155,7 @@ describe('StreamJsonParser', () => {
   });
 
   it('skips empty lines and non-JSON lines', () => {
-    const parser = new StreamJsonParser();
+    const parser = new ClaudeStreamParser();
     const msgs = collect(parser);
     parser.feed('\n\nNot JSON\n' + JSON.stringify({ type: 'user', message: { role: 'user', content: 'ok' } }) + '\n');
     expect(msgs).toHaveLength(1);
@@ -162,7 +163,7 @@ describe('StreamJsonParser', () => {
   });
 
   it('flush() processes remaining buffer', () => {
-    const parser = new StreamJsonParser();
+    const parser = new ClaudeStreamParser();
     const msgs = collect(parser);
     parser.feed(JSON.stringify({ type: 'user', message: { role: 'user', content: 'last' } }));
     expect(msgs).toHaveLength(0);
@@ -172,7 +173,7 @@ describe('StreamJsonParser', () => {
   });
 
   it('summarizes tool inputs for known tools', () => {
-    const parser = new StreamJsonParser();
+    const parser = new ClaudeStreamParser();
     const msgs = collect(parser);
     const tools = [
       { name: 'Edit', input: { file_path: '/a.ts' }, expected: '/a.ts' },
@@ -198,7 +199,7 @@ describe('StreamJsonParser', () => {
   });
 
   it('summarizes plan-related tools', () => {
-    const parser = new StreamJsonParser();
+    const parser = new ClaudeStreamParser();
     const msgs = collect(parser);
     const tools = [
       { name: 'EnterPlanMode', input: {}, expected: 'Entering plan mode' },
@@ -220,14 +221,14 @@ describe('StreamJsonParser', () => {
   });
 
   it('ignores unrecognised events like rate_limit_event', () => {
-    const parser = new StreamJsonParser();
+    const parser = new ClaudeStreamParser();
     const msgs = collect(parser);
     parser.feed('{"type":"rate_limit_event","rate_limit_info":{}}\n');
     expect(msgs).toHaveLength(0);
   });
 
   it('handles a real Claude init sequence', () => {
-    const parser = new StreamJsonParser();
+    const parser = new ClaudeStreamParser();
     const msgs = collect(parser);
     // Actual events from Claude CLI
     parser.feed('{"type":"rate_limit_event","rate_limit_info":{"status":"allowed"},"session_id":"s1"}\n');

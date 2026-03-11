@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { parseTranscript } from '../transcript-parser.js';
+import { parseClaudeTranscript } from '../providers/claude/transcript.js';
 
-describe('parseTranscript', () => {
+describe('parseClaudeTranscript', () => {
   it('parses user text messages', () => {
     const jsonl = JSON.stringify({
       type: 'user',
@@ -9,7 +9,7 @@ describe('parseTranscript', () => {
       timestamp: '2026-02-22T08:59:08.599Z',
       uuid: 'abc-123',
     });
-    const msgs = parseTranscript(jsonl);
+    const msgs = parseClaudeTranscript(jsonl);
     expect(msgs).toHaveLength(1);
     expect(msgs[0].type).toBe('user');
     expect(msgs[0].content).toBe('Hello Claude');
@@ -25,7 +25,7 @@ describe('parseTranscript', () => {
       },
       timestamp: '2026-02-22T09:00:00.000Z',
     });
-    const msgs = parseTranscript(jsonl);
+    const msgs = parseClaudeTranscript(jsonl);
     expect(msgs).toHaveLength(1);
     expect(msgs[0].type).toBe('assistant');
     expect(msgs[0].content).toBe('Hi there!');
@@ -45,7 +45,7 @@ describe('parseTranscript', () => {
       },
       timestamp: '2026-02-22T09:00:01.000Z',
     });
-    const msgs = parseTranscript(jsonl);
+    const msgs = parseClaudeTranscript(jsonl);
     expect(msgs).toHaveLength(1);
     expect(msgs[0].type).toBe('tool_call');
     expect(msgs[0].toolName).toBe('Read');
@@ -65,7 +65,7 @@ describe('parseTranscript', () => {
       },
       timestamp: '2026-02-22T09:00:02.000Z',
     });
-    const msgs = parseTranscript(jsonl);
+    const msgs = parseClaudeTranscript(jsonl);
     expect(msgs).toHaveLength(1);
     expect(msgs[0].type).toBe('tool_result');
     expect(msgs[0].content).toBe('file contents here');
@@ -80,7 +80,7 @@ describe('parseTranscript', () => {
       },
       timestamp: '2026-02-22T09:00:03.000Z',
     });
-    const msgs = parseTranscript(jsonl);
+    const msgs = parseClaudeTranscript(jsonl);
     expect(msgs).toHaveLength(0);
   });
 
@@ -91,7 +91,7 @@ describe('parseTranscript', () => {
       timestamp: '2026-02-22T08:59:08.589Z',
       content: 'some content',
     });
-    const msgs = parseTranscript(jsonl);
+    const msgs = parseClaudeTranscript(jsonl);
     expect(msgs).toHaveLength(0);
   });
 
@@ -130,7 +130,7 @@ describe('parseTranscript', () => {
       }),
     ].join('\n');
 
-    const msgs = parseTranscript(lines);
+    const msgs = parseClaudeTranscript(lines);
     expect(msgs).toHaveLength(3);
     expect(msgs[0].type).toBe('user');
     expect(msgs[1].type).toBe('assistant');
@@ -141,7 +141,7 @@ describe('parseTranscript', () => {
 
   it('handles malformed lines gracefully', () => {
     const lines = 'not json\n{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-01-01T00:00:00Z"}\n{broken';
-    const msgs = parseTranscript(lines);
+    const msgs = parseClaudeTranscript(lines);
     expect(msgs).toHaveLength(1);
     expect(msgs[0].content).toBe('hello');
   });
