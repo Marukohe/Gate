@@ -2,7 +2,7 @@ import { OutputParser } from '../types.js';
 import type { ParsedMessage } from '../types.js';
 
 /**
- * Parses NDJSON output from `claude -p --output-format stream-json --verbose`.
+ * Parses NDJSON output from `claude --output-format stream-json --verbose`.
  *
  * Each stdout line is a complete JSON object. Actual event shapes:
  *   - {type:"system", subtype:"init", session_id, ...}

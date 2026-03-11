@@ -10,9 +10,14 @@ describe('ClaudeProvider', () => {
 
   it('builds command with working dir', () => {
     const cmd = provider.buildCommand({ workingDir: '~/project' });
-    expect(cmd).toContain('claude -p');
+    expect(cmd).toContain('claude ');
     expect(cmd).toContain('--output-format stream-json');
     expect(cmd).toContain('cd $HOME/project');
+  });
+
+  it('does not use print mode for interactive sessions', () => {
+    const cmd = provider.buildCommand({});
+    expect(cmd).not.toContain('claude -p');
   });
 
   it('builds command with resume session', () => {

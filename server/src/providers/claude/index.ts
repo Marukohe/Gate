@@ -18,7 +18,7 @@ export class ClaudeProvider implements CLIProvider {
   buildCommand(opts: { resumeSessionId?: string; workingDir?: string; initialContext?: string }): string {
     const resumeFlag = opts.resumeSessionId ? ` --resume '${opts.resumeSessionId}'` : '';
     const cdPrefix = opts.workingDir ? `${shellCd(opts.workingDir)} && ` : '';
-    return `$SHELL -lc "${cdPrefix}claude -p${resumeFlag} ${CLAUDE_BASE_ARGS}"`;
+    return `$SHELL -lc "${cdPrefix}claude${resumeFlag} ${CLAUDE_BASE_ARGS}"`;
   }
 
   formatInput(text: string): string {

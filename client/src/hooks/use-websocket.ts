@@ -8,8 +8,11 @@ import { triggerTaskNotification } from '../lib/notification';
 
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectDelay = 1000;
 const MAX_RECONNECT_DELAY = 30000;
+// Must exceed server's 30s ping interval to avoid false positives
+const HEARTBEAT_TIMEOUT = 45_000;
 
 // Queued connect request — sent when WS opens
 let pendingConnect: { serverId: string; sessionId: string } | null = null;
@@ -65,8 +68,18 @@ function setupSocket() {
   const socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
   ws = socket;
 
+  // Reset heartbeat timer on any incoming data (messages, pong frames trigger onmessage too)
+  function resetHeartbeat() {
+    if (heartbeatTimer) clearTimeout(heartbeatTimer);
+    heartbeatTimer = setTimeout(() => {
+      // No data received within timeout — connection is likely dead
+      socket.close();
+    }, HEARTBEAT_TIMEOUT);
+  }
+
   socket.onopen = () => {
     resetBackoff();
+    resetHeartbeat();
     // Flush any queued connect request
     if (pendingConnect) {
       const { serverId, sessionId } = pendingConnect;
@@ -76,6 +89,7 @@ function setupSocket() {
   };
 
   socket.onmessage = (event) => {
+    resetHeartbeat();
     const data = JSON.parse(event.data);
     switch (data.type) {
       case 'message':
@@ -155,6 +169,7 @@ function setupSocket() {
 
   socket.onclose = () => {
     ws = null;
+    if (heartbeatTimer) clearTimeout(heartbeatTimer);
     if (reconnectTimer) clearTimeout(reconnectTimer);
     const delay = nextBackoff();
     reconnectTimer = setTimeout(setupSocket, delay);
