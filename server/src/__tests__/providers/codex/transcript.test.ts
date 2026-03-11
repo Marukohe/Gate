@@ -24,8 +24,10 @@ describe('parseCodexTranscript', () => {
     const msgs = parseCodexTranscript(input);
     expect(msgs).toHaveLength(2);
     expect(msgs[0].type).toBe('tool_call');
-    expect(msgs[0].toolName).toBe('command_execution');
+    expect(msgs[0].toolName).toBe('Bash');
     expect(msgs[1].type).toBe('tool_result');
+    expect(msgs[1].toolName).toBe('Bash');
+    expect(msgs[1].toolDetail).toBe('ls');
     expect(msgs[1].content).toBe('file.txt');
   });
 
@@ -34,7 +36,7 @@ describe('parseCodexTranscript', () => {
     const msgs = parseCodexTranscript(input);
     expect(msgs).toHaveLength(1);
     expect(msgs[0].type).toBe('tool_call');
-    expect(msgs[0].toolName).toBe('file_change');
+    expect(msgs[0].toolName).toBe('Edit');
     expect(msgs[0].toolDetail).toBe('main.ts');
   });
 
@@ -68,9 +70,21 @@ describe('parseCodexTranscript', () => {
     expect(msgs).toHaveLength(1);
   });
 
-  it('strips bash -lc prefix from commands', () => {
-    const input = '{"type":"ResponseItem","payload":{"type":"command_execution","command":"bash -lc echo hi"}}\n';
+  it('strips shell wrappers from commands', () => {
+    const input = [
+      '{"type":"ResponseItem","payload":{"type":"command_execution","command":"bash -lc echo hi"}}',
+      '{"type":"ResponseItem","payload":{"type":"command_execution","command":"/usr/bin/zsh -lc \'git diff --stat\'"}}',
+    ].join('\n') + '\n';
     const msgs = parseCodexTranscript(input);
     expect(msgs[0].toolDetail).toBe('echo hi');
+    expect(msgs[1].toolDetail).toBe('git diff --stat');
+  });
+
+  it('parses apply_patch tool calls with file detail', () => {
+    const input = '{"type":"ResponseItem","payload":{"type":"custom_tool_call","name":"apply_patch","input":"*** Begin Patch\\n*** Update File: /tmp/example.ts\\n*** End Patch"}}\n';
+    const msgs = parseCodexTranscript(input);
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].toolName).toBe('Edit');
+    expect(msgs[0].toolDetail).toBe('/tmp/example.ts');
   });
 });

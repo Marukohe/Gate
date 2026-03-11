@@ -611,6 +611,11 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
 
               // Step 3: Update session provider in DB
               db.updateSessionProvider(msg.sessionId, msg.provider);
+              broadcast(wss, {
+                type: 'sessions',
+                serverId: msg.serverId,
+                sessions: db.listSessions(msg.serverId),
+              });
 
               // Step 4: Insert system message about the switch
               const switchMsg = {

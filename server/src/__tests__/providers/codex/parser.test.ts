@@ -45,9 +45,11 @@ describe('CodexStreamParser', () => {
     const msgs = collectMessages(parser, input);
     expect(msgs).toHaveLength(2);
     expect(msgs[0].type).toBe('tool_call');
-    expect(msgs[0].toolName).toBe('command_execution');
+    expect(msgs[0].toolName).toBe('Bash');
     expect(msgs[0].toolDetail).toBe('ls -la');
     expect(msgs[1].type).toBe('tool_result');
+    expect(msgs[1].toolName).toBe('Bash');
+    expect(msgs[1].toolDetail).toBe('ls -la');
     expect(msgs[1].content).toContain('file1.txt');
   });
 
@@ -61,9 +63,11 @@ describe('CodexStreamParser', () => {
     const msgs = collectMessages(parser, input);
     expect(msgs).toHaveLength(2);
     expect(msgs[0].type).toBe('tool_call');
-    expect(msgs[0].toolName).toBe('file_change');
+    expect(msgs[0].toolName).toBe('Edit');
     expect(msgs[0].toolDetail).toBe('src/main.ts');
     expect(msgs[1].type).toBe('tool_result');
+    expect(msgs[1].toolName).toBe('Edit');
+    expect(msgs[1].toolDetail).toBe('src/main.ts');
     expect(msgs[1].content).toBe('+ new line');
   });
 
@@ -75,8 +79,40 @@ describe('CodexStreamParser', () => {
     );
     expect(msgs).toHaveLength(1);
     expect(msgs[0].type).toBe('tool_call');
-    expect(msgs[0].toolName).toBe('web_search');
+    expect(msgs[0].toolName).toBe('WebSearch');
     expect(msgs[0].content).toContain('"query"');
+  });
+
+  it('parses apply_patch custom tool calls with file detail', () => {
+    const parser = new CodexStreamParser();
+    const msgs = collectMessages(
+      parser,
+      [
+        '{"type":"item.started","item":{"type":"custom_tool_call","name":"apply_patch","input":"*** Begin Patch\\n*** Update File: /tmp/example.ts\\n*** End Patch"}}',
+        '{"type":"item.completed","item":{"type":"file_change","content":"File changed"}}',
+      ].join('\n') + '\n',
+    );
+    expect(msgs[0].type).toBe('tool_call');
+    expect(msgs[0].toolName).toBe('Edit');
+    expect(msgs[0].toolDetail).toBe('/tmp/example.ts');
+    expect(msgs[1].type).toBe('tool_result');
+    expect(msgs[1].toolName).toBe('Edit');
+    expect(msgs[1].toolDetail).toBe('/tmp/example.ts');
+  });
+
+  it('parses response_item apply_patch sequences with file detail', () => {
+    const parser = new CodexStreamParser();
+    const msgs = collectMessages(
+      parser,
+      [
+        '{"type":"response_item","payload":{"type":"custom_tool_call","name":"apply_patch","input":"*** Begin Patch\\n*** Update File: /tmp/example.ts\\n*** End Patch"}}',
+        '{"type":"response_item","payload":{"type":"file_change","content":"File changed"}}',
+      ].join('\n') + '\n',
+    );
+    expect(msgs[0].toolName).toBe('Edit');
+    expect(msgs[0].toolDetail).toBe('/tmp/example.ts');
+    expect(msgs[1].toolName).toBe('Edit');
+    expect(msgs[1].toolDetail).toBe('/tmp/example.ts');
   });
 
   it('parses todo_list from item.completed', () => {
@@ -167,13 +203,14 @@ describe('CodexStreamParser', () => {
     expect(parser.getSessionId()).toBe('z');
   });
 
-  it('strips bash -lc prefix from commands', () => {
+  it('strips shell wrappers from commands', () => {
     const parser = new CodexStreamParser();
-    const msgs = collectMessages(
-      parser,
-      '{"type":"item.started","item":{"type":"command_execution","command":"bash -lc echo hello"}}\n',
-    );
+    const msgs = collectMessages(parser, [
+      '{"type":"item.started","item":{"type":"command_execution","command":"bash -lc echo hello"}}',
+      '{"type":"item.started","item":{"type":"command_execution","command":"/usr/bin/zsh -lc \'git diff --stat\'"}}',
+    ].join('\n') + '\n');
     expect(msgs[0].toolDetail).toBe('echo hello');
+    expect(msgs[1].toolDetail).toBe('git diff --stat');
   });
 
   it('handles command_execution with exit code fallback', () => {

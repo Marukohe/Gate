@@ -3,6 +3,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ChevronRight, Zap, FileText, Search, Terminal, Pencil, Globe, FolderOpen, Loader2 } from 'lucide-react';
 import { cn, stripLineNumbers } from '@/lib/utils';
 import type { ToolActivityGroup, MergedToolItem } from './group-tools';
+import { getDisplayToolDetail, getDisplayToolName } from './tool-display';
 
 const toolIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   Read: FileText,
@@ -30,8 +31,8 @@ function getToolNames(items: MergedToolItem[]): string[] {
   const seen = new Set<string>();
   const names: string[] = [];
   for (const item of items) {
-    const name = item.call.toolName;
-    if (name && !seen.has(name)) {
+    const name = getDisplayToolName(item.call);
+    if (name && name !== 'Result' && !seen.has(name)) {
       seen.add(name);
       names.push(name);
     }
@@ -42,8 +43,8 @@ function getToolNames(items: MergedToolItem[]): string[] {
 function ToolLineItem({ item, defaultOpen }: { item: MergedToolItem; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen ?? false);
   const Icon = getToolIcon(item.call.toolName);
-  const name = item.call.toolName ?? 'tool';
-  const detail = item.call.toolDetail || item.call.content.slice(0, 100);
+  const name = getDisplayToolName(item.call);
+  const detail = getDisplayToolDetail(item.call);
   const isRunning = item.result === null && item.call.type === 'tool_call';
   const content = item.result?.content ?? item.call.content;
 
@@ -81,7 +82,7 @@ interface ToolActivityBlockProps {
 }
 
 export function ToolActivityBlock({ group }: ToolActivityBlockProps) {
-  const [open, setOpen] = useState(group.isUserBash);
+  const [open, setOpen] = useState(false);
   const count = group.items.length;
   const toolNames = getToolNames(group.items);
   const summary = toolNames.join(', ');
@@ -97,9 +98,9 @@ export function ToolActivityBlock({ group }: ToolActivityBlockProps) {
             {summary && <span className="ml-1 text-muted-foreground/70">— {summary}</span>}
           </span>
         </CollapsibleTrigger>
-        <CollapsibleContent className="border-l-2 border-muted ml-[11px] mt-0.5">
+          <CollapsibleContent className="border-l-2 border-muted ml-[11px] mt-0.5">
           {group.items.map((item, i) => (
-            <ToolLineItem key={item.call.id ?? i} item={item} defaultOpen={group.isUserBash} />
+            <ToolLineItem key={item.call.id ?? i} item={item} defaultOpen={false} />
           ))}
         </CollapsibleContent>
       </Collapsible>

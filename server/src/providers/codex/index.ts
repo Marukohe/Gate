@@ -8,6 +8,7 @@ import type {
 } from '../types.js';
 import { CodexStreamParser } from './parser.js';
 import { parseCodexTranscript } from './transcript.js';
+import { normalizeCodexToolName } from './tool-utils.js';
 
 function shellCd(dir: string): string {
   if (dir === '~' || dir.startsWith('~/')) return `cd $HOME${dir.slice(1)}`;
@@ -67,18 +68,7 @@ export class CodexProvider implements CLIProvider {
   }
 
   normalizeToolName(rawName: string): string {
-    switch (rawName) {
-      case 'command_execution':
-        return 'Bash';
-      case 'file_change':
-        return 'Edit';
-      case 'web_search':
-        return 'WebSearch';
-      case 'todo_list':
-        return 'TodoWrite';
-      default:
-        return rawName;
-    }
+    return normalizeCodexToolName(rawName);
   }
 
   async listRemoteSessions(

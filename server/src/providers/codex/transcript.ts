@@ -1,4 +1,14 @@
 import type { ParsedMessage } from '../types.js';
+import {
+  normalizeCodexToolName,
+  serializeToolInput,
+  stripShellWrapper,
+  summarizeCodexToolDetail,
+} from './tool-utils.js';
+
+function getFileDetail(payload: { file?: string; file_path?: string; path?: string }): string {
+  return payload.file ?? payload.file_path ?? payload.path ?? '';
+}
 
 /**
  * Parses Codex rollout JSONL transcripts (stored in ~/.codex/sessions/).
@@ -39,11 +49,11 @@ export function parseCodexTranscript(jsonlContent: string): ParsedMessage[] {
           timestamp: ts,
         });
       } else if (payload.type === 'command_execution') {
-        const command = (payload.command ?? '').replace(/^bash\s+-lc\s+/, '');
+        const command = stripShellWrapper(payload.command ?? '');
         messages.push({
           type: 'tool_call',
           content: JSON.stringify({ command }, null, 2),
-          toolName: 'command_execution',
+          toolName: normalizeCodexToolName(payload.type),
           toolDetail: command,
           timestamp: ts,
         });
@@ -51,15 +61,28 @@ export function parseCodexTranscript(jsonlContent: string): ParsedMessage[] {
           messages.push({
             type: 'tool_result',
             content: payload.output,
+            toolName: normalizeCodexToolName(payload.type),
+            toolDetail: command,
             timestamp: ts,
           });
         }
       } else if (payload.type === 'file_change') {
+        const fileDetail = getFileDetail(payload);
         messages.push({
           type: 'tool_call',
-          content: JSON.stringify({ file: payload.file }, null, 2),
-          toolName: 'file_change',
-          toolDetail: payload.file ?? '',
+          content: JSON.stringify({ file: fileDetail }, null, 2),
+          toolName: normalizeCodexToolName(payload.type),
+          toolDetail: fileDetail,
+          timestamp: ts,
+        });
+      } else if (payload.type === 'custom_tool_call' || payload.type === 'function_call') {
+        const name = payload.name ?? payload.type;
+        const input = payload.input ?? payload.arguments ?? {};
+        messages.push({
+          type: 'tool_call',
+          content: serializeToolInput(input),
+          toolName: normalizeCodexToolName(name),
+          toolDetail: summarizeCodexToolDetail(name, input),
           timestamp: ts,
         });
       }

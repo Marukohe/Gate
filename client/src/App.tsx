@@ -29,7 +29,7 @@ function App() {
   const setSessions = useSessionStore((s) => s.setSessions);
   const setActiveSession = useSessionStore((s) => s.setActiveSession);
 
-  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, loadMoreMessages } = useWebSocket();
+  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, loadMoreMessages } = useWebSocket();
 
   useEffect(() => {
     fetch('/api/servers')
