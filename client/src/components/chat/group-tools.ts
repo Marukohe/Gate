@@ -31,7 +31,6 @@ function canPair(call: ChatMessage, result: ChatMessage): boolean {
 
 function buildGroup(toolRun: ChatMessage[]): ToolActivityGroup {
   const items: MergedToolItem[] = [];
-  let isUserBash = false;
 
   for (let i = 0; i < toolRun.length; i++) {
     const msg = toolRun[i];
@@ -42,7 +41,6 @@ function buildGroup(toolRun: ChatMessage[]): ToolActivityGroup {
       for (let j = items.length - 1; j >= 0; j--) {
         if (items[j].result === null && canPair(items[j].call, msg)) {
           items[j] = { ...items[j], result: msg };
-          if (items[j].call.toolName === 'bash' || items[j].call.toolName === 'Bash') isUserBash = true;
           break;
         }
         if (j === 0) {
@@ -54,16 +52,19 @@ function buildGroup(toolRun: ChatMessage[]): ToolActivityGroup {
             toolName: msg.toolName ?? previous?.toolName,
             toolDetail: msg.toolDetail ?? previous?.toolDetail,
           };
-          if (inherited.toolName === 'bash' || inherited.toolName === 'Bash') isUserBash = true;
           items.push({ call: inherited, result: null });
         }
       }
       if (items.length === 0) {
-        if (msg.toolName === 'bash' || msg.toolName === 'Bash') isUserBash = true;
         items.push({ call: msg, result: null });
       }
     }
   }
+
+  const isUserBash =
+    toolRun.length === 1 &&
+    toolRun[0].type === 'tool_result' &&
+    (toolRun[0].toolName === 'bash' || toolRun[0].toolName === 'Bash');
 
   return { kind: 'tool-group', items, isUserBash };
 }
