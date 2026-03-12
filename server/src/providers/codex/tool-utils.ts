@@ -76,3 +76,108 @@ export function getCodexResultType(type: string, name?: string): string {
   }
   return type;
 }
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readPath(source: unknown, path: string[]): unknown {
+  let current = source;
+  for (const key of path) {
+    if (!isRecord(current) || !(key in current)) return undefined;
+    current = current[key];
+  }
+  return current;
+}
+
+function extractText(value: unknown): string | null {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    const parts = value
+      .map((entry) => extractText(entry))
+      .filter((entry): entry is string => !!entry && entry.length > 0);
+    return parts.length > 0 ? parts.join('\n') : null;
+  }
+  if (!isRecord(value)) return null;
+
+  // Codex sometimes nests human-readable output inside generic block objects.
+  for (const key of ['text', 'content', 'value', 'message']) {
+    const extracted = extractText(value[key]);
+    if (extracted) return extracted;
+  }
+
+  return null;
+}
+
+function extractOutputField(value: unknown): string | null {
+  if (isRecord(value) && ('stdout' in value || 'stderr' in value)) return null;
+  return extractText(value);
+}
+
+function firstText(source: unknown, paths: string[][], extractor: (value: unknown) => string | null = extractText): string | null {
+  for (const path of paths) {
+    const extracted = extractor(readPath(source, path));
+    if (extracted) return extracted;
+  }
+  return null;
+}
+
+function firstNumber(source: unknown, paths: string[][]): number | null {
+  for (const path of paths) {
+    const value = readPath(source, path);
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+export function formatCodexCommandResult(payload: unknown): string | null {
+  const stdout = firstText(payload, [
+    ['stdout'],
+    ['result', 'stdout'],
+    ['output', 'stdout'],
+    ['command_output', 'stdout'],
+  ]);
+  const stderr = firstText(payload, [
+    ['stderr'],
+    ['result', 'stderr'],
+    ['output', 'stderr'],
+    ['command_output', 'stderr'],
+  ]);
+  const output = firstText(
+    payload,
+    [
+      ['output'],
+      ['result', 'output'],
+      ['content'],
+      ['result', 'content'],
+      ['aggregated_output'],
+      ['combined_output'],
+      ['command_output'],
+    ],
+    extractOutputField,
+  );
+  const exitCode = firstNumber(payload, [
+    ['exit_code'],
+    ['result', 'exit_code'],
+    ['output', 'exit_code'],
+  ]);
+
+  const sections: string[] = [];
+  if (stdout) {
+    sections.push(stderr ? `stdout:\n${stdout}` : stdout);
+  }
+  if (stderr) {
+    sections.push(`stderr:\n${stderr}`);
+  }
+  if (sections.length === 0 && output) {
+    sections.push(output);
+  }
+  if (sections.length === 0) {
+    return exitCode != null ? `Exit code: ${exitCode}` : null;
+  }
+  if (exitCode != null && exitCode !== 0) {
+    sections.push(`Exit code: ${exitCode}`);
+  }
+  return sections.join('\n\n');
+}

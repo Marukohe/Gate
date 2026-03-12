@@ -31,6 +31,26 @@ describe('parseCodexTranscript', () => {
     expect(msgs[1].content).toBe('file.txt');
   });
 
+  it('parses command_execution ResponseItem with stdout and stderr', () => {
+    const input = '{"timestamp":"2025-01-01T00:00:00Z","type":"ResponseItem","payload":{"type":"command_execution","command":"git status --short","stdout":"M file.ts","stderr":"warning text","exit_code":1}}\n';
+    const msgs = parseCodexTranscript(input);
+    expect(msgs).toHaveLength(2);
+    expect(msgs[1].type).toBe('tool_result');
+    expect(msgs[1].content).toContain('stdout:');
+    expect(msgs[1].content).toContain('M file.ts');
+    expect(msgs[1].content).toContain('stderr:');
+    expect(msgs[1].content).toContain('warning text');
+    expect(msgs[1].content).toContain('Exit code: 1');
+  });
+
+  it('parses command_execution ResponseItem with nested output objects', () => {
+    const input = '{"timestamp":"2025-01-01T00:00:00Z","type":"ResponseItem","payload":{"type":"command_execution","command":"pwd","output":{"stdout":"/home/user","stderr":""},"exit_code":0}}\n';
+    const msgs = parseCodexTranscript(input);
+    expect(msgs).toHaveLength(2);
+    expect(msgs[1].content).toContain('/home/user');
+    expect(msgs[1].content).not.toContain('Exit code');
+  });
+
   it('parses file_change ResponseItem', () => {
     const input = '{"timestamp":"2025-01-01T00:00:00Z","type":"ResponseItem","payload":{"type":"file_change","file":"main.ts"}}\n';
     const msgs = parseCodexTranscript(input);

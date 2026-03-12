@@ -1,5 +1,6 @@
 import { OutputParser, type ParsedMessage } from '../types.js';
 import {
+  formatCodexCommandResult,
   getCodexResultType,
   normalizeCodexToolName,
   serializeToolInput,
@@ -111,11 +112,12 @@ export class CodexStreamParser extends OutputParser {
           ? this.activeTool.detail
           : '';
       const command = obj.command ? stripShellWrapper(obj.command) : activeToolDetail;
+      const resultContent = formatCodexCommandResult(obj);
 
-      if (obj.output != null || obj.exit_code != null || activeToolDetail) {
+      if (resultContent || activeToolDetail) {
         this.emit('message', {
           type: 'tool_result',
-          content: obj.output ?? `Exit code: ${obj.exit_code ?? 0}`,
+          content: resultContent ?? 'Exit code: 0',
           toolName: normalizeCodexToolName(obj.type),
           toolDetail: command,
           timestamp: Date.now(),
@@ -270,9 +272,10 @@ export class CodexStreamParser extends OutputParser {
         const detail = item.command
           ? stripShellWrapper(item.command)
           : activeToolDetail;
+        const resultContent = formatCodexCommandResult(item);
         this.emit('message', {
           type: 'tool_result',
-          content: item.output ?? `Exit code: ${item.exit_code ?? 0}`,
+          content: resultContent ?? 'Exit code: 0',
           toolName: normalizeCodexToolName(item.type),
           toolDetail: detail,
           timestamp: Date.now(),

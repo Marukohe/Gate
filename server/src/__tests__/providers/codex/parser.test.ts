@@ -53,6 +53,37 @@ describe('CodexStreamParser', () => {
     expect(msgs[1].content).toContain('file1.txt');
   });
 
+  it('prefers structured stdout and stderr for command_execution results', () => {
+    const parser = new CodexStreamParser();
+    const input = [
+      '{"type":"item.started","item":{"type":"command_execution","command":"git status --short"}}',
+      '{"type":"item.completed","item":{"type":"command_execution","stdout":"M server/src/providers/codex/parser.ts","stderr":"warning: test stderr","exit_code":1}}',
+    ].join('\n') + '\n';
+
+    const msgs = collectMessages(parser, input);
+    expect(msgs).toHaveLength(2);
+    expect(msgs[1].type).toBe('tool_result');
+    expect(msgs[1].content).toContain('stdout:');
+    expect(msgs[1].content).toContain('M server/src/providers/codex/parser.ts');
+    expect(msgs[1].content).toContain('stderr:');
+    expect(msgs[1].content).toContain('warning: test stderr');
+    expect(msgs[1].content).toContain('Exit code: 1');
+  });
+
+  it('reads nested command output objects', () => {
+    const parser = new CodexStreamParser();
+    const msgs = collectMessages(
+      parser,
+      '{"type":"item.completed","item":{"type":"command_execution","output":{"stdout":"line 1","stderr":"line 2"},"exit_code":0}}\n',
+    );
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].type).toBe('tool_result');
+    expect(msgs[0].content).toContain('stdout:');
+    expect(msgs[0].content).toContain('line 1');
+    expect(msgs[0].content).toContain('stderr:');
+    expect(msgs[0].content).toContain('line 2');
+  });
+
   it('parses file_change events', () => {
     const parser = new CodexStreamParser();
     const input = [

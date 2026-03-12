@@ -1,5 +1,6 @@
 import type { ParsedMessage } from '../types.js';
 import {
+  formatCodexCommandResult,
   normalizeCodexToolName,
   serializeToolInput,
   stripShellWrapper,
@@ -57,10 +58,11 @@ export function parseCodexTranscript(jsonlContent: string): ParsedMessage[] {
           toolDetail: command,
           timestamp: ts,
         });
-        if (payload.output != null) {
+        const resultContent = formatCodexCommandResult(payload);
+        if (resultContent) {
           messages.push({
             type: 'tool_result',
-            content: payload.output,
+            content: resultContent,
             toolName: normalizeCodexToolName(payload.type),
             toolDetail: command,
             timestamp: ts,
