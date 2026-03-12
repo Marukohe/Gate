@@ -82,7 +82,7 @@ interface ToolActivityBlockProps {
 }
 
 export function ToolActivityBlock({ group }: ToolActivityBlockProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(group.isUserBash);
   const count = group.items.length;
   const toolNames = getToolNames(group.items);
   const summary = toolNames.join(', ');
@@ -100,7 +100,7 @@ export function ToolActivityBlock({ group }: ToolActivityBlockProps) {
         </CollapsibleTrigger>
           <CollapsibleContent className="border-l-2 border-muted ml-[11px] mt-0.5">
           {group.items.map((item, i) => (
-            <ToolLineItem key={item.call.id ?? i} item={item} defaultOpen={false} />
+            <ToolLineItem key={item.call.id ?? i} item={item} defaultOpen={group.isUserBash} />
           ))}
         </CollapsibleContent>
       </Collapsible>

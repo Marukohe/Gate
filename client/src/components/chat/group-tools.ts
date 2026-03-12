@@ -59,6 +59,7 @@ function buildGroup(toolRun: ChatMessage[]): ToolActivityGroup {
         }
       }
       if (items.length === 0) {
+        if (msg.toolName === 'bash' || msg.toolName === 'Bash') isUserBash = true;
         items.push({ call: msg, result: null });
       }
     }
