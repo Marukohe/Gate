@@ -643,23 +643,38 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                 await sshManager.connect(config);
               }
 
-              const cmd = targetProvider.buildCommand({
-                workingDir: spSession.workingDir ?? undefined,
-                initialContext: summary || undefined,
-              });
-              await sshManager.startCLI(msg.serverId, msg.sessionId, cmd);
-              if (targetProvider.getCapabilities().supportsStdin && summary) {
-                setTimeout(() => {
-                  try {
-                    sshManager.sendInput(
-                      msg.serverId,
-                      msg.sessionId!,
-                      targetProvider.formatInput(summary),
-                    );
-                  } catch {
-                    /* channel may have closed */
-                  }
-                }, 500);
+              // Re-read session to get the restored cliSessionId from providerSessionMap
+              const updatedSession = db.getSession(msg.sessionId);
+              const resumeId = updatedSession?.cliSessionId ?? undefined;
+
+              const targetCaps = targetProvider.getCapabilities();
+              if (targetCaps.supportsStdin) {
+                // Interactive provider (e.g. Claude): launch once, keep running
+                perMessageSessions.delete(msg.sessionId);
+                const cmd = targetProvider.buildCommand({
+                  resumeSessionId: resumeId,
+                  workingDir: spSession.workingDir ?? undefined,
+                  // Only pass context if we can't resume an existing session
+                  initialContext: resumeId ? undefined : (summary || undefined),
+                });
+                await sshManager.startCLI(msg.serverId, msg.sessionId, cmd);
+                // Only send summary via stdin if we couldn't resume and have context to pass
+                if (!resumeId && summary) {
+                  setTimeout(() => {
+                    try {
+                      sshManager.sendInput(
+                        msg.serverId,
+                        msg.sessionId!,
+                        targetProvider.formatInput(summary),
+                      );
+                    } catch {
+                      /* channel may have closed */
+                    }
+                  }, 500);
+                }
+              } else {
+                // Per-message provider (e.g. Codex): don't launch yet
+                perMessageSessions.add(msg.sessionId);
               }
 
               broadcast(wss, { type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'connected' });

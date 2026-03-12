@@ -21,6 +21,7 @@ export interface Session {
   claudeSessionId: string | null;
   cliSessionId: string | null;
   provider: string;
+  providerSessionMap: string | null; // JSON: { [provider]: cliSessionId }
   workingDir: string | null;
   createdAt: number;
   lastActiveAt: number;
@@ -78,6 +79,7 @@ export function createDb(dbPath: string): Database {
   try { db.exec("ALTER TABLE sessions ADD COLUMN provider TEXT DEFAULT 'claude'"); } catch { /* already exists */ }
   try { db.exec('ALTER TABLE sessions ADD COLUMN cliSessionId TEXT'); } catch { /* already exists */ }
   try { db.exec('ALTER TABLE messages ADD COLUMN provider TEXT'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE sessions ADD COLUMN providerSessionMap TEXT'); } catch { /* already exists */ }
   try { db.exec('UPDATE sessions SET cliSessionId = claudeSessionId WHERE cliSessionId IS NULL AND claudeSessionId IS NOT NULL'); } catch { /* ignore */ }
 
   db.exec(`
@@ -102,6 +104,7 @@ export function createDb(dbPath: string): Database {
       claudeSessionId TEXT,
       cliSessionId TEXT,
       provider TEXT DEFAULT 'claude',
+      providerSessionMap TEXT,
       workingDir TEXT,
       createdAt INTEGER NOT NULL,
       lastActiveAt INTEGER NOT NULL
@@ -163,7 +166,7 @@ export function createDb(dbPath: string): Database {
         INSERT INTO sessions (id, serverId, name, tmuxSession, workingDir, provider, createdAt, lastActiveAt)
         VALUES (?, ?, ?, '', ?, ?, ?, ?)
       `).run(id, serverId, name, dir, prov, now, now);
-      return { id, serverId, name, claudeSessionId: null, cliSessionId: null, provider: prov, workingDir: dir, createdAt: now, lastActiveAt: now };
+      return { id, serverId, name, claudeSessionId: null, cliSessionId: null, provider: prov, providerSessionMap: null, workingDir: dir, createdAt: now, lastActiveAt: now };
     },
 
     getSession(id) {
@@ -195,7 +198,26 @@ export function createDb(dbPath: string): Database {
     },
 
     updateSessionProvider(id, provider) {
-      db.prepare('UPDATE sessions SET provider = ?, cliSessionId = NULL WHERE id = ?').run(provider, id);
+      const session = db.prepare('SELECT provider, cliSessionId, providerSessionMap FROM sessions WHERE id = ?').get(id) as
+        { provider: string; cliSessionId: string | null; providerSessionMap: string | null } | undefined;
+      if (!session) return;
+
+      // Parse existing map or start fresh
+      const map: Record<string, string> = session.providerSessionMap
+        ? JSON.parse(session.providerSessionMap)
+        : {};
+
+      // Save current provider's session ID before switching
+      const currentProvider = session.provider ?? 'claude';
+      if (session.cliSessionId) {
+        map[currentProvider] = session.cliSessionId;
+      }
+
+      // Restore target provider's saved session ID (if any)
+      const restoredCliSessionId = map[provider] ?? null;
+
+      db.prepare('UPDATE sessions SET provider = ?, cliSessionId = ?, providerSessionMap = ? WHERE id = ?')
+        .run(provider, restoredCliSessionId, JSON.stringify(map), id);
     },
 
     saveMessage(input) {
