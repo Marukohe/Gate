@@ -298,7 +298,7 @@ export class CodexStreamParser extends OutputParser {
       } else if (item.type === 'todo_list') {
         this.emit('message', {
           type: 'tool_call',
-          content: JSON.stringify(item.todos ?? item, null, 2),
+          content: JSON.stringify({ todos: item.todos ?? [] }, null, 2),
           toolName: normalizeCodexToolName(item.type),
           toolDetail: 'Task list update',
           timestamp: Date.now(),

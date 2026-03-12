@@ -49,6 +49,14 @@ const storeRefs = {
 let lastConnectedSession: string | null = null;
 let lastConnectedServer: string | null = null;
 
+function getActiveTarget(): { serverId: string; sessionId: string } | null {
+  const serverId = useServerStore.getState().activeServerId;
+  if (!serverId) return null;
+  const sessionId = useSessionStore.getState().activeSessionId[serverId];
+  if (!sessionId) return null;
+  return { serverId, sessionId };
+}
+
 function sendConnect(socket: WebSocket, serverId: string, sessionId: string) {
   // Only skip if already fully connected — allow re-sending if stuck in 'connecting'
   const status = useSessionStore.getState().connectionStatus[sessionId];
@@ -80,11 +88,12 @@ function setupSocket() {
   socket.onopen = () => {
     resetBackoff();
     resetHeartbeat();
-    // Flush any queued connect request
-    if (pendingConnect) {
-      const { serverId, sessionId } = pendingConnect;
+    // Re-bind the current active session after reconnects, even if no new UI
+    // interaction occurred while the socket was down.
+    const target = pendingConnect ?? getActiveTarget();
+    if (target) {
       pendingConnect = null;
-      sendConnect(socket, serverId, sessionId);
+      sendConnect(socket, target.serverId, target.sessionId);
     }
   };
 
@@ -171,6 +180,13 @@ function setupSocket() {
     ws = null;
     if (heartbeatTimer) clearTimeout(heartbeatTimer);
     if (reconnectTimer) clearTimeout(reconnectTimer);
+    const activeTarget = getActiveTarget();
+    if (activeTarget) {
+      pendingConnect = activeTarget;
+      storeRefs.setConnectionStatus?.(activeTarget.sessionId, 'connecting');
+      lastConnectedSession = null;
+      lastConnectedServer = activeTarget.serverId;
+    }
     const delay = nextBackoff();
     reconnectTimer = setTimeout(setupSocket, delay);
   };

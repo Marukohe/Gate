@@ -33,6 +33,52 @@ interface PlanStore {
   extractTodoWrite: (sessionId: string, jsonContent: string) => void;
 }
 
+interface TodoEntry {
+  text: string;
+  completed: boolean;
+}
+
+function parseTodoStatus(status: unknown, fallbackCompleted: boolean): boolean {
+  if (typeof status === 'string') {
+    const normalized = status.toLowerCase();
+    return normalized === 'completed' || normalized === 'done';
+  }
+  return fallbackCompleted;
+}
+
+function normalizeTodoEntry(todo: unknown): TodoEntry | null {
+  if (!todo || typeof todo !== 'object') return null;
+  const record = todo as Record<string, unknown>;
+  const text = record.content
+    ?? record.task
+    ?? record.text
+    ?? record.title
+    ?? record.label;
+  if (typeof text !== 'string' || text.trim().length === 0) return null;
+
+  const completedFlag =
+    typeof record.completed === 'boolean' ? record.completed
+    : typeof record.done === 'boolean' ? record.done
+    : false;
+
+  return {
+    text,
+    completed: parseTodoStatus(record.status, completedFlag),
+  };
+}
+
+function normalizeTodoList(parsed: unknown): TodoEntry[] {
+  const rawTodos = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === 'object' && Array.isArray((parsed as Record<string, unknown>).todos)
+      ? (parsed as Record<string, unknown>).todos as unknown[]
+      : [];
+
+  return rawTodos
+    .map((todo) => normalizeTodoEntry(todo))
+    .filter((todo): todo is TodoEntry => !!todo);
+}
+
 function toggleStepInList(steps: PlanStep[], stepId: string): PlanStep[] {
   return steps.map((step) => {
     if (step.id === stepId) return { ...step, completed: !step.completed };
@@ -119,13 +165,13 @@ export const usePlanStore = create<PlanStore>()(
   extractTodoWrite: (sessionId, jsonContent) => {
     try {
       const parsed = JSON.parse(jsonContent);
-      const todos: { content: string; status: string }[] = parsed.todos ?? [];
+      const todos = normalizeTodoList(parsed);
       if (todos.length < 1) return;
 
       const steps: PlanStep[] = todos.map((t) => ({
         id: uniqueId(),
-        text: t.content,
-        completed: t.status === 'completed',
+        text: t.text,
+        completed: t.completed,
       }));
       const title = 'Task Progress';
 

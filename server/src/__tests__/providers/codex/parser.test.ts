@@ -155,6 +155,9 @@ describe('CodexStreamParser', () => {
     expect(msgs).toHaveLength(1);
     expect(msgs[0].type).toBe('tool_call');
     expect(msgs[0].toolName).toBe('TodoWrite');
+    expect(JSON.parse(msgs[0].content)).toEqual({
+      todos: [{ task: 'Do thing', done: false }],
+    });
   });
 
   it('parses turn.completed with usage', () => {

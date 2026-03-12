@@ -60,6 +60,17 @@ describe('parseCodexTranscript', () => {
     expect(msgs[0].toolDetail).toBe('main.ts');
   });
 
+  it('parses todo_list ResponseItem', () => {
+    const input = '{"timestamp":"2025-01-01T00:00:00Z","type":"ResponseItem","payload":{"type":"todo_list","todos":[{"content":"Do thing","status":"in_progress"}]}}\n';
+    const msgs = parseCodexTranscript(input);
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].type).toBe('tool_call');
+    expect(msgs[0].toolName).toBe('TodoWrite');
+    expect(JSON.parse(msgs[0].content)).toEqual({
+      todos: [{ content: 'Do thing', status: 'in_progress' }],
+    });
+  });
+
   it('handles response_item type alias', () => {
     const input = '{"timestamp":"2025-01-01T00:00:00Z","type":"response_item","payload":{"type":"agent_message","text":"Hi"}}\n';
     const msgs = parseCodexTranscript(input);

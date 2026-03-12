@@ -87,6 +87,14 @@ export function parseCodexTranscript(jsonlContent: string): ParsedMessage[] {
           toolDetail: summarizeCodexToolDetail(name, input),
           timestamp: ts,
         });
+      } else if (payload.type === 'todo_list') {
+        messages.push({
+          type: 'tool_call',
+          content: JSON.stringify({ todos: payload.todos ?? [] }, null, 2),
+          toolName: normalizeCodexToolName(payload.type),
+          toolDetail: 'Task list update',
+          timestamp: ts,
+        });
       }
     }
   }
