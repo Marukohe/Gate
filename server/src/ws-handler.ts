@@ -609,7 +609,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               if (spParser) { spParser.flush(); parsers.delete(msg.sessionId); }
               sshManager.stopSession(msg.serverId, msg.sessionId);
 
-              // Step 3: Update session provider in DB
+              // Step 3: Update session provider in DB (saves current cliSessionId, restores target's)
               db.updateSessionProvider(msg.sessionId, msg.provider);
               broadcast(wss, {
                 type: 'sessions',
@@ -617,11 +617,24 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                 sessions: db.listSessions(msg.serverId),
               });
 
-              // Step 4: Insert system message about the switch
+              // Check if we can resume an existing session for the target provider
+              const updatedSession = db.getSession(msg.sessionId);
+              const resumeId = updatedSession?.cliSessionId ?? undefined;
+
+              // Step 4: Insert system message showing what happened
+              let switchContent = `Switched from ${currentProviderName} to ${msg.provider}.`;
+              if (resumeId) {
+                switchContent += ` Resuming existing ${msg.provider} session.`;
+              }
+              if (summary) {
+                switchContent += `\n\nContext summary:\n\n${summary}`;
+              } else {
+                switchContent += ' No prior context to sync.';
+              }
               const switchMsg = {
                 sessionId: msg.sessionId,
                 type: 'system' as const,
-                content: `Switched from ${currentProviderName} to ${msg.provider}. Context synced.`,
+                content: switchContent,
                 timestamp: Date.now(),
                 provider: msg.provider,
               };
@@ -643,10 +656,6 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                 await sshManager.connect(config);
               }
 
-              // Re-read session to get the restored cliSessionId from providerSessionMap
-              const updatedSession = db.getSession(msg.sessionId);
-              const resumeId = updatedSession?.cliSessionId ?? undefined;
-
               const targetCaps = targetProvider.getCapabilities();
               if (targetCaps.supportsStdin) {
                 // Interactive provider (e.g. Claude): launch once, keep running
@@ -654,12 +663,12 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                 const cmd = targetProvider.buildCommand({
                   resumeSessionId: resumeId,
                   workingDir: spSession.workingDir ?? undefined,
-                  // Only pass context if we can't resume an existing session
-                  initialContext: resumeId ? undefined : (summary || undefined),
+                  // Per-message providers need context in the command itself
+                  initialContext: targetCaps.supportsStdin ? undefined : (summary || undefined),
                 });
                 await sshManager.startCLI(msg.serverId, msg.sessionId, cmd);
-                // Only send summary via stdin if we couldn't resume and have context to pass
-                if (!resumeId && summary) {
+                // Always send summary via stdin so the target provider gets cross-provider context
+                if (summary) {
                   setTimeout(() => {
                     try {
                       sshManager.sendInput(
@@ -673,7 +682,8 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                   }, 500);
                 }
               } else {
-                // Per-message provider (e.g. Codex): don't launch yet
+                // Per-message provider (e.g. Codex): don't launch yet, context will be
+                // passed via initialContext in buildCommand on next user input
                 perMessageSessions.add(msg.sessionId);
               }
 
