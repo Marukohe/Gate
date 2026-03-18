@@ -6,7 +6,7 @@ import type { ProviderRegistry } from './providers/registry.js';
 import type { Database } from './db.js';
 
 interface ClientMessage {
-  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions' | 'load-more' | 'switch-provider';
+  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions' | 'list-cli-sessions' | 'load-more' | 'switch-provider';
   serverId: string;
   sessionId?: string;
   sessionName?: string;
@@ -20,7 +20,7 @@ interface ClientMessage {
 }
 
 interface ServerMessage {
-  type: 'message' | 'status' | 'history' | 'history-prepend' | 'sessions' | 'git-info' | 'branches' | 'sync-result' | 'claude-sessions';
+  type: 'message' | 'status' | 'history' | 'history-prepend' | 'sessions' | 'git-info' | 'branches' | 'sync-result' | 'claude-sessions' | 'cli-sessions';
   serverId: string;
   sessionId?: string | null;
   [key: string]: any;
@@ -345,11 +345,12 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
 
           case 'create-session': {
             const name = msg.sessionName || 'New Session';
-            const session = db.createSession(msg.serverId, name, msg.workingDir || null);
-            // Pre-fill Claude session ID if binding to an existing terminal session
+            const session = db.createSession(msg.serverId, name, msg.workingDir || null, msg.provider);
+            // Pre-fill CLI session ID if binding to an existing terminal session
             if (msg.claudeSessionId) {
               db.updateClaudeSessionId(session.id, msg.claudeSessionId);
               session.claudeSessionId = msg.claudeSessionId;
+              session.cliSessionId = msg.claudeSessionId;
             }
             const sessions = db.listSessions(msg.serverId);
             broadcast(wss, { type: 'sessions', serverId: msg.serverId, sessions });
@@ -443,19 +444,20 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             break;
           }
 
-          case 'list-claude-sessions': {
+          case 'list-claude-sessions':
+          case 'list-cli-sessions': {
             if (!msg.workingDir) return;
             const lsServer = db.getServer(msg.serverId);
             if (!lsServer) {
-              console.log('[list-claude-sessions] server not found:', msg.serverId);
-              ws.send(JSON.stringify({ type: 'claude-sessions', serverId: msg.serverId, sessions: [] }));
+              console.log('[list-cli-sessions] server not found:', msg.serverId);
+              ws.send(JSON.stringify({ type: 'cli-sessions', serverId: msg.serverId, sessions: [] }));
               return;
             }
 
             try {
               // Ensure SSH is connected (dialog may open before any session connects)
               if (!sshManager.isConnected(msg.serverId)) {
-                console.log('[list-claude-sessions] SSH not connected, auto-connecting...');
+                console.log('[list-cli-sessions] SSH not connected, auto-connecting...');
                 const config: ServerConfig = {
                   id: lsServer.id,
                   host: lsServer.host,
@@ -472,7 +474,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               const providerName = msg.provider ?? 'claude';
               const lsProvider = registry.get(providerName);
               if (!lsProvider) {
-                ws.send(JSON.stringify({ type: 'claude-sessions', serverId: msg.serverId, sessions: [] }));
+                ws.send(JSON.stringify({ type: 'cli-sessions', serverId: msg.serverId, sessions: [] }));
                 return;
               }
 
@@ -480,11 +482,11 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               const remoteSessions = await lsProvider.listRemoteSessions(runCommand, msg.workingDir);
               const sessionIds = remoteSessions.map((s) => s.id);
 
-              console.log('[list-claude-sessions] found %d sessions', sessionIds.length);
-              ws.send(JSON.stringify({ type: 'claude-sessions', serverId: msg.serverId, sessions: sessionIds }));
+              console.log('[list-cli-sessions] found %d sessions', sessionIds.length);
+              ws.send(JSON.stringify({ type: 'cli-sessions', serverId: msg.serverId, sessions: sessionIds }));
             } catch (err: any) {
-              console.error('[list-claude-sessions] error:', err.message);
-              ws.send(JSON.stringify({ type: 'claude-sessions', serverId: msg.serverId, sessions: [] }));
+              console.error('[list-cli-sessions] error:', err.message);
+              ws.send(JSON.stringify({ type: 'cli-sessions', serverId: msg.serverId, sessions: [] }));
             }
             break;
           }
