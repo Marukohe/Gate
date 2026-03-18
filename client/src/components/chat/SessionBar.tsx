@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Plus, GitBranch, ClipboardList, MoreVertical } from 'lucide-react';
+import { Plus, GitBranch, ClipboardList, MoreVertical, MessageSquarePlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -29,6 +29,7 @@ import { BranchSwitcher } from './BranchSwitcher';
 import { ProviderSwitcher } from './ProviderSwitcher';
 import { useSessionStore, type Session } from '@/stores/session-store';
 import { useServerStore } from '@/stores/server-store';
+import { useWebSocket } from '@/hooks/use-websocket';
 import { usePlanStore } from '@/stores/plan-store';
 import { useUIStore } from '@/stores/ui-store';
 import { cn } from '@/lib/utils';
@@ -64,6 +65,7 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
   const togglePlanPanel = useUIStore((s) => s.togglePlanPanel);
   const planPanelOpen = useUIStore((s) => s.planPanelOpen);
   const syncStatus = useUIStore((s) => s.syncStatus);
+  const { resetConversation } = useWebSocket();
 
   const statusDot = (sessionId: string) => {
     const status = connectionStatus[sessionId];
@@ -165,6 +167,9 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
                       </span>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
+                      <DropdownMenuItem onClick={() => resetConversation(serverId, session.id)}>
+                        New Chat
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => startRename(session)}>
                         Rename
                       </DropdownMenuItem>
@@ -188,6 +193,9 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
               )}
             </ContextMenuTrigger>
             <ContextMenuContent>
+              <ContextMenuItem onClick={() => resetConversation(serverId, session.id)}>
+                New Chat
+              </ContextMenuItem>
               <ContextMenuItem onClick={() => startRename(session)}>
                 Rename
               </ContextMenuItem>

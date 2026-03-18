@@ -56,6 +56,7 @@ export interface Database {
   updateClaudeSessionId(id: string, claudeSessionId: string): void;
   updateCliSessionId(id: string, cliSessionId: string): void;
   updateSessionProvider(id: string, provider: string): void;
+  clearCliSessionId(id: string): void;
   saveMessage(input: CreateMessageInput): Message;
   saveMessages(inputs: CreateMessageInput[]): Message[];
   deleteMessages(sessionId: string): void;
@@ -218,6 +219,21 @@ export function createDb(dbPath: string): Database {
 
       db.prepare('UPDATE sessions SET provider = ?, cliSessionId = ?, providerSessionMap = ? WHERE id = ?')
         .run(provider, restoredCliSessionId, JSON.stringify(map), id);
+    },
+
+    clearCliSessionId(id) {
+      const session = db.prepare('SELECT provider, providerSessionMap FROM sessions WHERE id = ?').get(id) as
+        { provider: string; providerSessionMap: string | null } | undefined;
+      if (!session) return;
+
+      // Also remove from providerSessionMap so it won't be restored on switch
+      const map: Record<string, string> = session.providerSessionMap
+        ? JSON.parse(session.providerSessionMap)
+        : {};
+      delete map[session.provider ?? 'claude'];
+
+      db.prepare('UPDATE sessions SET cliSessionId = NULL, claudeSessionId = NULL, providerSessionMap = ? WHERE id = ?')
+        .run(JSON.stringify(map), id);
     },
 
     saveMessage(input) {

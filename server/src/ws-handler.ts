@@ -6,7 +6,7 @@ import type { ProviderRegistry } from './providers/registry.js';
 import type { Database } from './db.js';
 
 interface ClientMessage {
-  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions' | 'list-cli-sessions' | 'load-more' | 'switch-provider';
+  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions' | 'list-cli-sessions' | 'load-more' | 'switch-provider' | 'reset-conversation';
   serverId: string;
   sessionId?: string;
   sessionName?: string;
@@ -692,6 +692,65 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               broadcast(wss, { type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'connected' });
             } catch (err: any) {
               console.error('[switch-provider] error:', err.message);
+              ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: err.message }));
+            }
+            break;
+          }
+
+          case 'reset-conversation': {
+            if (!msg.sessionId) return;
+            const rcSession = db.getSession(msg.sessionId);
+            if (!rcSession) return;
+
+            try {
+              // Stop current CLI
+              const rcParser = parsers.get(msg.sessionId);
+              if (rcParser) { rcParser.flush(); parsers.delete(msg.sessionId); }
+              sshManager.stopSession(msg.serverId, msg.sessionId);
+
+              // Clear CLI session ID so next launch won't --resume
+              db.clearCliSessionId(msg.sessionId);
+
+              // Insert system message
+              const rcMsg = {
+                sessionId: msg.sessionId,
+                type: 'system' as const,
+                content: 'Started a new conversation.',
+                timestamp: Date.now(),
+                provider: rcSession.provider,
+              };
+              db.saveMessage(rcMsg);
+              broadcast(wss, { type: 'message', serverId: msg.serverId, sessionId: msg.sessionId, message: rcMsg });
+
+              // Re-launch CLI without resume
+              const rcServer = db.getServer(msg.serverId);
+              if (!rcServer) return;
+
+              if (!sshManager.isConnected(msg.serverId)) {
+                const config: ServerConfig = {
+                  id: rcServer.id, host: rcServer.host, port: rcServer.port,
+                  username: rcServer.username, authType: rcServer.authType as 'password' | 'privateKey',
+                  password: rcServer.password ?? undefined, privateKeyPath: rcServer.privateKeyPath ?? undefined,
+                };
+                await sshManager.connect(config);
+              }
+
+              const rcProvider = getProvider(db, registry, msg.sessionId);
+              const rcCaps = rcProvider.getCapabilities();
+
+              if (rcCaps.supportsStdin) {
+                perMessageSessions.delete(msg.sessionId);
+                const cmd = rcProvider.buildCommand({
+                  workingDir: rcSession.workingDir ?? undefined,
+                });
+                await sshManager.startCLI(msg.serverId, msg.sessionId, cmd);
+              } else {
+                perMessageSessions.add(msg.sessionId);
+              }
+
+              broadcast(wss, { type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'connected' });
+            } catch (err: any) {
+              console.error('[reset-conversation] error:', err.message);
               ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: err.message }));
             }
             break;

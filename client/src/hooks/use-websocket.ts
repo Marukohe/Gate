@@ -294,6 +294,11 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'switch-provider', serverId, sessionId, provider }));
   }, []);
 
+  const resetConversation = useCallback((serverId: string, sessionId: string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'reset-conversation', serverId, sessionId }));
+  }, []);
+
   const listCliSessions = useCallback((serverId: string, workingDir: string, provider: string = 'claude'): Promise<string[]> => {
     return new Promise((resolve) => {
       if (!ws || ws.readyState !== WebSocket.OPEN) { resolve([]); return; }
@@ -314,5 +319,5 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'load-more', serverId, sessionId, beforeTimestamp }));
   }, []);
 
-  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, loadMoreMessages };
+  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, resetConversation, loadMoreMessages };
 }
