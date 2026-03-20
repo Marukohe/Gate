@@ -23,6 +23,7 @@ export interface Session {
   provider: string;
   providerSessionMap: string | null; // JSON: { [provider]: cliSessionId }
   workingDir: string | null;
+  chatStartedAt: number | null; // boundary timestamp: only show messages after this
   createdAt: number;
   lastActiveAt: number;
 }
@@ -57,6 +58,9 @@ export interface Database {
   updateCliSessionId(id: string, cliSessionId: string): void;
   updateSessionProvider(id: string, provider: string): void;
   clearCliSessionId(id: string): void;
+  updateChatStartedAt(id: string, timestamp: number): void;
+  getMessagesAfter(sessionId: string, afterTimestamp: number, limit?: number): Message[];
+  getMessageCountAfter(sessionId: string, afterTimestamp: number): number;
   saveMessage(input: CreateMessageInput): Message;
   saveMessages(inputs: CreateMessageInput[]): Message[];
   deleteMessages(sessionId: string): void;
@@ -81,6 +85,7 @@ export function createDb(dbPath: string): Database {
   try { db.exec('ALTER TABLE sessions ADD COLUMN cliSessionId TEXT'); } catch { /* already exists */ }
   try { db.exec('ALTER TABLE messages ADD COLUMN provider TEXT'); } catch { /* already exists */ }
   try { db.exec('ALTER TABLE sessions ADD COLUMN providerSessionMap TEXT'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE sessions ADD COLUMN chatStartedAt INTEGER'); } catch { /* already exists */ }
   try { db.exec('UPDATE sessions SET cliSessionId = claudeSessionId WHERE cliSessionId IS NULL AND claudeSessionId IS NOT NULL'); } catch { /* ignore */ }
 
   db.exec(`
@@ -106,6 +111,7 @@ export function createDb(dbPath: string): Database {
       cliSessionId TEXT,
       provider TEXT DEFAULT 'claude',
       providerSessionMap TEXT,
+      chatStartedAt INTEGER,
       workingDir TEXT,
       createdAt INTEGER NOT NULL,
       lastActiveAt INTEGER NOT NULL
@@ -167,7 +173,7 @@ export function createDb(dbPath: string): Database {
         INSERT INTO sessions (id, serverId, name, tmuxSession, workingDir, provider, createdAt, lastActiveAt)
         VALUES (?, ?, ?, '', ?, ?, ?, ?)
       `).run(id, serverId, name, dir, prov, now, now);
-      return { id, serverId, name, claudeSessionId: null, cliSessionId: null, provider: prov, providerSessionMap: null, workingDir: dir, createdAt: now, lastActiveAt: now };
+      return { id, serverId, name, claudeSessionId: null, cliSessionId: null, provider: prov, providerSessionMap: null, workingDir: dir, chatStartedAt: null, createdAt: now, lastActiveAt: now };
     },
 
     getSession(id) {
@@ -234,6 +240,23 @@ export function createDb(dbPath: string): Database {
 
       db.prepare('UPDATE sessions SET cliSessionId = NULL, claudeSessionId = NULL, providerSessionMap = ? WHERE id = ?')
         .run(JSON.stringify(map), id);
+    },
+
+    updateChatStartedAt(id, timestamp) {
+      db.prepare('UPDATE sessions SET chatStartedAt = ? WHERE id = ?').run(timestamp, id);
+    },
+
+    getMessagesAfter(sessionId, afterTimestamp, limit = 100) {
+      return db.prepare(`
+        SELECT * FROM (
+          SELECT * FROM messages WHERE sessionId = ? AND timestamp >= ? ORDER BY timestamp DESC LIMIT ?
+        ) ORDER BY timestamp ASC
+      `).all(sessionId, afterTimestamp, limit) as Message[];
+    },
+
+    getMessageCountAfter(sessionId, afterTimestamp) {
+      const row = db.prepare('SELECT COUNT(*) as count FROM messages WHERE sessionId = ? AND timestamp >= ?').get(sessionId, afterTimestamp) as { count: number };
+      return row.count;
     },
 
     saveMessage(input) {

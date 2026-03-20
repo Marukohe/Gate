@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { Plus, GitBranch, ClipboardList, MoreVertical, MessageSquarePlus } from 'lucide-react';
+import { useState, useRef, useCallback } from 'react';
+import { Plus, GitBranch, ClipboardList, MoreVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { CreateSessionDialog } from './CreateSessionDialog';
+import { ResumeChatDialog } from './ResumeChatDialog';
 import { BranchSwitcher } from './BranchSwitcher';
 import { ProviderSwitcher } from './ProviderSwitcher';
 import { useSessionStore, type Session } from '@/stores/session-store';
@@ -65,7 +66,16 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
   const togglePlanPanel = useUIStore((s) => s.togglePlanPanel);
   const planPanelOpen = useUIStore((s) => s.planPanelOpen);
   const syncStatus = useUIStore((s) => s.syncStatus);
-  const { resetConversation } = useWebSocket();
+  const { resetConversation, resumeCliSession, listCliSessions } = useWebSocket();
+  const [resumeDialogSession, setResumeDialogSession] = useState<Session | null>(null);
+
+  const listSessionsForResume = useCallback(
+    () => {
+      if (!resumeDialogSession) return Promise.resolve([]);
+      return listCliSessions(serverId, resumeDialogSession.workingDir ?? '', resumeDialogSession.provider ?? 'claude');
+    },
+    [serverId, resumeDialogSession, listCliSessions],
+  );
 
   const statusDot = (sessionId: string) => {
     const status = connectionStatus[sessionId];
@@ -167,8 +177,8 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
                       </span>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
-                      <DropdownMenuItem onClick={() => resetConversation(serverId, session.id)}>
-                        New Chat
+                      <DropdownMenuItem onClick={() => setResumeDialogSession(session)}>
+                        Switch
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => startRename(session)}>
                         Rename
@@ -193,8 +203,8 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
               )}
             </ContextMenuTrigger>
             <ContextMenuContent>
-              <ContextMenuItem onClick={() => resetConversation(serverId, session.id)}>
-                New Chat
+              <ContextMenuItem onClick={() => setResumeDialogSession(session)}>
+                Switch
               </ContextMenuItem>
               <ContextMenuItem onClick={() => startRename(session)}>
                 Rename
@@ -252,6 +262,15 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
         serverId={serverId}
         onListClaudeSessions={onListClaudeSessions}
         onListCliSessions={onListCliSessions}
+      />
+
+      <ResumeChatDialog
+        open={!!resumeDialogSession}
+        onOpenChange={(open) => { if (!open) setResumeDialogSession(null); }}
+        onResume={(cliSessionId) => resumeDialogSession && resumeCliSession(serverId, resumeDialogSession.id, cliSessionId)}
+        onNewChat={() => resumeDialogSession && resetConversation(serverId, resumeDialogSession.id)}
+        listSessions={listSessionsForResume}
+        currentCliSessionId={resumeDialogSession?.cliSessionId}
       />
 
       {branchSessionId && (

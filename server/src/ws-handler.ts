@@ -6,7 +6,7 @@ import type { ProviderRegistry } from './providers/registry.js';
 import type { Database } from './db.js';
 
 interface ClientMessage {
-  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions' | 'list-cli-sessions' | 'load-more' | 'switch-provider' | 'reset-conversation';
+  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions' | 'list-cli-sessions' | 'load-more' | 'switch-provider' | 'reset-conversation' | 'resume-cli-session';
   serverId: string;
   sessionId?: string;
   sessionName?: string;
@@ -196,9 +196,15 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               return;
             }
 
-            // Send chat history to this client (last 100 messages)
-            const messages = db.getMessages(session.id);
-            const totalCount = db.getMessageCount(session.id);
+            // Send chat history to this client, respecting chatStartedAt boundary
+            let messages, totalCount;
+            if (session.chatStartedAt) {
+              messages = db.getMessagesAfter(session.id, session.chatStartedAt);
+              totalCount = db.getMessageCountAfter(session.id, session.chatStartedAt);
+            } else {
+              messages = db.getMessages(session.id);
+              totalCount = db.getMessageCount(session.id);
+            }
             ws.send(JSON.stringify({ type: 'history', serverId: server.id, sessionId, messages, hasMore: totalCount > messages.length }));
 
             // If Claude is still running for this session, reuse it
@@ -711,16 +717,22 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               // Clear CLI session ID so next launch won't --resume
               db.clearCliSessionId(msg.sessionId);
 
+              // Set chat boundary — messages before this are hidden
+              const rcNow = Date.now();
+              db.updateChatStartedAt(msg.sessionId, rcNow);
+
               // Insert system message
               const rcMsg = {
                 sessionId: msg.sessionId,
                 type: 'system' as const,
                 content: 'Started a new conversation.',
-                timestamp: Date.now(),
+                timestamp: rcNow,
                 provider: rcSession.provider,
               };
               db.saveMessage(rcMsg);
-              broadcast(wss, { type: 'message', serverId: msg.serverId, sessionId: msg.sessionId, message: rcMsg });
+
+              // Send clean slate to frontend
+              broadcast(wss, { type: 'history', serverId: msg.serverId, sessionId: msg.sessionId, messages: [], hasMore: false });
 
               // Re-launch CLI without resume
               const rcServer = db.getServer(msg.serverId);
@@ -751,6 +763,73 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               broadcast(wss, { type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'connected' });
             } catch (err: any) {
               console.error('[reset-conversation] error:', err.message);
+              ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: err.message }));
+            }
+            break;
+          }
+
+          case 'resume-cli-session': {
+            if (!msg.sessionId || !msg.claudeSessionId) return;
+            const rsSession = db.getSession(msg.sessionId);
+            if (!rsSession) return;
+
+            try {
+              // Stop current CLI
+              const rsParser = parsers.get(msg.sessionId);
+              if (rsParser) { rsParser.flush(); parsers.delete(msg.sessionId); }
+              sshManager.stopSession(msg.serverId, msg.sessionId);
+
+              // Update cliSessionId to the selected one
+              db.updateCliSessionId(msg.sessionId, msg.claudeSessionId);
+              db.updateClaudeSessionId(msg.sessionId, msg.claudeSessionId);
+
+              // Set chat boundary — fresh view for this CLI session
+              const rsNow = Date.now();
+              db.updateChatStartedAt(msg.sessionId, rsNow);
+
+              // Insert system message
+              const rsMsg = {
+                sessionId: msg.sessionId,
+                type: 'system' as const,
+                content: `Resumed CLI session: ${msg.claudeSessionId}`,
+                timestamp: rsNow,
+                provider: rsSession.provider,
+              };
+              db.saveMessage(rsMsg);
+
+              // Send clean view with just the system message
+              broadcast(wss, { type: 'history', serverId: msg.serverId, sessionId: msg.sessionId, messages: [], hasMore: false });
+
+              // Re-launch CLI with --resume
+              const rsServer = db.getServer(msg.serverId);
+              if (!rsServer) return;
+
+              if (!sshManager.isConnected(msg.serverId)) {
+                const config: ServerConfig = {
+                  id: rsServer.id, host: rsServer.host, port: rsServer.port,
+                  username: rsServer.username, authType: rsServer.authType as 'password' | 'privateKey',
+                  password: rsServer.password ?? undefined, privateKeyPath: rsServer.privateKeyPath ?? undefined,
+                };
+                await sshManager.connect(config);
+              }
+
+              const rsProvider = getProvider(db, registry, msg.sessionId);
+              const rsCaps = rsProvider.getCapabilities();
+
+              if (rsCaps.supportsStdin) {
+                perMessageSessions.delete(msg.sessionId);
+                const cmd = rsProvider.buildCommand({
+                  resumeSessionId: msg.claudeSessionId,
+                  workingDir: rsSession.workingDir ?? undefined,
+                });
+                await sshManager.startCLI(msg.serverId, msg.sessionId, cmd);
+              } else {
+                perMessageSessions.add(msg.sessionId);
+              }
+
+              broadcast(wss, { type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'connected' });
+            } catch (err: any) {
+              console.error('[resume-cli-session] error:', err.message);
               ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: err.message }));
             }
             break;
