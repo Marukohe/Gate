@@ -4,3 +4,5 @@ dist/
 .env
 .mcp.json
 .worktrees/
+.claude/
+.entire/

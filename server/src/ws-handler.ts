@@ -541,10 +541,24 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                   toolDetail: m.toolDetail,
                   timestamp: m.timestamp,
                 })));
+
+                // Expand chatStartedAt to include synced messages if they fall before the boundary
+                if (syncSession?.chatStartedAt) {
+                  const earliestSynced = Math.min(...newMessages.map((m) => m.timestamp));
+                  if (earliestSynced < syncSession.chatStartedAt) {
+                    db.updateChatStartedAt(msg.sessionId!, earliestSynced);
+                  }
+                }
               }
 
-              // Send full updated history to this client
-              const allMessages = db.getMessages(msg.sessionId!);
+              // Send updated history respecting chatStartedAt
+              const refreshedSession = db.getSession(msg.sessionId!);
+              let allMessages;
+              if (refreshedSession?.chatStartedAt) {
+                allMessages = db.getMessagesAfter(msg.sessionId!, refreshedSession.chatStartedAt);
+              } else {
+                allMessages = db.getMessages(msg.sessionId!);
+              }
               ws.send(JSON.stringify({ type: 'history', serverId: msg.serverId, sessionId: msg.sessionId, messages: allMessages }));
               ws.send(JSON.stringify({ type: 'sync-result', serverId: msg.serverId, sessionId: msg.sessionId, success: true, added: newMessages.length }));
             } catch (err: any) {
@@ -783,9 +797,43 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               db.updateCliSessionId(msg.sessionId, msg.claudeSessionId);
               db.updateClaudeSessionId(msg.sessionId, msg.claudeSessionId);
 
-              // Set chat boundary — fresh view for this CLI session
+              // Auto-sync transcript from the resumed CLI session
+              let syncedMessages: ParsedMessage[] = [];
+              try {
+                const rsProvider = getProvider(db, registry, msg.sessionId);
+                const runCommand = async (command: string) => sshManager.runCommand(msg.serverId, null, command);
+                syncedMessages = await rsProvider.syncTranscript(runCommand, msg.claudeSessionId, rsSession.workingDir ?? undefined);
+              } catch { /* sync is best-effort */ }
+
+              // Set chatStartedAt to the earliest synced message, or now if none
               const rsNow = Date.now();
-              db.updateChatStartedAt(msg.sessionId, rsNow);
+              let chatBoundary = rsNow;
+              if (syncedMessages.length > 0) {
+                chatBoundary = Math.min(...syncedMessages.map((m) => m.timestamp));
+              }
+              db.updateChatStartedAt(msg.sessionId, chatBoundary);
+
+              // Save synced messages (dedup against existing)
+              if (syncedMessages.length > 0) {
+                const existing = db.getMessages(msg.sessionId, 10000);
+                const signatures = new Set<string>();
+                for (const m of existing) {
+                  signatures.add(msgSignature(m.type, m.content));
+                }
+                const newMsgs = syncedMessages.filter(
+                  (m) => !signatures.has(msgSignature(m.type, m.content)),
+                );
+                if (newMsgs.length > 0) {
+                  db.saveMessages(newMsgs.map((m) => ({
+                    sessionId: msg.sessionId!,
+                    type: m.type,
+                    content: m.content,
+                    toolName: m.toolName,
+                    toolDetail: m.toolDetail,
+                    timestamp: m.timestamp,
+                  })));
+                }
+              }
 
               // Insert system message
               const rsMsg = {
@@ -797,8 +845,10 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               };
               db.saveMessage(rsMsg);
 
-              // Send clean view with just the system message
-              broadcast(wss, { type: 'history', serverId: msg.serverId, sessionId: msg.sessionId, messages: [], hasMore: false });
+              // Send history with synced messages
+              const rsMessages = db.getMessagesAfter(msg.sessionId, chatBoundary);
+              const rsTotalCount = db.getMessageCountAfter(msg.sessionId, chatBoundary);
+              broadcast(wss, { type: 'history', serverId: msg.serverId, sessionId: msg.sessionId, messages: rsMessages, hasMore: rsTotalCount > rsMessages.length });
 
               // Re-launch CLI with --resume
               const rsServer = db.getServer(msg.serverId);
