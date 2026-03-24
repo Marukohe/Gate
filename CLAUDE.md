@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Gate is a responsive web app for "vibe coding" — chat with Claude Code CLI running on remote servers via SSH + tmux, from any device (phone, tablet, desktop). Internal network deployment only, no auth.
+Gate is a responsive web app for "vibe coding" — chat with AI coding CLIs (Claude Code, OpenAI Codex) running on remote servers via SSH, from any device (phone, tablet, desktop). Internal network deployment only, no auth.
 
 ## Architecture
 
@@ -17,7 +17,7 @@ Browser (React) <--WebSocket--> Node.js Backend <--SSH--> Remote Server (CLI too
 ```
 
 - **Monorepo** with npm workspaces: `client/` and `server/`
-- Backend parses Claude Code CLI terminal output into structured messages (strip ANSI, detect tool calls/user prompts/assistant text) and streams them to the frontend via WebSocket
+- Backend parses CLI terminal output into structured messages via provider-specific parsers and streams them to the frontend via WebSocket
 - Frontend renders parsed messages as chat bubbles with markdown, syntax highlighting, and collapsible tool call cards
 - Plan management: extract markdown checklists from chat into a dedicated panel for tracking/editing
 
@@ -43,7 +43,7 @@ npm run dev:server
 cd server && npx vitest run
 
 # Run a specific test file
-cd server && npx vitest run src/parser.test.ts
+cd server && npx vitest run src/__tests__/providers/claude/parser.test.ts
 
 # Type check server
 cd server && npx tsc --noEmit
@@ -72,28 +72,32 @@ npm publish --access public # build + publish to npm
 ## Key Modules
 
 **Server:**
-- `server/src/db.ts` — SQLite layer: servers, sessions, messages tables
+- `server/src/db.ts` — SQLite layer: servers, sessions, messages tables (with chatStartedAt, providerSessionMap)
 - `server/src/ssh-manager.ts` — SSH connection pool + tmux session attach/create via ssh2
-- `server/src/parser.ts` — State machine that incrementally parses Claude Code terminal output into `ParsedMessage` objects (types: assistant, user, tool_call, tool_result, system)
-- `server/src/ws-handler.ts` — WebSocket server that bridges browser clients to SSH sessions, wires parser output to broadcast
+- `server/src/ssh-browse.ts` — Remote directory browsing via SSH
+- `server/src/ws-handler.ts` — WebSocket server: bridges browser clients to SSH sessions, handles provider switching, conversation reset/resume
 - `server/src/routes/servers.ts` — REST CRUD for server configurations
 - `server/src/providers/types.ts` — CLIProvider interface, OutputParser abstract class, ParsedMessage type
 - `server/src/providers/registry.ts` — Provider registration and lookup
 - `server/src/providers/claude/` — Claude Code CLI provider (parser, transcript, command building)
-- `server/src/providers/codex/` — OpenAI Codex CLI provider (parser, transcript, command building)
+- `server/src/providers/codex/` — OpenAI Codex CLI provider (parser, transcript, tool-utils, command building)
 
 **Client:**
-- `client/src/stores/` — Zustand stores: server-store, chat-store, plan-store, ui-store
+- `client/src/stores/` — Zustand stores: server-store, session-store, chat-store, plan-store, plan-mode-store, ui-store
 - `client/src/hooks/use-websocket.ts` — Singleton WebSocket connection with auto-reconnect
 - `client/src/components/layout/` — AppShell (3-column responsive), Sidebar, TopBar
-- `client/src/components/chat/` — ChatView, MessageBubble, ToolCallCard, CodeBlock, ChatInput
+- `client/src/components/chat/` — ChatView, MessageBubble, ToolCallCard, ToolActivityBlock, CodeBlock, ChatInput, SessionBar, ProviderSwitcher, CreateSessionDialog, ResumeChatDialog, BranchSwitcher
 - `client/src/components/plan/` — PlanPanel (view/edit modes), PlanStepItem
+- `client/src/components/plan-mode/` — PlanModeOverlay, PlanModeQuestion, PlanModeThinking, PlanModeDone
+- `client/src/components/server/` — ServerDialog
 - `client/src/lib/plan-parser.ts` — Markdown checklist ↔ PlanStep[] conversion
 
 ## WebSocket Protocol
 
 Client sends: `{ type: 'connect'|'input'|'disconnect', serverId, text?, tmuxSession? }`
 Client sends: `{ type: 'switch-provider', serverId, sessionId, provider }`
+Client sends: `{ type: 'reset-conversation', serverId, sessionId }`
+Client sends: `{ type: 'resume-cli-session', serverId, sessionId, claudeSessionId }`
 Client sends: `{ type: 'list-cli-sessions', serverId, workingDir, provider }`
 Server sends: `{ type: 'message'|'status'|'history', serverId, ... }`
 Server sends: `{ type: 'cli-sessions', serverId, sessions }`

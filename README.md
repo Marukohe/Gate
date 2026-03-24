@@ -2,12 +2,12 @@
 
 [English](README.md) | [中文](README_CN.md)
 
-**Gate** opens a portal to [Claude Code](https://docs.anthropic.com/en/docs/claude-code) on remote servers — code from anywhere, on any device.
+**Gate** opens a portal to AI coding CLIs ([Claude Code](https://docs.anthropic.com/en/docs/claude-code), [OpenAI Codex](https://github.com/openai/codex)) on remote servers — code from anywhere, on any device.
 
-Waiting in line, on the couch, on the train — pull out your phone and pick up right where you left off. Gate bridges your browser to Claude Code CLI sessions over SSH + tmux, so your coding environment is always one tap away.
+Waiting in line, on the couch, on the train — pull out your phone and pick up right where you left off. Gate bridges your browser to CLI sessions over SSH, so your coding environment is always one tap away.
 
 ```
-Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──► Remote Server (tmux + claude)
+Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──► Remote Server (Claude / Codex CLI)
 ```
 
 ## Example
@@ -26,13 +26,14 @@ Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──�
 ## Key Features
 
 - **Code from anywhere** — Start on your desktop, pick up on your phone. Sessions persist across devices via SSH + tmux.
-- **Attach to existing sessions** — Already running Claude Code in a terminal? Gate finds its JSONL transcript and resumes right where you left off.
+- **Attach to existing sessions** — Already running a CLI in a terminal? Gate finds its transcript and resumes right where you left off.
 - **Clean chat UI** — Terminal output parsed into markdown messages, collapsible tool cards, syntax-highlighted code blocks, and scrollable tables.
 - **Multi-server, multi-session** — Manage several remote servers with multiple sessions each. Swipe or tap to switch.
 - **Live plan tracking** — Checklists auto-extracted from Claude's output into a side panel. Check off steps, edit plans, send them back for execution.
-- **Transcript sync** — Catch up on work done outside Gate by syncing the JSONL transcript from the remote server.
+- **Transcript sync** — Catch up on work done outside Gate by syncing the transcript from the remote CLI session.
 - **Responsive everywhere** — Three-column desktop, drawers on tablet, bottom sheets and swipe gestures on mobile. Notch-safe.
-- **Multi-CLI support** — Works with Claude Code and OpenAI Codex CLI. Switch between CLI tools within a session with automatic context sync.
+- **Multi-CLI support** — Works with Claude Code and OpenAI Codex CLI. Switch between CLI tools within a session with automatic context sync. Provider sessions are preserved — switching back resumes your previous conversation, not a new one.
+- **Switch Chat** — Start a fresh CLI conversation or resume a previous one within the same session. Messages are scoped per CLI session so switching gives you a clean view.
 - **Persistent history** — SQLite-backed chat history survives reconnects and server restarts.
 
 ## Quick Start
@@ -40,9 +41,10 @@ Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──�
 ### Prerequisites
 
 - Node.js >= 18
-- A remote server with SSH access and [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed
+- A remote server with SSH access and at least one of:
+  - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) — run `claude` once on the server to complete authentication
+  - [OpenAI Codex CLI](https://github.com/openai/codex) — run `codex` once on the server to complete authentication
 - tmux on the remote server
-- **Claude Code logged in on the remote server** — SSH into the server and run `claude` once to complete authentication before using Gate
 
 ### Install via npm (recommended)
 
@@ -97,21 +99,30 @@ gate/
 ├── client/                      # React frontend
 │   └── src/
 │       ├── components/
-│       │   ├── chat/            # ChatView, MessageBubble, ToolCallCard, ChatInput
+│       │   ├── chat/            # ChatView, SessionBar, MessageBubble, ToolActivityBlock,
+│       │   │                    # ChatInput, ProviderSwitcher, ResumeChatDialog, BranchSwitcher
 │       │   ├── layout/          # AppShell, Sidebar, TopBar
 │       │   ├── plan/            # PlanPanel, PlanStepItem
+│       │   ├── plan-mode/       # PlanModeOverlay, PlanModeQuestion, PlanModeThinking
+│       │   ├── server/          # ServerDialog
 │       │   └── ui/              # shadcn/ui components
 │       ├── hooks/               # use-websocket, use-swipe
-│       ├── stores/              # Zustand stores (server, session, chat, plan, ui)
-│       └── lib/                 # Utilities (plan-parser, server-utils)
+│       ├── stores/              # Zustand stores (server, session, chat, plan, plan-mode, ui)
+│       └── lib/                 # Utilities (plan-parser, server-utils, notification)
 ├── server/                      # Node.js backend
 │   └── src/
 │       ├── index.ts             # Express entry point
 │       ├── db.ts                # SQLite (servers, sessions, messages)
 │       ├── ssh-manager.ts       # SSH connection pool + tmux
-│       ├── stream-json-parser.ts# Claude CLI output parser
+│       ├── ssh-browse.ts        # Remote directory browsing
 │       ├── ws-handler.ts        # WebSocket server
-│       └── routes/              # REST API
+│       ├── routes/              # REST API
+│       ├── providers/
+│       │   ├── types.ts         # CLIProvider interface, OutputParser, ParsedMessage
+│       │   ├── registry.ts      # Provider registration and lookup
+│       │   ├── claude/          # Claude Code CLI provider
+│       │   └── codex/           # OpenAI Codex CLI provider
+│       └── __tests__/           # Vitest test suites
 └── docs/                        # Design documents
 ```
 
@@ -128,11 +139,15 @@ gate/
 Client → Server:
 ```jsonc
 { "type": "connect" | "input" | "disconnect", "serverId": "...", "sessionId": "...", "text": "..." }
+{ "type": "switch-provider", "serverId": "...", "sessionId": "...", "provider": "codex" }
+{ "type": "reset-conversation" | "resume-cli-session", "serverId": "...", "sessionId": "...", "claudeSessionId": "..." }
+{ "type": "list-cli-sessions", "serverId": "...", "workingDir": "...", "provider": "claude" }
 ```
 
 Server → Client:
 ```jsonc
 { "type": "message" | "status" | "history" | "sessions" | "git-info", "serverId": "...", ... }
+{ "type": "cli-sessions", "serverId": "...", "sessions": ["..."] }
 ```
 
 ## Responsive Layout
