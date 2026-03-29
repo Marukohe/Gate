@@ -313,6 +313,14 @@ export class SSHManager extends EventEmitter {
     return info;
   }
 
+  /** Disconnect all SSH connections. */
+  async disconnectAll(): Promise<void> {
+    const serverIds = [...this.connections.keys()];
+    for (const id of serverIds) {
+      await this.disconnect(id);
+    }
+  }
+
   isConnected(serverId: string): boolean {
     return this.connections.has(serverId);
   }

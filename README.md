@@ -25,7 +25,7 @@ Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──�
 
 ## Key Features
 
-- **Code from anywhere** — Start on your desktop, pick up on your phone. Sessions persist across devices via SSH + tmux.
+- **Code from anywhere** — Start on your desktop, pick up on your phone. Sessions persist across devices via SSH and CLI resume.
 - **Attach to existing sessions** — Already running a CLI in a terminal? Gate finds its transcript and resumes right where you left off.
 - **Clean chat UI** — Terminal output parsed into markdown messages, collapsible tool cards, syntax-highlighted code blocks, and scrollable tables.
 - **Multi-server, multi-session** — Manage several remote servers with multiple sessions each. Swipe or tap to switch.
@@ -44,7 +44,6 @@ Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──�
 - A remote server with SSH access and at least one of:
   - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) — run `claude` once on the server to complete authentication
   - [OpenAI Codex CLI](https://github.com/openai/codex) — run `codex` once on the server to complete authentication
-- tmux on the remote server
 
 ### Install via npm (recommended)
 
@@ -113,7 +112,7 @@ gate/
 │   └── src/
 │       ├── index.ts             # Express entry point
 │       ├── db.ts                # SQLite (servers, sessions, messages)
-│       ├── ssh-manager.ts       # SSH connection pool + tmux
+│       ├── ssh-manager.ts       # SSH connection pool + CLI channel management
 │       ├── ssh-browse.ts        # Remote directory browsing
 │       ├── ws-handler.ts        # WebSocket server
 │       ├── routes/              # REST API

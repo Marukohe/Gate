@@ -25,7 +25,7 @@
 
 ## 核心特性
 
-- **随时随地编程** — 在电脑上开始，手机上继续。会话通过 SSH + tmux 跨设备持久化。
+- **随时随地编程** — 在电脑上开始，手机上继续。会话通过 SSH 和 CLI resume 跨设备持久化。
 - **接入已有会话** — 已经在终端跑 CLI 了？Gate 能找到它的日志并从断点处恢复。
 - **清爽的聊天界面** — 终端输出解析为 Markdown 消息，可折叠的工具调用卡片，语法高亮代码块，可滚动表格。
 - **多服务器、多会话** — 管理多台远程服务器，每台多个会话。滑动或点击切换。
@@ -44,7 +44,6 @@
 - 一台有 SSH 访问权限的远程服务器，至少安装以下之一：
   - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) — 在服务器上运行一次 `claude` 完成认证
   - [OpenAI Codex CLI](https://github.com/openai/codex) — 在服务器上运行一次 `codex` 完成认证
-- 远程服务器上安装了 tmux
 
 ### 通过 npm 安装（推荐）
 
@@ -113,7 +112,7 @@ gate/
 │   └── src/
 │       ├── index.ts             # Express 入口
 │       ├── db.ts                # SQLite (servers, sessions, messages)
-│       ├── ssh-manager.ts       # SSH 连接池 + tmux
+│       ├── ssh-manager.ts       # SSH 连接池 + CLI 通道管理
 │       ├── ssh-browse.ts        # 远程目录浏览
 │       ├── ws-handler.ts        # WebSocket 服务端
 │       ├── routes/              # REST API

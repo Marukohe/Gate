@@ -35,7 +35,7 @@ function getProvider(db: Database, registry: ProviderRegistry, sessionId: string
   return provider;
 }
 
-export function setupWebSocket(httpServer: HttpServer, db: Database, registry: ProviderRegistry): void {
+export function setupWebSocket(httpServer: HttpServer, db: Database, registry: ProviderRegistry): SSHManager {
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
   const sshManager = new SSHManager();
   const parsers = new Map<string, OutputParser>(); // keyed by sessionId
@@ -890,6 +890,8 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
       }
     });
   });
+
+  return sshManager;
 }
 
 /** Dedup signature: type + first 150 chars of content. */

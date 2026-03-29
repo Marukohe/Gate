@@ -86,7 +86,7 @@ registry.setDefault('claude');
 
 const httpServer = createServer(app);
 
-setupWebSocket(httpServer, db, registry);
+const sshManager = setupWebSocket(httpServer, db, registry);
 
 httpServer.listen(PORT, HOST, () => {
   console.log(`Server running on http://${HOST}:${PORT}`);
@@ -94,9 +94,11 @@ httpServer.listen(PORT, HOST, () => {
 
 function shutdown() {
   console.log('Shutting down...');
-  httpServer.close();
-  db.close();
-  process.exit(0);
+  sshManager.disconnectAll().catch(() => {}).finally(() => {
+    httpServer.close();
+    db.close();
+    process.exit(0);
+  });
 }
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);

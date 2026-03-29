@@ -73,7 +73,7 @@ npm publish --access public # build + publish to npm
 
 **Server:**
 - `server/src/db.ts` — SQLite layer: servers, sessions, messages tables (with chatStartedAt, providerSessionMap)
-- `server/src/ssh-manager.ts` — SSH connection pool + tmux session attach/create via ssh2
+- `server/src/ssh-manager.ts` — SSH connection pool + CLI channel management via ssh2
 - `server/src/ssh-browse.ts` — Remote directory browsing via SSH
 - `server/src/ws-handler.ts` — WebSocket server: bridges browser clients to SSH sessions, handles provider switching, conversation reset/resume
 - `server/src/routes/servers.ts` — REST CRUD for server configurations
@@ -94,7 +94,7 @@ npm publish --access public # build + publish to npm
 
 ## WebSocket Protocol
 
-Client sends: `{ type: 'connect'|'input'|'disconnect', serverId, text?, tmuxSession? }`
+Client sends: `{ type: 'connect'|'input'|'disconnect', serverId, sessionId?, text? }`
 Client sends: `{ type: 'switch-provider', serverId, sessionId, provider }`
 Client sends: `{ type: 'reset-conversation', serverId, sessionId }`
 Client sends: `{ type: 'resume-cli-session', serverId, sessionId, claudeSessionId }`
