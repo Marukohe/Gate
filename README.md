@@ -40,7 +40,7 @@ Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──�
 
 ### Prerequisites
 
-- Node.js >= 18
+- Node.js >= 20
 - A remote server with SSH access and at least one of:
   - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) — run `claude` once on the server to complete authentication
   - [OpenAI Codex CLI](https://github.com/openai/codex) — run `codex` once on the server to complete authentication

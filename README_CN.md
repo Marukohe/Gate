@@ -40,7 +40,7 @@
 
 ### 前置条件
 
-- Node.js >= 18
+- Node.js >= 20
 - 一台有 SSH 访问权限的远程服务器，至少安装以下之一：
   - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) — 在服务器上运行一次 `claude` 完成认证
   - [OpenAI Codex CLI](https://github.com/openai/codex) — 在服务器上运行一次 `codex` 完成认证
