@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-Gate is a responsive web app that bridges a browser-based chat UI to Claude Code CLI sessions running on remote servers via SSH + tmux. It lets you "vibe code" from any device — phone, tablet, or desktop.
+Gate is a responsive web app that bridges a browser-based chat UI to AI coding CLI sessions (Claude Code, OpenAI Codex) running on remote servers via SSH. It lets you "vibe code" from any device — phone, tablet, or desktop.
 
 **Deployment model:** Internal network, no authentication.
 
@@ -12,7 +12,7 @@ Gate is a responsive web app that bridges a browser-based chat UI to Claude Code
 ┌──────────────┐     WebSocket      ┌──────────────┐      SSH        ┌──────────────┐
 │              │ ◄────────────────► │              │ ◄─────────────► │Remote Server │
 │   Browser    │   messages/status  │  Node.js     │  stdin/stdout   │              │
-│   (React)    │   history/git-info │  Backend     │  (tmux attach)  │  tmux+claude │
+│   (React)    │   history/git-info │  Backend     │  (ssh2 exec)    │ Claude/Codex │
 │              │                    │              │                 │              │
 └──────────────┘                    └──────────────┘                 └──────────────┘
        │                                   │
@@ -20,13 +20,23 @@ Gate is a responsive web app that bridges a browser-based chat UI to Claude Code
    (client state)                   (servers, sessions, messages)
 ```
 
+### Provider Layer
+
+```
+ProviderRegistry
+├── ClaudeProvider  (interactive, supportsStdin: true)
+└── CodexProvider   (per-message, supportsStdin: false)
+```
+
+Each provider implements the `CLIProvider` interface: `buildCommand()`, `formatInput()`, `createParser()`, `extractSessionId()`, `listRemoteSessions()`, `syncTranscript()`.
+
 ### Data Flow
 
 1. User types a message in the browser
 2. Client sends `{ type: 'input', serverId, sessionId, text }` over WebSocket
-3. Server writes text to the SSH channel (tmux stdin)
-4. Claude CLI processes and produces NDJSON output on stdout
-5. `StreamJsonParser` parses terminal output into typed `ParsedMessage` objects
+3. Server writes text to the SSH channel stdin (interactive providers) or launches a new CLI process (per-message providers)
+4. CLI processes and produces NDJSON output on stdout
+5. Provider-specific `OutputParser` parses terminal output into typed `ParsedMessage` objects
 6. Server broadcasts `{ type: 'message', message }` to all connected WebSocket clients
 7. Server persists each message to SQLite
 8. Client appends the message to the Zustand chat store and renders it
@@ -39,9 +49,9 @@ Gate is a responsive web app that bridges a browser-based chat UI to Claude Code
 | Styling | Tailwind CSS + shadcn/ui |
 | State | Zustand (with selective localStorage persistence) |
 | Backend | Express 5 + ws |
-| SSH | ssh2 (connection pool + tmux session management) |
+| SSH | ssh2 (connection pool + channel management) |
 | Database | better-sqlite3 (WAL mode) |
-| CLI Parser | Custom NDJSON stream parser |
+| CLI Parser | Provider-specific NDJSON parsers |
 | Testing | Vitest |
 
 ## 4. WebSocket Protocol
@@ -51,20 +61,30 @@ Gate is a responsive web app that bridges a browser-based chat UI to Claude Code
 ```typescript
 interface ClientMessage {
   type:
-    | 'connect'          // Attach to a session (loads history + starts Claude)
-    | 'input'            // Send user text to Claude
-    | 'disconnect'       // Detach from session
-    | 'create-session'   // Create a new session
-    | 'delete-session'   // Delete a session
-    | 'fetch-git-info'   // Get current branch + worktree
-    | 'list-branches'    // List local/remote branches
-    | 'switch-branch'    // Checkout a different branch
-    | 'exec';            // Run a shell command (! prefix)
+    | 'connect'              // Attach to a session (loads history + starts CLI)
+    | 'input'                // Send user text to CLI
+    | 'disconnect'           // Detach from session
+    | 'create-session'       // Create a new session
+    | 'delete-session'       // Delete a session
+    | 'fetch-git-info'       // Get current branch + worktree
+    | 'list-branches'        // List local/remote branches
+    | 'switch-branch'        // Checkout a different branch
+    | 'exec'                 // Run a shell command (! prefix)
+    | 'sync-transcript'      // Sync CLI transcript from remote
+    | 'list-cli-sessions'    // List remote CLI sessions for a provider
+    | 'switch-provider'      // Switch CLI provider (e.g. claude → codex)
+    | 'reset-conversation'   // Start a fresh CLI conversation
+    | 'resume-cli-session'   // Resume a specific CLI session
+    | 'load-more';           // Load older messages
   serverId: string;
   sessionId?: string;
   text?: string;
   branch?: string;
   command?: string;
+  claudeSessionId?: string;
+  provider?: string;
+  workingDir?: string;
+  beforeTimestamp?: number;
 }
 ```
 
@@ -73,12 +93,16 @@ interface ClientMessage {
 ```typescript
 interface ServerMessage {
   type:
-    | 'message'    // Single parsed message from Claude
-    | 'status'     // Connection status change
-    | 'history'    // Full message history for a session
-    | 'sessions'   // Updated session list
-    | 'git-info'   // Branch + worktree info
-    | 'branches';  // Branch list response
+    | 'message'          // Single parsed message from CLI
+    | 'status'           // Connection status change
+    | 'history'          // Full message history for a session
+    | 'history-prepend'  // Older messages for scroll-back
+    | 'sessions'         // Updated session list
+    | 'session-created'  // Newly created session
+    | 'git-info'         // Branch + worktree info
+    | 'branches'         // Branch list response
+    | 'sync-result'      // Transcript sync result
+    | 'cli-sessions';    // Remote CLI session list
   serverId: string;
   sessionId?: string;
 }
@@ -90,18 +114,18 @@ interface ServerMessage {
 Client                          Server
   │                               │
   ├─ connect(serverId, sessionId)─►
-  │                               ├─ Load messages from DB
+  │                               ├─ Load messages from DB (respecting chatStartedAt)
   │                   ◄─ history ─┤
   │                               ├─ Check for active SSH channel
-  │                               ├─ If none: SSH connect → tmux → start Claude
+  │                               ├─ If none: SSH connect → start CLI via exec
   │                  ◄─ status ───┤  (status: 'connected')
   │                               │
-  ├─ input(text) ────────────────►├─ Write to SSH channel
+  ├─ input(text) ────────────────►├─ Write to SSH channel (stdin)
   │                               ├─ Save user message to DB
-  │                               │  ... Claude processes ...
+  │                               │  ... CLI processes ...
   │                  ◄─ message ──┤  (parsed assistant/tool_call/tool_result)
   │                               │
-  ├─ disconnect ─────────────────►├─ Stop tmux session
+  ├─ disconnect ─────────────────►├─ Close SSH channel
   │                               │
 ```
 
@@ -116,7 +140,7 @@ servers (
   host TEXT NOT NULL,
   port INTEGER DEFAULT 22,
   username TEXT NOT NULL,
-  authType TEXT NOT NULL,       -- 'password' | 'privateKey'
+  authType TEXT NOT NULL,           -- 'password' | 'privateKey'
   password TEXT,
   privateKeyPath TEXT,
   defaultWorkingDir TEXT,
@@ -127,7 +151,11 @@ sessions (
   id TEXT PRIMARY KEY,
   serverId TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
   name TEXT NOT NULL DEFAULT 'Default',
-  claudeSessionId TEXT,         -- For --resume on reconnect
+  claudeSessionId TEXT,             -- Legacy, kept for backward compat
+  cliSessionId TEXT,                -- Current provider's CLI session ID
+  provider TEXT DEFAULT 'claude',   -- Active provider name
+  providerSessionMap TEXT,          -- JSON: { [provider]: cliSessionId }
+  chatStartedAt INTEGER,            -- Message boundary for current chat
   workingDir TEXT,
   createdAt INTEGER NOT NULL,
   lastActiveAt INTEGER NOT NULL
@@ -136,11 +164,12 @@ sessions (
 messages (
   id TEXT PRIMARY KEY,
   sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-  type TEXT NOT NULL,            -- assistant | user | tool_call | tool_result | system
+  type TEXT NOT NULL,                -- assistant | user | tool_call | tool_result | system
   content TEXT NOT NULL,
   toolName TEXT,
   toolDetail TEXT,
-  timestamp INTEGER NOT NULL
+  timestamp INTEGER NOT NULL,
+  provider TEXT                      -- Which CLI provider produced this message
 )
 ```
 
@@ -149,21 +178,23 @@ messages (
 | Type | Source | Description |
 |------|--------|-------------|
 | `user` | WebSocket `input` handler | User's chat text |
-| `assistant` | Claude CLI `assistant` event | Claude's text response |
-| `tool_call` | Claude CLI `assistant` event | Tool invocation with JSON input |
-| `tool_result` | Claude CLI `user` event | Tool execution output |
-| `system` | Claude CLI `system`/`result` | Session init, cost summary |
+| `assistant` | CLI `assistant` event | CLI's text response |
+| `tool_call` | CLI `assistant` event | Tool invocation with JSON input |
+| `tool_result` | CLI `user` event | Tool execution output |
+| `system` | CLI `system`/`result` event | Session init, cost summary, provider switches |
 
 ## 6. Client State Management
 
-Four Zustand stores with clear responsibilities:
+Six Zustand stores with clear responsibilities:
 
 | Store | Key State | Persisted |
 |-------|-----------|-----------|
 | `server-store` | Server list, active server ID | `activeServerId` |
 | `session-store` | Sessions per server, active session IDs, connection status, git info | `activeSessionId` |
 | `chat-store` | Messages keyed by session ID | No (fetched from server) |
-| `ui-store` | Sidebar open, plan panel open | No |
+| `plan-store` | Extracted plans and checklist state | No |
+| `plan-mode-store` | Plan mode phase tracking | No |
+| `ui-store` | Sidebar open, plan panel open, sync status | No |
 
 ### Persistence Strategy
 
@@ -171,45 +202,66 @@ Four Zustand stores with clear responsibilities:
 - Chat messages are NOT persisted client-side — they are loaded from SQLite on each `connect`
 - On page refresh: persisted IDs are validated against the server, then a `connect` message is sent to reload history
 
-## 7. SSH & tmux Management
+## 7. SSH Management
 
-The `SSHManager` class manages a pool of SSH connections and tmux sessions:
+The `SSHManager` class manages a pool of SSH connections and CLI channels:
 
 ```
 SSHManager
   ├── connections: Map<serverId, { client, channels: Map<sessionId, channel> }>
   │
-  ├── connect(config)          → Establish SSH connection
-  ├── startClaude(serverId, sessionId, resumeId?, workingDir?)
-  │                            → tmux new-session / send-keys to start Claude CLI
+  ├── connect(config)           → Establish SSH connection
+  ├── ensureConnected(serverId) → Ping check + auto-reconnect if stale
+  ├── startCLI(serverId, sessionId, command)
+  │                             → ssh2 exec to launch CLI process
   ├── sendInput(serverId, sessionId, text)
-  │                            → Write to tmux stdin
+  │                             → Write to channel stdin
   ├── stopSession(serverId, sessionId)
-  │                            → Kill tmux session
+  │                             → Close the SSH channel
+  ├── disconnect(serverId)      → Close all channels + SSH connection
+  ├── disconnectAll()           → Disconnect all servers (on shutdown)
   ├── fetchGitInfo(serverId, workingDir)
-  │                            → Run git commands, return branch + worktree
+  │                             → Run git commands, return branch + worktree
   └── runCommand(serverId, workingDir?, command)
-                               → Execute arbitrary shell command (! prefix)
+                                → Execute arbitrary shell command
 ```
 
-**Claude CLI invocation:**
+**CLI invocation examples:**
 ```bash
-bash -lc "cd <workingDir> && claude -p [--resume <id>] \
-  --output-format stream-json --input-format stream-json \
-  --verbose --dangerously-skip-permissions"
+# Claude Code (interactive)
+$SHELL -lc "cd <workingDir> && claude [--resume <id>] --output-format stream-json --input-format stream-json --verbose --dangerously-skip-permissions"
+
+# OpenAI Codex (per-message)
+$SHELL -lc "cd <workingDir> && codex exec --json [resume '<id>' | '<prompt>']"
 ```
 
-## 8. Terminal Output Parser
+## 8. Provider Architecture
 
-`StreamJsonParser` is an EventEmitter-based NDJSON parser that processes Claude CLI's `stream-json` output:
+Each CLI tool is encapsulated as a provider implementing the `CLIProvider` interface:
 
-**Input events from Claude CLI:**
-- `{type: "system", subtype: "init", session_id}` → system message
-- `{type: "assistant", message: {content: [{type: "text"}, {type: "tool_use"}]}}` → assistant text + tool calls
-- `{type: "user", message: {content: [{type: "tool_result"}]}}` → tool results
-- `{type: "result", duration_ms, num_turns}` → session summary
+| Aspect | Claude | Codex |
+|--------|--------|-------|
+| `supportsStdin` | true | false |
+| Launch model | Once, keep running | Per-message |
+| Input method | Write JSON to stdin | Pass as CLI argument |
+| Resume | `--resume <id>` flag | `codex exec --json resume '<id>'` |
+| Parser | Claude-specific NDJSON | Codex-specific JSON |
 
-**Output:** Emits `ParsedMessage` events with normalized type, content, toolName, and toolDetail fields.
+### Provider Switching
+
+When switching providers (e.g. Claude → Codex):
+1. Summarize current conversation context
+2. Save current provider's `cliSessionId` to `providerSessionMap`
+3. Restore target provider's saved session ID (if any)
+4. Launch target CLI with `--resume` (if session exists) and send context summary
+5. Display summary in system message
+
+### Chat Management (Switch Chat)
+
+Each Gate session can host multiple CLI conversations:
+- **New Chat**: Clears `cliSessionId`, sets `chatStartedAt` boundary, launches CLI fresh
+- **Resume**: Sets `cliSessionId` to selected session, auto-syncs transcript, updates `chatStartedAt`
+- Messages before `chatStartedAt` are hidden from the current view
 
 ## 9. Responsive Layout
 
@@ -250,10 +302,16 @@ Desktop (≥1024px)                 Mobile (<768px)
 
 2. **Server-side message persistence** — Messages are stored in SQLite, not client-side localStorage. This keeps the client lightweight and ensures history survives across different devices/browsers.
 
-3. **Parser skips user echoes** — Claude CLI echoes user input as `{type: "user"}` events. The parser skips these to avoid duplicate storage; user messages are saved directly from the WebSocket `input` handler.
+3. **Parser skips user echoes** — CLI echoes user input as `{type: "user"}` events. The parser skips these to avoid duplicate storage; user messages are saved directly from the WebSocket `input` handler.
 
-4. **Session resumption** — Each session tracks a `claudeSessionId`. On reconnect, the server passes `--resume <id>` to Claude CLI to continue the conversation without re-uploading context.
+4. **Session resumption** — Each session tracks a `cliSessionId` per provider via `providerSessionMap`. On reconnect, the server passes the resume flag to the CLI to continue the conversation.
 
-5. **Selective state persistence** — Only `activeServerId` and `activeSessionId` are persisted to localStorage. Everything else (messages, sessions list, connection status) is ephemeral and fetched from the server on connect.
+5. **Per-CLI-session message isolation** — `chatStartedAt` acts as a boundary: switching CLI conversations gives a clean message view without deleting old data.
 
-6. **Bottom sheet over sidebar drawer** — On mobile, the server list uses a bottom sheet instead of a left drawer, aligning with modern mobile UX patterns and keeping the trigger button within thumb reach.
+6. **Provider session preservation** — Switching providers saves the current `cliSessionId` and restores the target's, so switching back resumes instead of creating a new conversation.
+
+7. **Selective state persistence** — Only `activeServerId` and `activeSessionId` are persisted to localStorage. Everything else is ephemeral and fetched from the server on connect.
+
+8. **SSH exec, not tmux** — CLI processes run directly via `ssh2.exec()`, not through tmux. Simpler management, and `--resume` handles continuity. Gate shutdown closes all SSH connections via `disconnectAll()`.
+
+9. **Bottom sheet over sidebar drawer** — On mobile, the server list uses a bottom sheet instead of a left drawer, aligning with modern mobile UX patterns and keeping the trigger button within thumb reach.
