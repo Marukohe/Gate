@@ -81,7 +81,7 @@ export function BranchSwitcher({ open, onOpenChange, sessionId, serverId, onList
           autoFocus
         />
 
-        <ScrollArea className="h-64">
+        <ScrollArea className="h-64 overflow-hidden">
           {loading ? (
             <div className="flex items-center justify-center p-8">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -145,7 +145,7 @@ function BranchGroup({ label, icon, branches, current, switching, onSwitch }: {
           <button
             key={branch}
             className={cn(
-              'flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm font-mono',
+              'flex w-full min-w-0 items-center gap-2 rounded px-2 py-1.5 text-sm font-mono',
               isCurrent ? 'bg-primary/10 text-primary' : 'hover:bg-muted',
               isSwitching && 'opacity-60',
             )}
