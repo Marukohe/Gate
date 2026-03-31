@@ -18,7 +18,7 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3030;
 const HOST = process.env.HOST || '0.0.0.0';
 
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 const dataDir = process.env.GATE_DATA_DIR || path.join(os.homedir(), '.gate');
 fs.mkdirSync(dataDir, { recursive: true });
@@ -63,7 +63,16 @@ app.post('/api/mkdir', async (req, res) => {
   }
 });
 
-app.use('/api/servers', createServerRoutes(db));
+const registry = new ProviderRegistry();
+registry.register(new ClaudeProvider());
+registry.register(new CodexProvider());
+registry.setDefault('claude');
+
+const httpServer = createServer(app);
+
+const sshManager = setupWebSocket(httpServer, db, registry);
+
+app.use('/api/servers', createServerRoutes(db, sshManager));
 
 // Serve built client in production
 const clientDist = path.resolve(__dirname, '../../client/dist');
@@ -78,15 +87,6 @@ if (fs.existsSync(clientIndexPath)) {
   console.warn(`Warning: client build not found at ${clientDist}`);
   console.warn('Run "npm run build" first, or use "npm run dev" for development.');
 }
-
-const registry = new ProviderRegistry();
-registry.register(new ClaudeProvider());
-registry.register(new CodexProvider());
-registry.setDefault('claude');
-
-const httpServer = createServer(app);
-
-const sshManager = setupWebSocket(httpServer, db, registry);
 
 httpServer.listen(PORT, HOST, () => {
   console.log(`Server running on http://${HOST}:${PORT}`);

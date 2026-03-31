@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import type { Database } from '../db.js';
+import type { SSHManager } from '../ssh-manager.js';
 import { listRemoteDirectory, createRemoteDirectory } from '../ssh-browse.js';
 
-export function createServerRoutes(db: Database): Router {
+export function createServerRoutes(db: Database, sshManager?: SSHManager): Router {
   const router = Router();
 
   router.get('/', (_req, res) => {
@@ -100,6 +101,43 @@ export function createServerRoutes(db: Database): Router {
   router.delete('/:id/sessions/:sessionId', (req, res) => {
     db.deleteSession(req.params.sessionId);
     res.status(204).end();
+  });
+
+  // Upload file to remote server via SFTP (base64 encoded)
+  router.post('/:id/sessions/:sessionId/upload', async (req, res) => {
+    if (!sshManager) return res.status(500).json({ error: 'SSH manager not available' });
+    const server = db.getServer(req.params.id);
+    if (!server) return res.status(404).json({ error: 'Server not found' });
+    const session = db.getSession(req.params.sessionId);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+
+    const { fileName, data } = req.body;
+    if (!fileName || !data) return res.status(400).json({ error: 'Missing fileName or data' });
+
+    try {
+      if (!sshManager.isConnected(server.id)) {
+        return res.status(400).json({ error: 'Not connected to server' });
+      }
+
+      // Upload to global directory (~/.gate/uploads/) to avoid polluting git repos
+      const uploadDir = '$HOME/.gate/uploads';
+      await sshManager.runCommand(server.id, null, `mkdir -p '${uploadDir}'`);
+
+      // Add timestamp prefix to avoid collisions
+      const remoteName = `${Date.now()}-${fileName}`;
+
+      // Resolve $HOME to get absolute path for SFTP
+      const { stdout: homePath } = await sshManager.runCommand(server.id, null, 'echo $HOME');
+      const resolvedDir = `${homePath.trim()}/.gate/uploads`;
+      const remotePath = `${resolvedDir}/${remoteName}`;
+
+      const fileBuffer = Buffer.from(data, 'base64');
+      await sshManager.uploadFile(server.id, remotePath, fileBuffer);
+
+      res.json({ remotePath });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   return router;

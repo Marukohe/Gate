@@ -313,6 +313,22 @@ export class SSHManager extends EventEmitter {
     return info;
   }
 
+  /** Upload a file to the remote server via SFTP. Returns the remote path. */
+  async uploadFile(serverId: string, remotePath: string, data: Buffer): Promise<string> {
+    const conn = this.connections.get(serverId);
+    if (!conn) throw new Error(`No connection for server ${serverId}`);
+
+    return new Promise((resolve, reject) => {
+      conn.client.sftp((err, sftp) => {
+        if (err) return reject(err);
+        const ws = sftp.createWriteStream(remotePath);
+        ws.on('error', (e: Error) => { sftp.end(); reject(e); });
+        ws.on('close', () => { sftp.end(); resolve(remotePath); });
+        ws.end(data);
+      });
+    });
+  }
+
   /** Disconnect all SSH connections. */
   async disconnectAll(): Promise<void> {
     const serverIds = [...this.connections.keys()];
