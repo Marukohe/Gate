@@ -6,7 +6,7 @@ import type { ProviderRegistry } from './providers/registry.js';
 import type { Database } from './db.js';
 
 interface ClientMessage {
-  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions' | 'list-cli-sessions' | 'load-more' | 'switch-provider' | 'reset-conversation' | 'resume-cli-session';
+  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions' | 'list-cli-sessions' | 'load-more' | 'switch-provider' | 'reset-conversation' | 'resume-cli-session' | 'fetch-git-status' | 'fetch-git-diff' | 'fetch-pr-info' | 'git-commit' | 'git-create-pr';
   serverId: string;
   sessionId?: string;
   sessionName?: string;
@@ -17,10 +17,15 @@ interface ClientMessage {
   claudeSessionId?: string;
   beforeTimestamp?: number;
   provider?: string;
+  message?: string;
+  files?: string[];
+  title?: string;
+  body?: string;
+  diffArgs?: string;
 }
 
 interface ServerMessage {
-  type: 'message' | 'status' | 'history' | 'history-prepend' | 'sessions' | 'git-info' | 'branches' | 'sync-result' | 'claude-sessions' | 'cli-sessions';
+  type: 'message' | 'status' | 'history' | 'history-prepend' | 'sessions' | 'git-info' | 'branches' | 'sync-result' | 'claude-sessions' | 'cli-sessions' | 'git-status' | 'git-diff' | 'pr-info' | 'git-commit-result' | 'git-create-pr-result';
   serverId: string;
   sessionId?: string | null;
   [key: string]: any;
@@ -881,6 +886,64 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             } catch (err: any) {
               console.error('[resume-cli-session] error:', err.message);
               ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: err.message }));
+            }
+            break;
+          }
+
+          case 'fetch-git-status': {
+            if (!msg.sessionId) return;
+            const gsSession = db.getSession(msg.sessionId);
+            if (!gsSession?.workingDir) return;
+            if (!sshManager.isConnected(msg.serverId)) return;
+            const raw = await sshManager.fetchGitStatus(msg.serverId, gsSession.workingDir);
+            ws.send(JSON.stringify({ type: 'git-status', serverId: msg.serverId, sessionId: msg.sessionId, raw }));
+            break;
+          }
+
+          case 'fetch-git-diff': {
+            if (!msg.sessionId) return;
+            const gdSession = db.getSession(msg.sessionId);
+            if (!gdSession?.workingDir) return;
+            if (!sshManager.isConnected(msg.serverId)) return;
+            const diff = await sshManager.fetchGitDiff(msg.serverId, gdSession.workingDir, msg.diffArgs ?? '');
+            ws.send(JSON.stringify({ type: 'git-diff', serverId: msg.serverId, sessionId: msg.sessionId, diff }));
+            break;
+          }
+
+          case 'fetch-pr-info': {
+            if (!msg.sessionId) return;
+            const prSession = db.getSession(msg.sessionId);
+            if (!prSession?.workingDir) return;
+            if (!sshManager.isConnected(msg.serverId)) return;
+            const prJson = await sshManager.fetchPRInfo(msg.serverId, prSession.workingDir);
+            ws.send(JSON.stringify({ type: 'pr-info', serverId: msg.serverId, sessionId: msg.sessionId, data: prJson }));
+            break;
+          }
+
+          case 'git-commit': {
+            if (!msg.sessionId || !msg.message) return;
+            const gcSession = db.getSession(msg.sessionId);
+            if (!gcSession?.workingDir) return;
+            if (!sshManager.isConnected(msg.serverId)) return;
+            try {
+              const result = await sshManager.gitCommit(msg.serverId, gcSession.workingDir, msg.message, msg.files);
+              ws.send(JSON.stringify({ type: 'git-commit-result', serverId: msg.serverId, sessionId: msg.sessionId, success: true, output: result }));
+            } catch (err: any) {
+              ws.send(JSON.stringify({ type: 'git-commit-result', serverId: msg.serverId, sessionId: msg.sessionId, success: false, error: err.message }));
+            }
+            break;
+          }
+
+          case 'git-create-pr': {
+            if (!msg.sessionId || !msg.title) return;
+            const cpSession = db.getSession(msg.sessionId);
+            if (!cpSession?.workingDir) return;
+            if (!sshManager.isConnected(msg.serverId)) return;
+            try {
+              const url = await sshManager.gitCreatePR(msg.serverId, cpSession.workingDir, msg.title, msg.body ?? '');
+              ws.send(JSON.stringify({ type: 'git-create-pr-result', serverId: msg.serverId, sessionId: msg.sessionId, success: true, url }));
+            } catch (err: any) {
+              ws.send(JSON.stringify({ type: 'git-create-pr-result', serverId: msg.serverId, sessionId: msg.sessionId, success: false, error: err.message }));
             }
             break;
           }

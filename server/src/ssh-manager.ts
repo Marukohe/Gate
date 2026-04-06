@@ -329,6 +329,44 @@ export class SSHManager extends EventEmitter {
     });
   }
 
+  /** Get git status (porcelain format) for a working directory. */
+  async fetchGitStatus(serverId: string, workingDir: string): Promise<string> {
+    const { stdout } = await this.runCommand(serverId, workingDir, 'git status --porcelain');
+    return stdout;
+  }
+
+  /** Get git diff for a working directory. diffArgs can be '--staged', a file path, etc. */
+  async fetchGitDiff(serverId: string, workingDir: string, diffArgs: string = ''): Promise<string> {
+    const { stdout } = await this.runCommand(serverId, workingDir, `git diff ${diffArgs}`);
+    return stdout;
+  }
+
+  /** Create a git commit. */
+  async gitCommit(serverId: string, workingDir: string, message: string, files?: string[]): Promise<string> {
+    if (files && files.length > 0) {
+      const escaped = files.map((f) => `'${f}'`).join(' ');
+      await this.runCommand(serverId, workingDir, `git add ${escaped}`);
+    }
+    const { stdout } = await this.runCommand(serverId, workingDir, `git commit -m '${message.replace(/'/g, "'\\''")}'`);
+    return stdout;
+  }
+
+  /** Create a GitHub PR using gh CLI. */
+  async gitCreatePR(serverId: string, workingDir: string, title: string, body: string): Promise<string> {
+    await this.runCommand(serverId, workingDir, 'git push -u origin HEAD');
+    const { stdout } = await this.runCommand(serverId, workingDir,
+      `gh pr create --title '${title.replace(/'/g, "'\\''")}'` +
+      ` --body '${body.replace(/'/g, "'\\''")}'`);
+    return stdout.trim();
+  }
+
+  /** Get PR info for current branch. */
+  async fetchPRInfo(serverId: string, workingDir: string): Promise<string> {
+    const { stdout } = await this.runCommand(serverId, workingDir,
+      'gh pr view --json number,title,state,url,statusCheckRollup 2>/dev/null || echo ""');
+    return stdout.trim();
+  }
+
   /** Disconnect all SSH connections. */
   async disconnectAll(): Promise<void> {
     const serverIds = [...this.connections.keys()];
