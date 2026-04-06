@@ -367,6 +367,39 @@ export class SSHManager extends EventEmitter {
     return stdout.trim();
   }
 
+  /** Create a git checkpoint by committing current state and tagging it. */
+  async createCheckpoint(serverId: string, workingDir: string, tagName: string): Promise<{ branch: string; commitSha: string }> {
+    // Get current branch and commit
+    const info = await this.fetchGitInfo(serverId, workingDir);
+    const branch = info?.branch ?? 'unknown';
+    const { stdout: sha } = await this.runCommand(serverId, workingDir, 'git rev-parse HEAD');
+    const commitSha = sha.trim();
+
+    // Stash any uncommitted changes into a checkpoint commit on a detached ref
+    // Use git stash create to get a commit of current state without disturbing working tree
+    const { stdout: stashSha } = await this.runCommand(serverId, workingDir, 'git stash create');
+    const refSha = stashSha.trim() || commitSha;
+
+    // Create a lightweight tag pointing to the current state
+    await this.runCommand(serverId, workingDir, `git tag -f '${tagName}' '${refSha}'`);
+
+    return { branch, commitSha: refSha };
+  }
+
+  /** Revert working directory to a checkpoint state. */
+  async revertToCheckpoint(serverId: string, workingDir: string, tagName: string): Promise<void> {
+    // Reset working tree to the checkpoint state
+    // First, get the commit the tag points to
+    const { stdout: tagSha } = await this.runCommand(serverId, workingDir, `git rev-parse '${tagName}'`);
+    const sha = tagSha.trim();
+    if (!sha) throw new Error(`Checkpoint tag not found: ${tagName}`);
+
+    // Hard reset to the checkpoint (this restores all files)
+    await this.runCommand(serverId, workingDir, `git checkout -f '${sha}' -- .`);
+    // Clean untracked files that were added after the checkpoint
+    await this.runCommand(serverId, workingDir, 'git clean -fd');
+  }
+
   /** Disconnect all SSH connections. */
   async disconnectAll(): Promise<void> {
     const serverIds = [...this.connections.keys()];
