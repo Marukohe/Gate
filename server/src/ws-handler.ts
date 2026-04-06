@@ -106,6 +106,10 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             sshManager.fetchGitInfo(serverId, s.workingDir).then((info) => {
               if (info) broadcast(wss, { type: 'git-info', serverId, sessionId, ...info });
             }).catch(() => {});
+            // Also refresh git status for the changes panel
+            sshManager.fetchGitStatus(serverId, s.workingDir).then((raw) => {
+              broadcast(wss, { type: 'git-status', serverId, sessionId, raw });
+            }).catch(() => {});
           }
         }
       });
