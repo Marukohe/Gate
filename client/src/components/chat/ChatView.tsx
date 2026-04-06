@@ -14,6 +14,7 @@ import { usePlanStore } from '@/stores/plan-store';
 import { usePlanModeStore } from '@/stores/plan-mode-store';
 import { useSwipe } from '@/hooks/use-swipe';
 import { PlanModeOverlay } from '@/components/plan-mode/PlanModeOverlay';
+import { DiffView } from '../diff/DiffView';
 
 const EMPTY_MESSAGES: ChatMessage[] = [];
 
@@ -169,6 +170,7 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
   }, [messages, loadingMore, onLoadMore]);
 
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
+  const activeTab = useUIStore((s) => s.activeTab);
 
   if (!activeServerId) {
     return (
@@ -223,39 +225,43 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
           Sync failed: {syncStatus.error}
         </div>
       )}
-      <div className="relative flex-1 flex flex-col overflow-hidden">
-        <PlanModeOverlay activeSessionId={activeSessionId} onSendInput={onSendToSession} />
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4" {...swipe}>
-          <div className="mx-auto max-w-3xl py-4">
-            {hasMore && (
-              <button
-                onClick={handleLoadMore}
-                disabled={loadingMore}
-                className="mx-auto mb-4 flex items-center gap-1 rounded-full border bg-muted/50 px-4 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
-              >
-                {loadingMore ? (
-                  <RefreshCw className="h-3 w-3 animate-spin" />
-                ) : (
-                  <ChevronUp className="h-3 w-3" />
-                )}
-                {loadingMore ? 'Loading...' : 'Load older messages'}
-              </button>
-            )}
-            {messages.length === 0 && isConnected && (
-              <div className="py-12 text-center text-sm text-muted-foreground">
-                Waiting for Claude...
-              </div>
-            )}
-            {renderItems.map((item, i) =>
-              item.kind === 'single'
-                ? <MessageBubble key={item.message.id} message={item.message} provider={activeSession?.provider} />
-                : <ToolActivityBlock key={item.items[0]?.call.id ?? i} group={item} />
-            )}
-            <div ref={bottomRef} />
+      {activeTab === 'chat' ? (
+        <div className="relative flex-1 flex flex-col overflow-hidden">
+          <PlanModeOverlay activeSessionId={activeSessionId} onSendInput={onSendToSession} />
+          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4" {...swipe}>
+            <div className="mx-auto max-w-3xl py-4">
+              {hasMore && (
+                <button
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  className="mx-auto mb-4 flex items-center gap-1 rounded-full border bg-muted/50 px-4 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                >
+                  {loadingMore ? (
+                    <RefreshCw className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <ChevronUp className="h-3 w-3" />
+                  )}
+                  {loadingMore ? 'Loading...' : 'Load older messages'}
+                </button>
+              )}
+              {messages.length === 0 && isConnected && (
+                <div className="py-12 text-center text-sm text-muted-foreground">
+                  Waiting for Claude...
+                </div>
+              )}
+              {renderItems.map((item, i) =>
+                item.kind === 'single'
+                  ? <MessageBubble key={item.message.id} message={item.message} provider={activeSession?.provider} />
+                  : <ToolActivityBlock key={item.items[0]?.call.id ?? i} group={item} />
+              )}
+              <div ref={bottomRef} />
+            </div>
           </div>
+          <ChatInput onSend={onSend} disabled={!isConnected} />
         </div>
-        <ChatInput onSend={onSend} disabled={!isConnected} />
-      </div>
+      ) : (
+        <DiffView />
+      )}
     </div>
   );
 }

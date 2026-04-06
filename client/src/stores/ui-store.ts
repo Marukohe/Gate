@@ -31,6 +31,8 @@ interface UIStore {
   setNotifyToast: (on: boolean) => void;
   setNotifySound: (on: boolean) => void;
   setSyncStatus: (sessionId: string, status: SyncStatus) => void;
+  activeTab: 'chat' | 'diff';
+  setActiveTab: (tab: 'chat' | 'diff') => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -65,4 +67,6 @@ export const useUIStore = create<UIStore>((set) => ({
   setSyncStatus: (sessionId, status) => set((s) => ({
     syncStatus: { ...s.syncStatus, [sessionId]: status },
   })),
+  activeTab: 'chat',
+  setActiveTab: (tab) => set({ activeTab: tab }),
 }));

@@ -33,6 +33,7 @@ import { useServerStore } from '@/stores/server-store';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { usePlanStore } from '@/stores/plan-store';
 import { useUIStore } from '@/stores/ui-store';
+import { useGitStore } from '@/stores/git-store';
 import { cn } from '@/lib/utils';
 
 const EMPTY_SESSIONS: Session[] = [];
@@ -66,6 +67,9 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
   const togglePlanPanel = useUIStore((s) => s.togglePlanPanel);
   const planPanelOpen = useUIStore((s) => s.planPanelOpen);
   const syncStatus = useUIStore((s) => s.syncStatus);
+  const activeTab = useUIStore((s) => s.activeTab);
+  const setActiveTab = useUIStore((s) => s.setActiveTab);
+  const prInfo = useGitStore((s) => activeSessionId ? s.prInfo[activeSessionId] : null);
   const { resetConversation, resumeCliSession, listCliSessions } = useWebSocket();
   const [resumeDialogSession, setResumeDialogSession] = useState<Session | null>(null);
 
@@ -123,6 +127,26 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
   return (
     <>
       <div className="flex items-center gap-1 border-b px-2 py-1 overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-0.5 mr-2">
+          <button
+            className={cn(
+              'rounded-md px-2 py-0.5 text-xs font-medium transition-colors',
+              activeTab === 'chat' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+            )}
+            onClick={() => setActiveTab('chat')}
+          >
+            Chat
+          </button>
+          <button
+            className={cn(
+              'rounded-md px-2 py-0.5 text-xs font-medium transition-colors',
+              activeTab === 'diff' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+            )}
+            onClick={() => setActiveTab('diff')}
+          >
+            Diff
+          </button>
+        </div>
         {sessions.map((session) => (
           <ContextMenu key={session.id}>
             <ContextMenuTrigger asChild>
@@ -236,6 +260,17 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
         </Button>
 
         <ProviderSwitcher />
+
+        {prInfo && (
+          <a
+            href={prInfo.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-1 inline-flex items-center gap-1 rounded-md bg-green-500/10 px-2 py-0.5 text-xs text-green-600 dark:text-green-400 hover:bg-green-500/20"
+          >
+            PR #{prInfo.number}
+          </a>
+        )}
 
         {activePlanId && (
           <>
