@@ -39,6 +39,16 @@ export interface Message {
   provider?: string | null;
 }
 
+export interface Checkpoint {
+  id: string;
+  sessionId: string;
+  messageTimestamp: number;  // correlates to the user message timestamp
+  gitRef: string;            // git tag name (e.g., "gate-cp-{sessionId}-{timestamp}")
+  gitBranch: string;
+  gitCommitSha: string;
+  createdAt: number;
+}
+
 export type CreateServerInput = Omit<Server, 'id' | 'createdAt'>;
 export type CreateMessageInput = Omit<Message, 'id'>;
 
@@ -67,6 +77,9 @@ export interface Database {
   getMessages(sessionId: string, limit?: number): Message[];
   getMessagesBefore(sessionId: string, beforeTimestamp: number, limit?: number): Message[];
   getMessageCount(sessionId: string): number;
+  saveCheckpoint(sessionId: string, messageTimestamp: number, gitRef: string, gitBranch: string, gitCommitSha: string): Checkpoint;
+  listCheckpoints(sessionId: string): Checkpoint[];
+  deleteCheckpointsAfter(sessionId: string, afterTimestamp: number): void;
   close(): void;
 }
 
@@ -87,6 +100,16 @@ export function createDb(dbPath: string): Database {
   try { db.exec('ALTER TABLE sessions ADD COLUMN providerSessionMap TEXT'); } catch { /* already exists */ }
   try { db.exec('ALTER TABLE sessions ADD COLUMN chatStartedAt INTEGER'); } catch { /* already exists */ }
   try { db.exec('UPDATE sessions SET cliSessionId = claudeSessionId WHERE cliSessionId IS NULL AND claudeSessionId IS NOT NULL'); } catch { /* ignore */ }
+  try { db.exec(`CREATE TABLE IF NOT EXISTS checkpoints (
+  id TEXT PRIMARY KEY,
+  sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  messageTimestamp INTEGER NOT NULL,
+  gitRef TEXT NOT NULL,
+  gitBranch TEXT NOT NULL,
+  gitCommitSha TEXT NOT NULL,
+  createdAt INTEGER NOT NULL
+)`); } catch { /* already exists */ }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_checkpoints_sessionId ON checkpoints(sessionId)'); } catch { /* already exists */ }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS servers (
@@ -309,6 +332,24 @@ export function createDb(dbPath: string): Database {
     getMessageCount(sessionId) {
       const row = db.prepare('SELECT COUNT(*) as count FROM messages WHERE sessionId = ?').get(sessionId) as { count: number };
       return row.count;
+    },
+
+    saveCheckpoint(sessionId, messageTimestamp, gitRef, gitBranch, gitCommitSha) {
+      const id = randomUUID();
+      const createdAt = Date.now();
+      db.prepare(`
+        INSERT INTO checkpoints (id, sessionId, messageTimestamp, gitRef, gitBranch, gitCommitSha, createdAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(id, sessionId, messageTimestamp, gitRef, gitBranch, gitCommitSha, createdAt);
+      return { id, sessionId, messageTimestamp, gitRef, gitBranch, gitCommitSha, createdAt };
+    },
+
+    listCheckpoints(sessionId) {
+      return db.prepare('SELECT * FROM checkpoints WHERE sessionId = ? ORDER BY messageTimestamp ASC').all(sessionId) as Checkpoint[];
+    },
+
+    deleteCheckpointsAfter(sessionId, afterTimestamp) {
+      db.prepare('DELETE FROM checkpoints WHERE sessionId = ? AND messageTimestamp > ?').run(sessionId, afterTimestamp);
     },
 
     close() {
