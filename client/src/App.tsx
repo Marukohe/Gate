@@ -29,7 +29,7 @@ function App() {
   const setSessions = useSessionStore((s) => s.setSessions);
   const setActiveSession = useSessionStore((s) => s.setActiveSession);
 
-  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, loadMoreMessages } = useWebSocket();
+  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, loadMoreMessages, listCheckpoints } = useWebSocket();
 
   useEffect(() => {
     fetch('/api/servers')
@@ -104,7 +104,8 @@ function App() {
   useEffect(() => {
     if (!activeServerId || !activeSessionId) return;
     connectToSession(activeServerId, activeSessionId);
-  }, [activeServerId, activeSessionId, connectToSession]);
+    listCheckpoints(activeServerId, activeSessionId);
+  }, [activeServerId, activeSessionId, connectToSession, listCheckpoints]);
 
   // Fetch git info immediately and refresh periodically
   useEffect(() => {

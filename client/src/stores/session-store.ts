@@ -1,6 +1,16 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+export interface Checkpoint {
+  id: string;
+  sessionId: string;
+  messageTimestamp: number;
+  gitRef: string;
+  gitBranch: string;
+  gitCommitSha: string;
+  createdAt: number;
+}
+
 export interface Session {
   id: string;
   serverId: string;
@@ -41,6 +51,7 @@ interface SessionStore {
   gitInfo: Record<string, GitInfo>;             // sessionId → git info
   branches: Record<string, BranchList>;         // sessionId → branch list
   agentStatus: Record<string, AgentStatus>;     // sessionId → status
+  checkpoints: Record<string, Checkpoint[]>;    // sessionId → checkpoints
 
   setSessions: (serverId: string, sessions: Session[]) => void;
   addSession: (serverId: string, session: Session) => void;
@@ -50,6 +61,7 @@ interface SessionStore {
   setGitInfo: (sessionId: string, info: GitInfo) => void;
   setBranches: (sessionId: string, branches: BranchList) => void;
   setAgentStatus: (sessionId: string, status: AgentStatus) => void;
+  setCheckpoints: (sessionId: string, checkpoints: Checkpoint[]) => void;
   getActiveSessionId: (serverId: string | null) => string | undefined;
 }
 
@@ -63,6 +75,7 @@ export const useSessionStore = create<SessionStore>()(
       gitInfo: {},
       branches: {},
       agentStatus: {},
+      checkpoints: {},
 
       setSessions: (serverId, sessions) => set((s) => ({
         sessions: { ...s.sessions, [serverId]: sessions },
@@ -123,6 +136,10 @@ export const useSessionStore = create<SessionStore>()(
 
       setAgentStatus: (sessionId, status) => set((s) => ({
         agentStatus: { ...s.agentStatus, [sessionId]: status },
+      })),
+
+      setCheckpoints: (sessionId, checkpoints) => set((s) => ({
+        checkpoints: { ...s.checkpoints, [sessionId]: checkpoints },
       })),
 
       getActiveSessionId: (serverId) => {

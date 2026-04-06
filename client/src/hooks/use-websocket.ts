@@ -47,6 +47,7 @@ const storeRefs = {
   setGitStatus: null as null | ReturnType<typeof useGitStore.getState>['setStatus'],
   setGitDiff: null as null | ReturnType<typeof useGitStore.getState>['setDiff'],
   setPRInfo: null as null | ReturnType<typeof useGitStore.getState>['setPRInfo'],
+  setCheckpoints: null as null | ReturnType<typeof useSessionStore.getState>['setCheckpoints'],
 };
 
 // Track the last session/server we sent a connect for so we don't spam the server.
@@ -209,6 +210,11 @@ function setupSocket() {
           } catch { storeRefs.setPRInfo?.(data.sessionId, null); }
         }
         break;
+      case 'checkpoints':
+        if (data.sessionId) {
+          storeRefs.setCheckpoints?.(data.sessionId, data.checkpoints ?? []);
+        }
+        break;
     }
   };
 
@@ -249,6 +255,7 @@ export function useWebSocket() {
   const setGitStatus = useGitStore((s) => s.setStatus);
   const setGitDiff = useGitStore((s) => s.setDiff);
   const setPRInfo = useGitStore((s) => s.setPRInfo);
+  const setCheckpoints = useSessionStore((s) => s.setCheckpoints);
 
   // Keep refs current so WebSocket handlers always use latest store functions
   storeRefs.setConnectionStatus = setConnectionStatus;
@@ -265,6 +272,7 @@ export function useWebSocket() {
   storeRefs.setGitStatus = setGitStatus;
   storeRefs.setGitDiff = setGitDiff;
   storeRefs.setPRInfo = setPRInfo;
+  storeRefs.setCheckpoints = setCheckpoints;
 
   useEffect(() => {
     if (initialized) return;
@@ -373,6 +381,16 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'git-create-pr', serverId, sessionId, title, body }));
   }, []);
 
+  const revertToCheckpoint = useCallback((serverId: string, sessionId: string, checkpointId: string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'revert-to-checkpoint', serverId, sessionId, checkpointId }));
+  }, []);
+
+  const listCheckpoints = useCallback((serverId: string, sessionId: string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'list-checkpoints', serverId, sessionId }));
+  }, []);
+
   const resumeCliSession = useCallback((serverId: string, sessionId: string, cliSessionId: string) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: 'resume-cli-session', serverId, sessionId, claudeSessionId: cliSessionId }));
@@ -398,5 +416,5 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'load-more', serverId, sessionId, beforeTimestamp }));
   }, []);
 
-  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, resetConversation, resumeCliSession, loadMoreMessages, fetchGitStatus, fetchGitDiff, fetchPRInfo, gitCommit, gitCreatePR };
+  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, resetConversation, resumeCliSession, loadMoreMessages, fetchGitStatus, fetchGitDiff, fetchPRInfo, gitCommit, gitCreatePR, revertToCheckpoint, listCheckpoints };
 }

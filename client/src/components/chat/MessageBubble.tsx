@@ -2,6 +2,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from './CodeBlock';
 import { ScrollableTable } from './ScrollableTable';
+import { CheckpointButton } from './CheckpointButton';
 import { cn, stripLineNumbers } from '@/lib/utils';
 import { getProviderStyle } from '@/lib/provider-colors';
 import type { ChatMessage } from '@/stores/chat-store';
@@ -9,9 +10,10 @@ import type { ChatMessage } from '@/stores/chat-store';
 interface MessageBubbleProps {
   message: ChatMessage;
   provider?: string | null;
+  onRevert?: () => void;
 }
 
-export function MessageBubble({ message, provider }: MessageBubbleProps) {
+export function MessageBubble({ message, provider, onRevert }: MessageBubbleProps) {
   if (message.type === 'system') {
     return (
       <div className="my-2 text-center text-xs text-muted-foreground">{message.content}</div>
@@ -23,6 +25,11 @@ export function MessageBubble({ message, provider }: MessageBubbleProps) {
 
   return (
     <div className={cn('my-2 flex', isUser ? 'justify-end' : 'justify-start')}>
+      <div className={cn(
+        'relative',
+        isUser && onRevert && 'group',
+      )}>
+      {isUser && onRevert && <CheckpointButton onClick={onRevert} />}
       <div className={cn(
         'max-w-[85%] min-w-0 overflow-hidden rounded-lg px-4 py-2 text-sm',
         isUser
@@ -60,6 +67,7 @@ export function MessageBubble({ message, provider }: MessageBubbleProps) {
             </ReactMarkdown>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

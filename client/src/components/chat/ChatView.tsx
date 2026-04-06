@@ -13,6 +13,7 @@ import { useUIStore } from '@/stores/ui-store';
 import { usePlanStore } from '@/stores/plan-store';
 import { usePlanModeStore } from '@/stores/plan-mode-store';
 import { useSwipe } from '@/hooks/use-swipe';
+import { useWebSocket } from '@/hooks/use-websocket';
 import { PlanModeOverlay } from '@/components/plan-mode/PlanModeOverlay';
 import { DiffView } from '../diff/DiffView';
 
@@ -169,6 +170,9 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
     });
   }, [messages, loadingMore, onLoadMore]);
 
+  const { revertToCheckpoint } = useWebSocket();
+  const checkpoints = useSessionStore((s) => activeSessionId ? s.checkpoints[activeSessionId] : undefined);
+
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const activeTab = useUIStore((s) => s.activeTab);
 
@@ -251,7 +255,22 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
               )}
               {renderItems.map((item, i) =>
                 item.kind === 'single'
-                  ? <MessageBubble key={item.message.id} message={item.message} provider={activeSession?.provider} />
+                  ? <MessageBubble
+                      key={item.message.id}
+                      message={item.message}
+                      provider={activeSession?.provider}
+                      onRevert={
+                        item.message.type === 'user' && activeServerId && activeSessionId
+                          ? (() => {
+                              // Find the checkpoint closest to but not exceeding this message's timestamp
+                              const closest = checkpoints
+                                ?.filter((c) => c.messageTimestamp <= item.message.timestamp)
+                                .at(-1);
+                              if (closest) revertToCheckpoint(activeServerId, activeSessionId, closest.id);
+                            })
+                          : undefined
+                      }
+                    />
                   : <ToolActivityBlock key={item.items[0]?.call.id ?? i} group={item} />
               )}
               <div ref={bottomRef} />
