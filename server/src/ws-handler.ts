@@ -6,7 +6,7 @@ import type { ProviderRegistry } from './providers/registry.js';
 import type { Database } from './db.js';
 
 interface ClientMessage {
-  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions' | 'list-cli-sessions' | 'load-more' | 'switch-provider' | 'reset-conversation' | 'resume-cli-session' | 'fetch-git-status' | 'fetch-git-diff' | 'fetch-pr-info' | 'git-commit' | 'git-create-pr';
+  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions' | 'list-cli-sessions' | 'load-more' | 'switch-provider' | 'reset-conversation' | 'resume-cli-session' | 'fetch-git-status' | 'fetch-git-diff' | 'fetch-pr-info' | 'git-commit' | 'git-create-pr' | 'revert-to-checkpoint' | 'list-checkpoints';
   serverId: string;
   sessionId?: string;
   sessionName?: string;
@@ -22,10 +22,11 @@ interface ClientMessage {
   title?: string;
   body?: string;
   diffArgs?: string;
+  checkpointId?: string;
 }
 
 interface ServerMessage {
-  type: 'message' | 'status' | 'history' | 'history-prepend' | 'sessions' | 'git-info' | 'branches' | 'sync-result' | 'claude-sessions' | 'cli-sessions' | 'git-status' | 'git-diff' | 'pr-info' | 'git-commit-result' | 'git-create-pr-result';
+  type: 'message' | 'status' | 'history' | 'history-prepend' | 'sessions' | 'git-info' | 'branches' | 'sync-result' | 'claude-sessions' | 'cli-sessions' | 'git-status' | 'git-diff' | 'pr-info' | 'git-commit-result' | 'git-create-pr-result' | 'checkpoints' | 'checkpoint-reverted';
   serverId: string;
   sessionId?: string | null;
   [key: string]: any;
@@ -288,6 +289,18 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               timestamp: Date.now(),
             });
             db.updateSessionActivity(msg.sessionId);
+
+            // Auto-checkpoint: snapshot git state before sending to CLI
+            {
+              const cpSession = db.getSession(msg.sessionId);
+              if (cpSession?.workingDir && sshManager.isConnected(msg.serverId)) {
+                const cpTimestamp = Date.now();
+                const tagName = `gate-cp-${msg.sessionId.slice(0, 8)}-${cpTimestamp}`;
+                sshManager.createCheckpoint(msg.serverId, cpSession.workingDir, tagName).then(({ branch, commitSha }) => {
+                  db.saveCheckpoint(msg.sessionId!, cpTimestamp, tagName, branch, commitSha);
+                }).catch(() => { /* checkpoint is best-effort */ });
+              }
+            }
 
             const inputCaps = inputProvider.getCapabilities();
             if (inputCaps.supportsStdin && sshManager.hasActiveChannel(msg.serverId, msg.sessionId)) {
@@ -949,6 +962,55 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             } catch (err: any) {
               ws.send(JSON.stringify({ type: 'git-create-pr-result', serverId: msg.serverId, sessionId: msg.sessionId, success: false, error: err.message }));
             }
+            break;
+          }
+
+          case 'revert-to-checkpoint': {
+            if (!msg.sessionId || !msg.checkpointId) return;
+            const rvSession = db.getSession(msg.sessionId);
+            if (!rvSession?.workingDir) return;
+            if (!sshManager.isConnected(msg.serverId)) return;
+
+            try {
+              // Find the checkpoint
+              const checkpoints = db.listCheckpoints(msg.sessionId);
+              const checkpoint = checkpoints.find((cp) => cp.id === msg.checkpointId);
+              if (!checkpoint) {
+                ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: 'Checkpoint not found' }));
+                return;
+              }
+
+              // Revert git state
+              await sshManager.revertToCheckpoint(msg.serverId, rvSession.workingDir, checkpoint.gitRef);
+
+              // Delete checkpoints after this one
+              db.deleteCheckpointsAfter(msg.sessionId, checkpoint.messageTimestamp);
+
+              // Update chatStartedAt to show messages only up to this checkpoint
+              db.updateChatStartedAt(msg.sessionId, checkpoint.messageTimestamp);
+
+              // Reload history for client
+              const messages = db.getMessagesAfter(msg.sessionId, checkpoint.messageTimestamp);
+              broadcast(wss, { type: 'history', serverId: msg.serverId, sessionId: msg.sessionId, messages, hasMore: true });
+              broadcast(wss, { type: 'checkpoint-reverted', serverId: msg.serverId, sessionId: msg.sessionId, checkpointId: msg.checkpointId });
+
+              // Refresh git info
+              const gitInfo = await sshManager.fetchGitInfo(msg.serverId, rvSession.workingDir);
+              if (gitInfo) broadcast(wss, { type: 'git-info', serverId: msg.serverId, sessionId: msg.sessionId, ...gitInfo });
+
+              // Refresh git status
+              const raw = await sshManager.fetchGitStatus(msg.serverId, rvSession.workingDir);
+              broadcast(wss, { type: 'git-status', serverId: msg.serverId, sessionId: msg.sessionId, raw });
+            } catch (err: any) {
+              ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: err.message }));
+            }
+            break;
+          }
+
+          case 'list-checkpoints': {
+            if (!msg.sessionId) return;
+            const checkpoints = db.listCheckpoints(msg.sessionId);
+            ws.send(JSON.stringify({ type: 'checkpoints', serverId: msg.serverId, sessionId: msg.sessionId, checkpoints }));
             break;
           }
         }
