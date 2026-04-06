@@ -24,6 +24,13 @@ export interface BranchList {
   remote: string[];
 }
 
+export type AgentStatus =
+  | { state: 'idle' }
+  | { state: 'thinking' }
+  | { state: 'tool_call'; toolName: string }
+  | { state: 'disconnected' }
+  | { state: 'connecting' };
+
 type ConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'error';
 
 interface SessionStore {
@@ -33,6 +40,7 @@ interface SessionStore {
   connectionError: Record<string, string>;      // sessionId → error
   gitInfo: Record<string, GitInfo>;             // sessionId → git info
   branches: Record<string, BranchList>;         // sessionId → branch list
+  agentStatus: Record<string, AgentStatus>;     // sessionId → status
 
   setSessions: (serverId: string, sessions: Session[]) => void;
   addSession: (serverId: string, session: Session) => void;
@@ -41,6 +49,7 @@ interface SessionStore {
   setConnectionStatus: (sessionId: string, status: ConnectionStatus, error?: string) => void;
   setGitInfo: (sessionId: string, info: GitInfo) => void;
   setBranches: (sessionId: string, branches: BranchList) => void;
+  setAgentStatus: (sessionId: string, status: AgentStatus) => void;
   getActiveSessionId: (serverId: string | null) => string | undefined;
 }
 
@@ -53,6 +62,7 @@ export const useSessionStore = create<SessionStore>()(
       connectionError: {},
       gitInfo: {},
       branches: {},
+      agentStatus: {},
 
       setSessions: (serverId, sessions) => set((s) => ({
         sessions: { ...s.sessions, [serverId]: sessions },
@@ -109,6 +119,10 @@ export const useSessionStore = create<SessionStore>()(
 
       setBranches: (sessionId, branches) => set((s) => ({
         branches: { ...s.branches, [sessionId]: branches },
+      })),
+
+      setAgentStatus: (sessionId, status) => set((s) => ({
+        agentStatus: { ...s.agentStatus, [sessionId]: status },
       })),
 
       getActiveSessionId: (serverId) => {

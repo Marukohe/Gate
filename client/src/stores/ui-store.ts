@@ -33,6 +33,9 @@ interface UIStore {
   setSyncStatus: (sessionId: string, status: SyncStatus) => void;
   activeTab: 'chat' | 'diff';
   setActiveTab: (tab: 'chat' | 'diff') => void;
+  changesPanelOpen: boolean;
+  setChangesPanelOpen: (open: boolean) => void;
+  toggleChangesPanel: () => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -69,4 +72,7 @@ export const useUIStore = create<UIStore>((set) => ({
   })),
   activeTab: 'chat',
   setActiveTab: (tab) => set({ activeTab: tab }),
+  changesPanelOpen: true,
+  setChangesPanelOpen: (open) => set({ changesPanelOpen: open }),
+  toggleChangesPanel: () => set((s) => ({ changesPanelOpen: !s.changesPanelOpen })),
 }));

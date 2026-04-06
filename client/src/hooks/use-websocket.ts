@@ -4,6 +4,7 @@ import { useServerStore } from '../stores/server-store';
 import { useChatStore } from '../stores/chat-store';
 import { usePlanModeStore } from '../stores/plan-mode-store';
 import { useUIStore } from '../stores/ui-store';
+import { useGitStore, parseGitStatusPorcelain } from '../stores/git-store';
 import { triggerTaskNotification } from '../lib/notification';
 
 let ws: WebSocket | null = null;
@@ -38,10 +39,14 @@ const storeRefs = {
   removeSession: null as null | ReturnType<typeof useSessionStore.getState>['removeSession'],
   setGitInfo: null as null | ReturnType<typeof useSessionStore.getState>['setGitInfo'],
   setBranches: null as null | ReturnType<typeof useSessionStore.getState>['setBranches'],
+  setAgentStatus: null as null | ReturnType<typeof useSessionStore.getState>['setAgentStatus'],
   addMessage: null as null | ReturnType<typeof useChatStore.getState>['addMessage'],
   setHistory: null as null | ReturnType<typeof useChatStore.getState>['setHistory'],
   prependMessages: null as null | ReturnType<typeof useChatStore.getState>['prependMessages'],
   processPlanModeMessage: null as null | ReturnType<typeof usePlanModeStore.getState>['processMessage'],
+  setGitStatus: null as null | ReturnType<typeof useGitStore.getState>['setStatus'],
+  setGitDiff: null as null | ReturnType<typeof useGitStore.getState>['setDiff'],
+  setPRInfo: null as null | ReturnType<typeof useGitStore.getState>['setPRInfo'],
 };
 
 // Track the last session/server we sent a connect for so we don't spam the server.
@@ -105,6 +110,16 @@ function setupSocket() {
         if (data.sessionId) {
           storeRefs.addMessage?.(data.sessionId, data.message);
           storeRefs.processPlanModeMessage?.(data.serverId, data.sessionId, data.message);
+          // Derive agent status from incoming message type
+          if (data.message.type === 'user') {
+            storeRefs.setAgentStatus?.(data.sessionId, { state: 'thinking' });
+          } else if (data.message.type === 'tool_call') {
+            storeRefs.setAgentStatus?.(data.sessionId, { state: 'tool_call', toolName: data.message.toolName ?? 'unknown' });
+          } else if (data.message.type === 'assistant') {
+            storeRefs.setAgentStatus?.(data.sessionId, { state: 'idle' });
+          } else if (data.message.type === 'system' && data.message.subType === 'result') {
+            storeRefs.setAgentStatus?.(data.sessionId, { state: 'idle' });
+          }
           // Notify on task completion in background sessions
           if (data.message.type === 'system' && data.message.subType === 'result') {
             const activeServerId = useServerStore.getState().activeServerId;
@@ -122,6 +137,13 @@ function setupSocket() {
       case 'status':
         if (data.sessionId) {
           storeRefs.setConnectionStatus?.(data.sessionId, data.status, data.error);
+          if (data.status === 'disconnected') {
+            storeRefs.setAgentStatus?.(data.sessionId, { state: 'disconnected' });
+          } else if (data.status === 'connecting') {
+            storeRefs.setAgentStatus?.(data.sessionId, { state: 'connecting' });
+          } else if (data.status === 'connected') {
+            storeRefs.setAgentStatus?.(data.sessionId, { state: 'idle' });
+          }
         }
         break;
       case 'history':
@@ -169,6 +191,24 @@ function setupSocket() {
           cliSessionsCallback = null;
         }
         break;
+      case 'git-status':
+        if (data.sessionId) {
+          storeRefs.setGitStatus?.(data.sessionId, parseGitStatusPorcelain(data.raw));
+        }
+        break;
+      case 'git-diff':
+        if (data.sessionId) {
+          storeRefs.setGitDiff?.(data.sessionId, data.diff);
+        }
+        break;
+      case 'pr-info':
+        if (data.sessionId && data.data) {
+          try {
+            const info = JSON.parse(data.data);
+            storeRefs.setPRInfo?.(data.sessionId, info.number ? info : null);
+          } catch { storeRefs.setPRInfo?.(data.sessionId, null); }
+        }
+        break;
     }
   };
 
@@ -201,10 +241,14 @@ export function useWebSocket() {
   const removeSession = useSessionStore((s) => s.removeSession);
   const setGitInfo = useSessionStore((s) => s.setGitInfo);
   const setBranches = useSessionStore((s) => s.setBranches);
+  const setAgentStatus = useSessionStore((s) => s.setAgentStatus);
   const addMessage = useChatStore((s) => s.addMessage);
   const setHistory = useChatStore((s) => s.setHistory);
   const prependMessages = useChatStore((s) => s.prependMessages);
   const processPlanModeMessage = usePlanModeStore((s) => s.processMessage);
+  const setGitStatus = useGitStore((s) => s.setStatus);
+  const setGitDiff = useGitStore((s) => s.setDiff);
+  const setPRInfo = useGitStore((s) => s.setPRInfo);
 
   // Keep refs current so WebSocket handlers always use latest store functions
   storeRefs.setConnectionStatus = setConnectionStatus;
@@ -213,10 +257,14 @@ export function useWebSocket() {
   storeRefs.removeSession = removeSession;
   storeRefs.setGitInfo = setGitInfo;
   storeRefs.setBranches = setBranches;
+  storeRefs.setAgentStatus = setAgentStatus;
   storeRefs.addMessage = addMessage;
   storeRefs.setHistory = setHistory;
   storeRefs.prependMessages = prependMessages;
   storeRefs.processPlanModeMessage = processPlanModeMessage;
+  storeRefs.setGitStatus = setGitStatus;
+  storeRefs.setGitDiff = setGitDiff;
+  storeRefs.setPRInfo = setPRInfo;
 
   useEffect(() => {
     if (initialized) return;
@@ -245,6 +293,7 @@ export function useWebSocket() {
   const sendInput = useCallback((serverId: string, sessionId: string, text: string) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: 'input', serverId, sessionId, text }));
+    storeRefs.setAgentStatus?.(sessionId, { state: 'thinking' });
   }, []);
 
   const disconnectSession = useCallback((serverId: string, sessionId: string) => {
@@ -299,6 +348,31 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'reset-conversation', serverId, sessionId }));
   }, []);
 
+  const fetchGitStatus = useCallback((serverId: string, sessionId: string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'fetch-git-status', serverId, sessionId }));
+  }, []);
+
+  const fetchGitDiff = useCallback((serverId: string, sessionId: string, diffArgs?: string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'fetch-git-diff', serverId, sessionId, diffArgs }));
+  }, []);
+
+  const fetchPRInfo = useCallback((serverId: string, sessionId: string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'fetch-pr-info', serverId, sessionId }));
+  }, []);
+
+  const gitCommit = useCallback((serverId: string, sessionId: string, message: string, files?: string[]) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'git-commit', serverId, sessionId, message, files }));
+  }, []);
+
+  const gitCreatePR = useCallback((serverId: string, sessionId: string, title: string, body?: string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'git-create-pr', serverId, sessionId, title, body }));
+  }, []);
+
   const resumeCliSession = useCallback((serverId: string, sessionId: string, cliSessionId: string) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: 'resume-cli-session', serverId, sessionId, claudeSessionId: cliSessionId }));
@@ -324,5 +398,5 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'load-more', serverId, sessionId, beforeTimestamp }));
   }, []);
 
-  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, resetConversation, resumeCliSession, loadMoreMessages };
+  return { connectToSession, sendInput, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, resetConversation, resumeCliSession, loadMoreMessages, fetchGitStatus, fetchGitDiff, fetchPRInfo, gitCommit, gitCreatePR };
 }

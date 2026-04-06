@@ -2,6 +2,7 @@ import { type ReactNode, useCallback, useState, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { PlanPanel } from '@/components/plan/PlanPanel';
+import { ChangesPanel } from '@/components/changes/ChangesPanel';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useUIStore } from '@/stores/ui-store';
 import type { Server } from '@/stores/server-store';
@@ -11,13 +12,15 @@ interface AppShellProps {
   onAddServer: () => void;
   onEditServer: (server: Server) => void;
   onSendToChat: (text: string) => void;
+  onSelectSession?: (serverId: string, sessionId: string) => void;
 }
 
-export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat }: AppShellProps) {
+export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat, onSelectSession }: AppShellProps) {
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
   const planPanelOpen = useUIStore((s) => s.planPanelOpen);
   const setPlanPanelOpen = useUIStore((s) => s.setPlanPanelOpen);
+  const changesPanelOpen = useUIStore((s) => s.changesPanelOpen);
 
   const closeSidebar = useCallback(() => setSidebarOpen(false), [setSidebarOpen]);
 
@@ -34,7 +37,7 @@ export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat }: 
     <div className="flex h-full">
       {/* Desktop sidebar */}
       <div className="hidden lg:block">
-        <Sidebar onAddServer={onAddServer} onEditServer={onEditServer} />
+        <Sidebar onAddServer={onAddServer} onEditServer={onEditServer} onSelectSession={onSelectSession} />
       </div>
 
       {/* Mobile sidebar — bottom sheet */}
@@ -52,7 +55,7 @@ export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat }: 
             <SheetTitle className="text-base">Servers</SheetTitle>
           </SheetHeader>
           <div className="max-h-[50dvh] overflow-y-auto">
-            <Sidebar onAddServer={onAddServer} onEditServer={onEditServer} onClose={closeSidebar} />
+            <Sidebar onAddServer={onAddServer} onEditServer={onEditServer} onSelectSession={onSelectSession} onClose={closeSidebar} />
           </div>
         </SheetContent>
       </Sheet>
@@ -68,6 +71,11 @@ export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat }: 
           {planPanelOpen && (
             <div className="hidden w-80 shrink-0 overflow-hidden border-l lg:block">
               <PlanPanel onSendToChat={onSendToChat} />
+            </div>
+          )}
+          {changesPanelOpen && (
+            <div className="hidden w-64 shrink-0 overflow-hidden border-l lg:block">
+              <ChangesPanel />
             </div>
           )}
         </div>

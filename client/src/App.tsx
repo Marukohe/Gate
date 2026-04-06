@@ -165,6 +165,13 @@ function App() {
     setActiveSession(activeServerId, sessionId);
   }, [activeServerId, activeSessionId, setActiveSession, connectToSession]);
 
+  // Sidebar session tree: select a session from any server (not just the active one)
+  const handleSidebarSelectSession = useCallback((serverId: string, sessionId: string) => {
+    setActiveServer(serverId);
+    setActiveSession(serverId, sessionId);
+    connectToSession(serverId, sessionId);
+  }, [setActiveServer, setActiveSession, connectToSession]);
+
   const handleSyncTranscript = useCallback((sessionId: string) => {
     if (!activeServerId) return;
     syncTranscript(activeServerId, sessionId);
@@ -196,6 +203,7 @@ function App() {
         onAddServer={() => { setEditingServer(null); setServerDialogOpen(true); }}
         onEditServer={(server) => { setEditingServer(server); setServerDialogOpen(true); }}
         onSendToChat={handleSend}
+        onSelectSession={handleSidebarSelectSession}
       />
       <ServerDialog
         open={serverDialogOpen}

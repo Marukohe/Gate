@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { Plus, GitBranch, ClipboardList, MoreVertical } from 'lucide-react';
+import { Plus, GitBranch, ClipboardList, MoreVertical, FolderGit2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -66,6 +66,8 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
   const activePlanId = usePlanStore((s) => s.activePlanId);
   const togglePlanPanel = useUIStore((s) => s.togglePlanPanel);
   const planPanelOpen = useUIStore((s) => s.planPanelOpen);
+  const changesPanelOpen = useUIStore((s) => s.changesPanelOpen);
+  const toggleChangesPanel = useUIStore((s) => s.toggleChangesPanel);
   const syncStatus = useUIStore((s) => s.syncStatus);
   const activeTab = useUIStore((s) => s.activeTab);
   const setActiveTab = useUIStore((s) => s.setActiveTab);
@@ -286,6 +288,16 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
             </Button>
           </>
         )}
+        {!activePlanId && <div className="flex-1" />}
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn('h-6 w-6 shrink-0', changesPanelOpen && 'bg-accent')}
+          onClick={toggleChangesPanel}
+          title="Toggle changes panel"
+        >
+          <FolderGit2 className="h-3.5 w-3.5" />
+        </Button>
       </div>
 
       <CreateSessionDialog

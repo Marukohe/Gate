@@ -27,7 +27,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useServerStore, type Server as ServerType } from '@/stores/server-store';
-import { useSessionStore } from '@/stores/session-store';
+import { useSessionStore, type AgentStatus } from '@/stores/session-store';
 import { useUIStore } from '@/stores/ui-store';
 import { requestNotificationPermission, ensureAudioContext } from '@/lib/notification';
 import { toast } from 'sonner';
@@ -37,16 +37,37 @@ import { getInitials, getAvatarColor } from '@/lib/server-utils';
 interface SidebarProps {
   onAddServer: () => void;
   onEditServer: (server: ServerType) => void;
+  onSelectSession?: (serverId: string, sessionId: string) => void;
   onClose?: () => void;
 }
 
-export function Sidebar({ onAddServer, onEditServer, onClose }: SidebarProps) {
+function agentDot(status?: AgentStatus): string {
+  if (!status || status.state === 'disconnected') return 'bg-muted-foreground/40';
+  if (status.state === 'connecting') return 'bg-yellow-500';
+  if (status.state === 'thinking') return 'bg-blue-500 animate-pulse';
+  if (status.state === 'tool_call') return 'bg-purple-500 animate-pulse';
+  return 'bg-green-500'; // idle
+}
+
+function agentLabel(status?: AgentStatus): string {
+  if (!status || status.state === 'idle') return '';
+  if (status.state === 'thinking') return 'thinking...';
+  if (status.state === 'tool_call') return status.toolName;
+  if (status.state === 'connecting') return 'connecting...';
+  return '';
+}
+
+export function Sidebar({ onAddServer, onEditServer, onSelectSession, onClose }: SidebarProps) {
   const servers = useServerStore((s) => s.servers);
   const activeServerId = useServerStore((s) => s.activeServerId);
   const setActiveServer = useServerStore((s) => s.setActiveServer);
   const removeServer = useServerStore((s) => s.removeServer);
   const activeSessionIds = useSessionStore((s) => s.activeSessionId);
   const connectionStatus = useSessionStore((s) => s.connectionStatus);
+  const allSessions = useSessionStore((s) => s.sessions);
+  const agentStatus = useSessionStore((s) => s.agentStatus);
+  const gitInfo = useSessionStore((s) => s.gitInfo);
+  const currentActiveSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
 
   const darkMode = useUIStore((s) => s.darkMode);
   const toggleDarkMode = useUIStore((s) => s.toggleDarkMode);
@@ -84,7 +105,7 @@ export function Sidebar({ onAddServer, onEditServer, onClose }: SidebarProps) {
     <>
       <div className={cn(
         'flex flex-col bg-muted/40',
-        isMobile ? 'w-full' : 'h-full w-52 border-r',
+        isMobile ? 'w-full' : 'h-full w-64 border-r',
       )}>
         {!isMobile && (
           <div className="px-3 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -142,6 +163,38 @@ export function Sidebar({ onAddServer, onEditServer, onClose }: SidebarProps) {
                     </DropdownMenu>
                   </button>
                 </ContextMenuTrigger>
+                {isActive && (
+                  <div className="ml-4 mt-1 space-y-0.5">
+                    {(allSessions[server.id] ?? []).map((session) => {
+                      const isActiveSession = currentActiveSessionId === session.id;
+                      const agent = agentStatus[session.id];
+                      const git = gitInfo[session.id];
+                      const dirName = session.workingDir?.split('/').pop() ?? session.name;
+
+                      return (
+                        <button
+                          key={session.id}
+                          className={cn(
+                            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors',
+                            isActiveSession
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-muted-foreground hover:bg-accent/50'
+                          )}
+                          onClick={() => { onSelectSession?.(server.id, session.id); onClose?.(); }}
+                        >
+                          <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', agentDot(agent))} />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate font-medium">{dirName}</div>
+                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                              {git && <span className="truncate">{git.branch}</span>}
+                              {agent && agentLabel(agent) && <span>{agentLabel(agent)}</span>}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 <ContextMenuContent>
                   <ContextMenuItem onClick={() => onEditServer(server)}>
                     <Pencil className="mr-2 h-4 w-4" />
