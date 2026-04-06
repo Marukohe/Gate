@@ -5,6 +5,7 @@ import { useGitStore } from '@/stores/git-store';
 import { useServerStore } from '@/stores/server-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useUIStore } from '@/stores/ui-store';
+import { usePlanStore } from '@/stores/plan-store';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { FileItem } from './FileItem';
 import { CreatePRDialog } from './CreatePRDialog';
@@ -19,6 +20,11 @@ export function ChangesPanel() {
   const prInfo = useGitStore((s) => activeSessionId ? s.prInfo[activeSessionId] : null);
   const gitBranch = useSessionStore((s) => activeSessionId ? s.gitInfo[activeSessionId]?.branch : undefined);
   const { fetchGitStatus, fetchGitDiff, gitCreatePR, fetchPRInfo } = useWebSocket();
+
+  const activePlanId = usePlanStore((s) => s.activePlanId);
+  const sessionPlans = usePlanStore((s) => activeSessionId ? (s.plans[activeSessionId] ?? []) : []);
+  const activePlan = activePlanId ? sessionPlans.find((p) => p.id === activePlanId) ?? null : null;
+  const hasUnfinishedTodos = activePlan ? activePlan.steps.some((step) => !step.completed) : false;
 
   const [prDialogOpen, setPRDialogOpen] = useState(false);
 
@@ -111,16 +117,24 @@ export function ChangesPanel() {
               PR #{prInfo.number} ({prInfo.state})
             </a>
           ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full text-xs"
-              onClick={() => setPRDialogOpen(true)}
-              disabled={totalChanges === 0}
-            >
-              <GitCommitHorizontal className="mr-1.5 h-3 w-3" />
-              Create PR
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs"
+                onClick={() => setPRDialogOpen(true)}
+                disabled={totalChanges === 0 || hasUnfinishedTodos}
+                title={hasUnfinishedTodos ? 'Complete all plan items before creating PR' : undefined}
+              >
+                <GitCommitHorizontal className="mr-1.5 h-3 w-3" />
+                Create PR
+              </Button>
+              {hasUnfinishedTodos && (
+                <div className="text-[10px] text-yellow-600 dark:text-yellow-400 text-center">
+                  {activePlan!.steps.filter((s) => !s.completed).length} plan items remaining
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
