@@ -26,48 +26,48 @@ export function MessageBubble({ message, provider, onRevert }: MessageBubbleProp
   return (
     <div className={cn('my-2 flex', isUser ? 'justify-end' : 'justify-start')}>
       <div className={cn(
-        'relative',
+        'relative max-w-[85%]',
         isUser && onRevert && 'group',
       )}>
-      {isUser && onRevert && <CheckpointButton onClick={onRevert} />}
-      <div className={cn(
-        'max-w-[85%] min-w-0 overflow-hidden rounded-lg px-4 py-2 text-sm',
-        isUser
-          ? 'bg-primary text-primary-foreground'
-          : providerStyle?.bg || 'bg-muted'
-      )}>
-        {isUser ? (
-          <p>{message.content}</p>
-        ) : (
-          <div className="markdown-prose overflow-x-auto">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                code({ className, children, ...props }) {
-                  const match = /language-(\w+)/.exec(className || '');
-                  const code = String(children).replace(/\n$/, '');
-                  if (match) {
-                    return <CodeBlock code={code} language={match[1]} />;
-                  }
-                  // Fenced code block without language (inside <pre>)
-                  if (code.includes('\n')) {
-                    return <CodeBlock code={code} language="text" />;
-                  }
-                  return <code className="break-all rounded border border-border/40 bg-muted/70 px-1.5 py-0.5 text-[0.8125rem]" style={{ fontFamily: "'Fira Code', monospace" }} {...props}>{children}</code>;
-                },
-                pre({ children }) {
-                  return <>{children}</>;
-                },
-                table({ children }) {
-                  return <ScrollableTable>{children}</ScrollableTable>;
-                },
-              }}
-            >
-              {stripLineNumbers(message.content)}
-            </ReactMarkdown>
-          </div>
-        )}
-      </div>
+        {isUser && onRevert && <CheckpointButton onClick={onRevert} />}
+        <div className={cn(
+          'min-w-0 overflow-hidden rounded-lg px-4 py-2 text-sm',
+          isUser
+            ? 'bg-primary text-primary-foreground'
+            : providerStyle?.bg || 'bg-muted'
+        )}>
+          {isUser ? (
+            <p className="whitespace-pre-wrap break-words">{message.content}</p>
+          ) : (
+            <div className="markdown-prose overflow-x-auto">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  code({ className, children, ...props }) {
+                    const match = /language-(\w+)/.exec(className || '');
+                    const code = String(children).replace(/\n$/, '');
+                    if (match) {
+                      return <CodeBlock code={code} language={match[1]} />;
+                    }
+                    // Fenced code block without language (inside <pre>)
+                    if (code.includes('\n')) {
+                      return <CodeBlock code={code} language="text" />;
+                    }
+                    return <code className="break-all rounded border border-border/40 bg-muted/70 px-1.5 py-0.5 text-[0.8125rem]" style={{ fontFamily: "'Fira Code', monospace" }} {...props}>{children}</code>;
+                  },
+                  pre({ children }) {
+                    return <>{children}</>;
+                  },
+                  table({ children }) {
+                    return <ScrollableTable>{children}</ScrollableTable>;
+                  },
+                }}
+              >
+                {stripLineNumbers(message.content)}
+              </ReactMarkdown>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

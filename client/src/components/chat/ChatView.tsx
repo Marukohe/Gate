@@ -233,7 +233,7 @@ export function ChatView({ onSend, onCreateSession, onDeleteSession, onSelectSes
         <div className="relative flex-1 flex flex-col overflow-hidden">
           <PlanModeOverlay activeSessionId={activeSessionId} onSendInput={onSendToSession} />
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-4" {...swipe}>
-            <div className="mx-auto max-w-3xl py-4">
+            <div className="mx-auto max-w-4xl py-4">
               {hasMore && (
                 <button
                   onClick={handleLoadMore}
