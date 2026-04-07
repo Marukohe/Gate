@@ -148,10 +148,8 @@ export function Sidebar({ onAddServer, onEditServer, onSelectSession, onClose }:
                       }
                     }}
                   >
-                    <span
-                      className="shrink-0 text-muted-foreground/60"
-                    >
-                      {collapsed[server.id]
+                    <span className="shrink-0 text-muted-foreground/60">
+                      {(allSessions[server.id] ?? []).length === 0 || collapsed[server.id]
                         ? <ChevronRight className="h-3.5 w-3.5" />
                         : <ChevronDown className="h-3.5 w-3.5" />}
                     </span>
