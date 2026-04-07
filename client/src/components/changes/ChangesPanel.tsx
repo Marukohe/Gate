@@ -46,11 +46,15 @@ export function ChangesPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeServerId, activeSessionId]);
 
-  const handleFileClick = (path: string) => {
+  const handleFileClick = (path: string, isUntracked: boolean) => {
     if (!activeSessionId || !activeServerId) return;
     setSelectedFile(activeSessionId, path);
     setActiveTab('diff');
-    fetchGitDiff(activeServerId, activeSessionId, `-- '${path}'`);
+    // Untracked files aren't in git index, so use --no-index to show full content
+    const diffArgs = isUntracked
+      ? `--no-index /dev/null '${path}'`
+      : `-- '${path}'`;
+    fetchGitDiff(activeServerId, activeSessionId, diffArgs);
   };
 
   const totalChanges = (gitStatus?.staged.length ?? 0) + (gitStatus?.unstaged.length ?? 0) + (gitStatus?.untracked.length ?? 0);
@@ -78,7 +82,7 @@ export function ChangesPanel() {
                 Staged ({gitStatus.staged.length})
               </div>
               {gitStatus.staged.map((f) => (
-                <FileItem key={'s-' + f.path} file={f} selected={selectedFile === f.path} onClick={() => handleFileClick(f.path)} />
+                <FileItem key={'s-' + f.path} file={f} selected={selectedFile === f.path} onClick={() => handleFileClick(f.path, false)} />
               ))}
             </div>
           ) : null}
@@ -89,7 +93,7 @@ export function ChangesPanel() {
                 Modified ({gitStatus.unstaged.length})
               </div>
               {gitStatus.unstaged.map((f) => (
-                <FileItem key={'u-' + f.path} file={f} selected={selectedFile === f.path} onClick={() => handleFileClick(f.path)} />
+                <FileItem key={'u-' + f.path} file={f} selected={selectedFile === f.path} onClick={() => handleFileClick(f.path, false)} />
               ))}
             </div>
           ) : null}
@@ -100,7 +104,7 @@ export function ChangesPanel() {
                 Untracked ({gitStatus.untracked.length})
               </div>
               {gitStatus.untracked.map((f) => (
-                <FileItem key={'t-' + f.path} file={f} selected={selectedFile === f.path} onClick={() => handleFileClick(f.path)} />
+                <FileItem key={'t-' + f.path} file={f} selected={selectedFile === f.path} onClick={() => handleFileClick(f.path, true)} />
               ))}
             </div>
           ) : null}
