@@ -10,6 +10,8 @@ import { useWebSocket } from '@/hooks/use-websocket';
 import { FileItem } from './FileItem';
 import { CreatePRDialog } from './CreatePRDialog';
 
+const EMPTY_PLANS: import('@/stores/plan-store').Plan[] = [];
+
 export function ChangesPanel() {
   const activeServerId = useServerStore((s) => s.activeServerId);
   const activeSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
@@ -22,7 +24,7 @@ export function ChangesPanel() {
   const { fetchGitStatus, fetchGitDiff, gitCreatePR, fetchPRInfo } = useWebSocket();
 
   const activePlanId = usePlanStore((s) => s.activePlanId);
-  const sessionPlans = usePlanStore((s) => activeSessionId ? (s.plans[activeSessionId] ?? []) : []);
+  const sessionPlans = usePlanStore((s) => activeSessionId ? (s.plans[activeSessionId] ?? EMPTY_PLANS) : EMPTY_PLANS);
   const activePlan = activePlanId ? sessionPlans.find((p) => p.id === activePlanId) ?? null : null;
   const hasUnfinishedTodos = activePlan ? activePlan.steps.some((step) => !step.completed) : false;
 
@@ -33,13 +35,16 @@ export function ChangesPanel() {
     fetchGitStatus(activeServerId, activeSessionId);
     const interval = setInterval(() => fetchGitStatus(activeServerId, activeSessionId), 15_000);
     return () => clearInterval(interval);
-  }, [activeServerId, activeSessionId, fetchGitStatus]);
+    // fetchGitStatus is a stable useCallback — safe to omit from deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeServerId, activeSessionId]);
 
   useEffect(() => {
     if (activeServerId && activeSessionId) {
       fetchPRInfo(activeServerId, activeSessionId);
     }
-  }, [activeServerId, activeSessionId, fetchPRInfo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeServerId, activeSessionId]);
 
   const handleFileClick = (path: string) => {
     if (!activeSessionId || !activeServerId) return;

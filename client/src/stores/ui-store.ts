@@ -72,7 +72,7 @@ export const useUIStore = create<UIStore>((set) => ({
   })),
   activeTab: 'chat',
   setActiveTab: (tab) => set({ activeTab: tab }),
-  changesPanelOpen: true,
+  changesPanelOpen: false,
   setChangesPanelOpen: (open) => set({ changesPanelOpen: open }),
   toggleChangesPanel: () => set((s) => ({ changesPanelOpen: !s.changesPanelOpen })),
 }));

@@ -17,7 +17,9 @@ export function DiffView() {
     if (activeServerId && activeSessionId) {
       fetchGitDiff(activeServerId, activeSessionId);
     }
-  }, [activeServerId, activeSessionId, fetchGitDiff]);
+    // fetchGitDiff is a stable useCallback — safe to omit from deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeServerId, activeSessionId]);
 
   if (rawDiff === undefined) {
     return (

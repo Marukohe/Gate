@@ -31,24 +31,16 @@ function nextBackoff(): number {
   return delay;
 }
 
-// Refs for store callbacks, updated each render so closures are never stale
-const storeRefs = {
-  setConnectionStatus: null as null | ReturnType<typeof useSessionStore.getState>['setConnectionStatus'],
-  setSessions: null as null | ReturnType<typeof useSessionStore.getState>['setSessions'],
-  setActiveSession: null as null | ReturnType<typeof useSessionStore.getState>['setActiveSession'],
-  removeSession: null as null | ReturnType<typeof useSessionStore.getState>['removeSession'],
-  setGitInfo: null as null | ReturnType<typeof useSessionStore.getState>['setGitInfo'],
-  setBranches: null as null | ReturnType<typeof useSessionStore.getState>['setBranches'],
-  setAgentStatus: null as null | ReturnType<typeof useSessionStore.getState>['setAgentStatus'],
-  addMessage: null as null | ReturnType<typeof useChatStore.getState>['addMessage'],
-  setHistory: null as null | ReturnType<typeof useChatStore.getState>['setHistory'],
-  prependMessages: null as null | ReturnType<typeof useChatStore.getState>['prependMessages'],
-  processPlanModeMessage: null as null | ReturnType<typeof usePlanModeStore.getState>['processMessage'],
-  setGitStatus: null as null | ReturnType<typeof useGitStore.getState>['setStatus'],
-  setGitDiff: null as null | ReturnType<typeof useGitStore.getState>['setDiff'],
-  setPRInfo: null as null | ReturnType<typeof useGitStore.getState>['setPRInfo'],
-  setCheckpoints: null as null | ReturnType<typeof useSessionStore.getState>['setCheckpoints'],
-};
+// Access store functions directly via getState() — Zustand functions are stable
+// references, so there's no need for storeRefs or hook-based subscriptions.
+function stores() {
+  return {
+    session: useSessionStore.getState(),
+    chat: useChatStore.getState(),
+    planMode: usePlanModeStore.getState(),
+    git: useGitStore.getState(),
+  };
+}
 
 // Track the last session/server we sent a connect for so we don't spam the server.
 // Reset on server switch to avoid skipping the first connect on a new server.
@@ -68,7 +60,7 @@ function sendConnect(socket: WebSocket, serverId: string, sessionId: string) {
   const status = useSessionStore.getState().connectionStatus[sessionId];
   if (sessionId === lastConnectedSession && status === 'connected') return;
   lastConnectedSession = sessionId;
-  storeRefs.setConnectionStatus?.(sessionId, 'connecting');
+  stores().session.setConnectionStatus(sessionId, 'connecting');
   socket.send(JSON.stringify({ type: 'connect', serverId, sessionId }));
   socket.send(JSON.stringify({ type: 'fetch-git-info', serverId, sessionId }));
 }
@@ -106,20 +98,21 @@ function setupSocket() {
   socket.onmessage = (event) => {
     resetHeartbeat();
     const data = JSON.parse(event.data);
+    const { session, chat, planMode, git } = stores();
     switch (data.type) {
       case 'message':
         if (data.sessionId) {
-          storeRefs.addMessage?.(data.sessionId, data.message);
-          storeRefs.processPlanModeMessage?.(data.serverId, data.sessionId, data.message);
+          chat.addMessage(data.sessionId, data.message);
+          planMode.processMessage(data.serverId, data.sessionId, data.message);
           // Derive agent status from incoming message type
           if (data.message.type === 'user') {
-            storeRefs.setAgentStatus?.(data.sessionId, { state: 'thinking' });
+            session.setAgentStatus(data.sessionId, { state: 'thinking' });
           } else if (data.message.type === 'tool_call') {
-            storeRefs.setAgentStatus?.(data.sessionId, { state: 'tool_call', toolName: data.message.toolName ?? 'unknown' });
+            session.setAgentStatus(data.sessionId, { state: 'tool_call', toolName: data.message.toolName ?? 'unknown' });
           } else if (data.message.type === 'assistant') {
-            storeRefs.setAgentStatus?.(data.sessionId, { state: 'idle' });
+            session.setAgentStatus(data.sessionId, { state: 'idle' });
           } else if (data.message.type === 'system' && data.message.subType === 'result') {
-            storeRefs.setAgentStatus?.(data.sessionId, { state: 'idle' });
+            session.setAgentStatus(data.sessionId, { state: 'idle' });
           }
           // Notify on task completion in background sessions
           if (data.message.type === 'system' && data.message.subType === 'result') {
@@ -129,50 +122,50 @@ function setupSocket() {
             if (isBackground) {
               const server = useServerStore.getState().servers.find((s) => s.id === data.serverId);
               const sessions = useSessionStore.getState().sessions[data.serverId] ?? [];
-              const session = sessions.find((s) => s.id === data.sessionId);
-              triggerTaskNotification(server?.name ?? data.serverId, session?.name ?? data.sessionId);
+              const sess = sessions.find((s) => s.id === data.sessionId);
+              triggerTaskNotification(server?.name ?? data.serverId, sess?.name ?? data.sessionId);
             }
           }
         }
         break;
       case 'status':
         if (data.sessionId) {
-          storeRefs.setConnectionStatus?.(data.sessionId, data.status, data.error);
+          session.setConnectionStatus(data.sessionId, data.status, data.error);
           if (data.status === 'disconnected') {
-            storeRefs.setAgentStatus?.(data.sessionId, { state: 'disconnected' });
+            session.setAgentStatus(data.sessionId, { state: 'disconnected' });
           } else if (data.status === 'connecting') {
-            storeRefs.setAgentStatus?.(data.sessionId, { state: 'connecting' });
+            session.setAgentStatus(data.sessionId, { state: 'connecting' });
           } else if (data.status === 'connected') {
-            storeRefs.setAgentStatus?.(data.sessionId, { state: 'idle' });
+            session.setAgentStatus(data.sessionId, { state: 'idle' });
           }
         }
         break;
       case 'history':
         if (data.sessionId) {
-          storeRefs.setHistory?.(data.sessionId, data.messages, data.hasMore ?? false);
+          chat.setHistory(data.sessionId, data.messages, data.hasMore ?? false);
         }
         break;
       case 'history-prepend':
         if (data.sessionId) {
-          storeRefs.prependMessages?.(data.sessionId, data.messages, data.hasMore ?? false);
+          chat.prependMessages(data.sessionId, data.messages, data.hasMore ?? false);
         }
         break;
       case 'sessions':
-        storeRefs.setSessions?.(data.serverId, data.sessions);
+        session.setSessions(data.serverId, data.sessions);
         break;
       case 'session-created':
         // Don't addSession — the 'sessions' broadcast already updated the full list.
         // Just auto-select the newly created session.
-        storeRefs.setActiveSession?.(data.serverId, data.session.id);
+        session.setActiveSession(data.serverId, data.session.id);
         break;
       case 'git-info':
         if (data.sessionId) {
-          storeRefs.setGitInfo?.(data.sessionId, { branch: data.branch, worktree: data.worktree });
+          session.setGitInfo(data.sessionId, { branch: data.branch, worktree: data.worktree });
         }
         break;
       case 'branches':
         if (data.sessionId) {
-          storeRefs.setBranches?.(data.sessionId, { current: data.current, local: data.local, remote: data.remote });
+          session.setBranches(data.sessionId, { current: data.current, local: data.local, remote: data.remote });
         }
         break;
       case 'sync-result':
@@ -194,25 +187,25 @@ function setupSocket() {
         break;
       case 'git-status':
         if (data.sessionId) {
-          storeRefs.setGitStatus?.(data.sessionId, parseGitStatusPorcelain(data.raw));
+          git.setStatus(data.sessionId, parseGitStatusPorcelain(data.raw));
         }
         break;
       case 'git-diff':
         if (data.sessionId) {
-          storeRefs.setGitDiff?.(data.sessionId, data.diff);
+          git.setDiff(data.sessionId, data.diff);
         }
         break;
       case 'pr-info':
         if (data.sessionId && data.data) {
           try {
             const info = JSON.parse(data.data);
-            storeRefs.setPRInfo?.(data.sessionId, info.number ? info : null);
-          } catch { storeRefs.setPRInfo?.(data.sessionId, null); }
+            git.setPRInfo(data.sessionId, info.number ? info : null);
+          } catch { git.setPRInfo(data.sessionId, null); }
         }
         break;
       case 'checkpoints':
         if (data.sessionId) {
-          storeRefs.setCheckpoints?.(data.sessionId, data.checkpoints ?? []);
+          session.setCheckpoints(data.sessionId, data.checkpoints ?? []);
         }
         break;
     }
@@ -229,7 +222,7 @@ function setupSocket() {
     const activeTarget = getActiveTarget();
     if (activeTarget) {
       pendingConnect = activeTarget;
-      storeRefs.setConnectionStatus?.(activeTarget.sessionId, 'connecting');
+      stores().session.setConnectionStatus(activeTarget.sessionId, 'connecting');
       lastConnectedSession = null;
       lastConnectedServer = activeTarget.serverId;
     }
@@ -241,39 +234,6 @@ function setupSocket() {
 let initialized = false;
 
 export function useWebSocket() {
-  const setConnectionStatus = useSessionStore((s) => s.setConnectionStatus);
-  const setSessions = useSessionStore((s) => s.setSessions);
-  const setActiveSession = useSessionStore((s) => s.setActiveSession);
-  const removeSession = useSessionStore((s) => s.removeSession);
-  const setGitInfo = useSessionStore((s) => s.setGitInfo);
-  const setBranches = useSessionStore((s) => s.setBranches);
-  const setAgentStatus = useSessionStore((s) => s.setAgentStatus);
-  const addMessage = useChatStore((s) => s.addMessage);
-  const setHistory = useChatStore((s) => s.setHistory);
-  const prependMessages = useChatStore((s) => s.prependMessages);
-  const processPlanModeMessage = usePlanModeStore((s) => s.processMessage);
-  const setGitStatus = useGitStore((s) => s.setStatus);
-  const setGitDiff = useGitStore((s) => s.setDiff);
-  const setPRInfo = useGitStore((s) => s.setPRInfo);
-  const setCheckpoints = useSessionStore((s) => s.setCheckpoints);
-
-  // Keep refs current so WebSocket handlers always use latest store functions
-  storeRefs.setConnectionStatus = setConnectionStatus;
-  storeRefs.setSessions = setSessions;
-  storeRefs.setActiveSession = setActiveSession;
-  storeRefs.removeSession = removeSession;
-  storeRefs.setGitInfo = setGitInfo;
-  storeRefs.setBranches = setBranches;
-  storeRefs.setAgentStatus = setAgentStatus;
-  storeRefs.addMessage = addMessage;
-  storeRefs.setHistory = setHistory;
-  storeRefs.prependMessages = prependMessages;
-  storeRefs.processPlanModeMessage = processPlanModeMessage;
-  storeRefs.setGitStatus = setGitStatus;
-  storeRefs.setGitDiff = setGitDiff;
-  storeRefs.setPRInfo = setPRInfo;
-  storeRefs.setCheckpoints = setCheckpoints;
-
   useEffect(() => {
     if (initialized) return;
     initialized = true;
@@ -301,7 +261,7 @@ export function useWebSocket() {
   const sendInput = useCallback((serverId: string, sessionId: string, text: string) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: 'input', serverId, sessionId, text }));
-    storeRefs.setAgentStatus?.(sessionId, { state: 'thinking' });
+    stores().session.setAgentStatus(sessionId, { state: 'thinking' });
   }, []);
 
   const disconnectSession = useCallback((serverId: string, sessionId: string) => {
@@ -332,7 +292,7 @@ export function useWebSocket() {
   const deleteSession = useCallback((serverId: string, sessionId: string) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: 'delete-session', serverId, sessionId }));
-    storeRefs.removeSession?.(serverId, sessionId);
+    stores().session.removeSession(serverId, sessionId);
   }, []);
 
   const execCommand = useCallback((serverId: string, sessionId: string, command: string) => {
