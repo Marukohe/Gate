@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, MoreVertical, Moon, Sun, Bell } from 'lucide-react';
+import { Plus, Pencil, Trash2, MoreVertical, Moon, Sun, Bell, FolderOpen, GitBranch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
@@ -163,31 +163,48 @@ export function Sidebar({ onAddServer, onEditServer, onSelectSession, onClose }:
                     </DropdownMenu>
                   </button>
                 </ContextMenuTrigger>
-                {isActive && (
-                  <div className="ml-4 mt-1 space-y-0.5">
+                {isActive && (allSessions[server.id] ?? []).length > 0 && (
+                  <div className="ml-3 mt-1 border-l border-border/50 pl-0 space-y-px">
                     {(allSessions[server.id] ?? []).map((session) => {
                       const isActiveSession = currentActiveSessionId === session.id;
                       const agent = agentStatus[session.id];
                       const git = gitInfo[session.id];
                       const dirName = session.workingDir?.split('/').pop() ?? session.name;
+                      const label = agentLabel(agent);
 
                       return (
                         <button
                           key={session.id}
                           className={cn(
-                            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors',
+                            'flex w-full items-center gap-2 rounded-r-md pl-3 pr-2 py-1.5 text-xs transition-colors',
                             isActiveSession
-                              ? 'bg-primary/10 text-primary'
-                              : 'text-muted-foreground hover:bg-accent/50'
+                              ? 'bg-primary/10 text-primary border-l-2 border-primary -ml-px'
+                              : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground'
                           )}
                           onClick={() => { onSelectSession?.(server.id, session.id); onClose?.(); }}
                         >
-                          <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', agentDot(agent))} />
+                          <FolderOpen className={cn('h-3.5 w-3.5 shrink-0', isActiveSession ? 'text-primary' : 'text-muted-foreground/60')} />
                           <div className="min-w-0 flex-1">
-                            <div className="truncate font-medium">{dirName}</div>
-                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                              {git && <span className="truncate">{git.branch}</span>}
-                              {agent && agentLabel(agent) && <span>{agentLabel(agent)}</span>}
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate font-medium">{dirName}</span>
+                              <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', agentDot(agent))} />
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
+                              {git && (
+                                <span className="flex items-center gap-0.5 truncate">
+                                  <GitBranch className="h-2.5 w-2.5 shrink-0" />
+                                  {git.branch}
+                                </span>
+                              )}
+                              {label && (
+                                <span className={cn(
+                                  'truncate',
+                                  agent?.state === 'thinking' && 'text-blue-500',
+                                  agent?.state === 'tool_call' && 'text-purple-500',
+                                )}>
+                                  {label}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </button>

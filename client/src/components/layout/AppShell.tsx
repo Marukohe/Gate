@@ -64,7 +64,7 @@ export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat, on
       <div className="flex flex-1 flex-col overflow-hidden">
         <TopBar />
         <div className="flex flex-1 overflow-hidden">
-          <div className="flex-1 overflow-hidden">
+          <div className="min-w-0 flex-1 overflow-hidden">
             {chatView}
           </div>
           {/* Desktop plan panel — inside content area so border-t aligns with ChatInput */}
