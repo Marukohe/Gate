@@ -139,12 +139,17 @@ export function Sidebar({ onAddServer, onEditServer, onSelectSession, onClose }:
                         ? 'bg-accent text-accent-foreground'
                         : 'text-foreground/70 hover:bg-accent/50 hover:text-accent-foreground'
                     )}
-                    onClick={() => { setActiveServer(server.id); }}
+                    onClick={() => {
+                      if (isActive) {
+                        toggleCollapse(server.id);
+                      } else {
+                        setActiveServer(server.id);
+                        setCollapsed((s) => ({ ...s, [server.id]: false }));
+                      }
+                    }}
                   >
                     <span
-                      role="button"
                       className="shrink-0 text-muted-foreground/60"
-                      onClick={(e) => { e.stopPropagation(); toggleCollapse(server.id); }}
                     >
                       {collapsed[server.id]
                         ? <ChevronRight className="h-3.5 w-3.5" />
