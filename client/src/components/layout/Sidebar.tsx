@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, MoreVertical, Moon, Sun, Bell, FolderOpen, GitBranch } from 'lucide-react';
+import { Plus, Pencil, Trash2, MoreVertical, Moon, Sun, Bell, FolderOpen, GitBranch, ChevronDown, ChevronRight, Server } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
@@ -41,12 +41,23 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
+function isAgentWorking(status?: AgentStatus): boolean {
+  return !!status && (status.state === 'thinking' || status.state === 'tool_call');
+}
+
 function agentDot(status?: AgentStatus): string {
   if (!status || status.state === 'disconnected') return 'bg-muted-foreground/40';
   if (status.state === 'connecting') return 'bg-yellow-500';
-  if (status.state === 'thinking') return 'bg-blue-500 animate-pulse';
-  if (status.state === 'tool_call') return 'bg-purple-500 animate-pulse';
+  if (status.state === 'thinking') return 'bg-blue-500';
+  if (status.state === 'tool_call') return 'bg-purple-500';
   return 'bg-green-500'; // idle
+}
+
+function agentDotsColor(status?: AgentStatus): string {
+  if (!status) return 'text-muted-foreground/40';
+  if (status.state === 'thinking') return 'text-blue-500';
+  if (status.state === 'tool_call') return 'text-purple-500';
+  return 'text-muted-foreground/40';
 }
 
 function agentLabel(status?: AgentStatus): string {
@@ -78,6 +89,8 @@ export function Sidebar({ onAddServer, onEditServer, onSelectSession, onClose }:
   const setNotifyToast = useUIStore((s) => s.setNotifyToast);
   const setNotifySound = useUIStore((s) => s.setNotifySound);
   const [deleteTarget, setDeleteTarget] = useState<ServerType | null>(null);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const toggleCollapse = (serverId: string) => setCollapsed((s) => ({ ...s, [serverId]: !s[serverId] }));
 
   const statusInfo = (serverId: string) => {
     const sessionId = activeSessionIds[serverId];
@@ -121,21 +134,27 @@ export function Sidebar({ onAddServer, onEditServer, onSelectSession, onClose }:
                 <ContextMenuTrigger asChild>
                   <button
                     className={cn(
-                      'group flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-sm transition-colors',
+                      'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors',
                       isActive
                         ? 'bg-accent text-accent-foreground'
                         : 'text-foreground/70 hover:bg-accent/50 hover:text-accent-foreground'
                     )}
-                    onClick={() => { setActiveServer(server.id); onClose?.(); }}
+                    onClick={() => { setActiveServer(server.id); }}
                   >
-                    <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold text-white', getAvatarColor(server.name))}>
-                      {getInitials(server.name)}
-                    </div>
+                    <span
+                      role="button"
+                      className="shrink-0 text-muted-foreground/60"
+                      onClick={(e) => { e.stopPropagation(); toggleCollapse(server.id); }}
+                    >
+                      {collapsed[server.id]
+                        ? <ChevronRight className="h-3.5 w-3.5" />
+                        : <ChevronDown className="h-3.5 w-3.5" />}
+                    </span>
+                    <Server className={cn('h-3.5 w-3.5 shrink-0', isActive ? 'text-foreground' : 'text-muted-foreground/70')} />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium">{server.name}</div>
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <span className={cn('inline-block h-1.5 w-1.5 rounded-full', status.color)} />
-                        <span className="truncate">{status.label || server.host}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate font-medium text-xs">{server.name}</span>
+                        <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', status.color)} />
                       </div>
                     </div>
                     <DropdownMenu>
@@ -144,7 +163,7 @@ export function Sidebar({ onAddServer, onEditServer, onSelectSession, onClose }:
                           role="button"
                           className="shrink-0 rounded p-0.5 opacity-60 hover:bg-accent sm:opacity-0 sm:group-hover:opacity-100"
                         >
-                          <MoreVertical className="h-4 w-4" />
+                          <MoreVertical className="h-3.5 w-3.5" />
                         </span>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
@@ -163,8 +182,8 @@ export function Sidebar({ onAddServer, onEditServer, onSelectSession, onClose }:
                     </DropdownMenu>
                   </button>
                 </ContextMenuTrigger>
-                {isActive && (allSessions[server.id] ?? []).length > 0 && (
-                  <div className="ml-3 mt-1 border-l border-border/50 pl-0 space-y-px">
+                {!collapsed[server.id] && (allSessions[server.id] ?? []).length > 0 && (
+                  <div className="ml-5 mt-1 border-l border-border/50 pl-0 space-y-px">
                     {(allSessions[server.id] ?? []).map((session) => {
                       const isActiveSession = currentActiveSessionId === session.id;
                       const agent = agentStatus[session.id];
@@ -187,7 +206,13 @@ export function Sidebar({ onAddServer, onEditServer, onSelectSession, onClose }:
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
                               <span className="truncate font-medium">{dirName}</span>
-                              <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', agentDot(agent))} />
+                              {isAgentWorking(agent) ? (
+                                <span className={cn('agent-dots shrink-0', agentDotsColor(agent))}>
+                                  <span /><span /><span />
+                                </span>
+                              ) : (
+                                <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', agentDot(agent))} />
+                              )}
                             </div>
                             <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
                               {git && (
