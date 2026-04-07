@@ -25,12 +25,21 @@ interface ChatStore {
 export const useChatStore = create<ChatStore>((set) => ({
   messages: {},
   hasMore: {},
-  addMessage: (sessionId, message) => set((s) => ({
-    messages: {
-      ...s.messages,
-      [sessionId]: [...(s.messages[sessionId] ?? []), { ...message, id: `msg-${++msgSeq}` }],
-    },
-  })),
+  addMessage: (sessionId, message) => set((s) => {
+    const existing = s.messages[sessionId] ?? [];
+    // Dedup: skip if last message has same type, content, and close timestamp
+    const last = existing[existing.length - 1];
+    if (last && last.type === message.type && last.content === message.content
+      && Math.abs(last.timestamp - message.timestamp) < 2000) {
+      return s;
+    }
+    return {
+      messages: {
+        ...s.messages,
+        [sessionId]: [...existing, { ...message, id: `msg-${++msgSeq}` }],
+      },
+    };
+  }),
   setHistory: (sessionId, messages, hasMore) => set((s) => ({
     messages: { ...s.messages, [sessionId]: messages },
     hasMore: hasMore !== undefined ? { ...s.hasMore, [sessionId]: hasMore } : s.hasMore,

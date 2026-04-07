@@ -20,7 +20,8 @@ export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat, on
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
   const planPanelOpen = useUIStore((s) => s.planPanelOpen);
   const setPlanPanelOpen = useUIStore((s) => s.setPlanPanelOpen);
-  const changesPanelOpen = useUIStore((s) => s.changesPanelOpen);
+  const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
+  const setRightPanelOpen = useUIStore((s) => s.setRightPanelOpen);
 
   const closeSidebar = useCallback(() => setSidebarOpen(false), [setSidebarOpen]);
 
@@ -67,36 +68,42 @@ export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat, on
           <div className="min-w-0 flex-1 overflow-hidden">
             {chatView}
           </div>
-          {/* Desktop plan panel — inside content area so border-t aligns with ChatInput */}
-          {planPanelOpen && (
-            <div className="hidden w-80 shrink-0 overflow-hidden border-l lg:block">
-              <PlanPanel onSendToChat={onSendToChat} />
-            </div>
-          )}
-          {changesPanelOpen && (
-            <div className="hidden w-64 shrink-0 overflow-hidden border-l lg:block">
-              <ChangesPanel />
+          {/* Desktop right panel — Changes (top) + Plan (bottom) */}
+          {rightPanelOpen && (
+            <div className="hidden w-72 shrink-0 overflow-hidden border-l lg:flex lg:flex-col">
+              <div className="flex-1 overflow-hidden">
+                <ChangesPanel />
+              </div>
+              {planPanelOpen && (
+                <div className="border-t overflow-hidden" style={{ maxHeight: '40%' }}>
+                  <PlanPanel onSendToChat={onSendToChat} />
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
 
-      {/* Mobile plan panel — bottom sheet */}
-      <Sheet open={planPanelOpen && isMobile} onOpenChange={setPlanPanelOpen}>
+      {/* Mobile right panel — bottom sheet with Changes + Plan */}
+      <Sheet open={rightPanelOpen && isMobile} onOpenChange={setRightPanelOpen}>
         <SheetContent
           side="bottom"
           showCloseButton={false}
           className="rounded-t-2xl px-0 pb-[env(safe-area-inset-bottom)] lg:hidden"
         >
-          {/* Drag handle */}
           <div className="flex justify-center pt-2 pb-1">
             <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
           </div>
           <SheetHeader className="sr-only">
-            <SheetTitle>Plan</SheetTitle>
+            <SheetTitle>Changes & Plan</SheetTitle>
           </SheetHeader>
-          <div className="max-h-[60dvh] overflow-hidden">
-            <PlanPanel onSendToChat={onSendToChat} />
+          <div className="max-h-[60dvh] overflow-y-auto">
+            <ChangesPanel />
+            {planPanelOpen && (
+              <div className="border-t">
+                <PlanPanel onSendToChat={onSendToChat} />
+              </div>
+            )}
           </div>
         </SheetContent>
       </Sheet>

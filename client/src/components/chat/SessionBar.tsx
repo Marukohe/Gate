@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { Plus, GitBranch, ClipboardList, MoreVertical, FolderGit2 } from 'lucide-react';
+import { Plus, GitBranch, MoreVertical, FolderGit2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -31,7 +31,6 @@ import { ProviderSwitcher } from './ProviderSwitcher';
 import { useSessionStore, type Session } from '@/stores/session-store';
 import { useServerStore } from '@/stores/server-store';
 import { useWebSocket } from '@/hooks/use-websocket';
-import { usePlanStore } from '@/stores/plan-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useGitStore } from '@/stores/git-store';
 import { cn } from '@/lib/utils';
@@ -63,11 +62,8 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
   const [branchSessionId, setBranchSessionId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
-  const activePlanId = usePlanStore((s) => s.activePlanId);
-  const togglePlanPanel = useUIStore((s) => s.togglePlanPanel);
-  const planPanelOpen = useUIStore((s) => s.planPanelOpen);
-  const changesPanelOpen = useUIStore((s) => s.changesPanelOpen);
-  const toggleChangesPanel = useUIStore((s) => s.toggleChangesPanel);
+  const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
+  const toggleRightPanel = useUIStore((s) => s.toggleRightPanel);
   const syncStatus = useUIStore((s) => s.syncStatus);
   const activeTab = useUIStore((s) => s.activeTab);
   const setActiveTab = useUIStore((s) => s.setActiveTab);
@@ -274,27 +270,13 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onSelec
           </a>
         )}
 
-        {activePlanId && (
-          <>
-            <div className="flex-1" />
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn('h-6 w-6 shrink-0', planPanelOpen && 'bg-accent')}
-              onClick={togglePlanPanel}
-              title="Toggle plan panel"
-            >
-              <ClipboardList className="h-3.5 w-3.5" />
-            </Button>
-          </>
-        )}
-        {!activePlanId && <div className="flex-1" />}
+        <div className="flex-1" />
         <Button
           variant="ghost"
           size="icon"
-          className={cn('h-6 w-6 shrink-0', changesPanelOpen && 'bg-accent')}
-          onClick={toggleChangesPanel}
-          title="Toggle changes panel"
+          className={cn('h-6 w-6 shrink-0', rightPanelOpen && 'bg-accent')}
+          onClick={toggleRightPanel}
+          title="Toggle sidebar"
         >
           <FolderGit2 className="h-3.5 w-3.5" />
         </Button>

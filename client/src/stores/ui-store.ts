@@ -36,6 +36,9 @@ interface UIStore {
   changesPanelOpen: boolean;
   setChangesPanelOpen: (open: boolean) => void;
   toggleChangesPanel: () => void;
+  rightPanelOpen: boolean;
+  setRightPanelOpen: (open: boolean) => void;
+  toggleRightPanel: () => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -75,4 +78,7 @@ export const useUIStore = create<UIStore>((set) => ({
   changesPanelOpen: false,
   setChangesPanelOpen: (open) => set({ changesPanelOpen: open }),
   toggleChangesPanel: () => set((s) => ({ changesPanelOpen: !s.changesPanelOpen })),
+  rightPanelOpen: false,
+  setRightPanelOpen: (open) => set({ rightPanelOpen: open }),
+  toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
 }));
