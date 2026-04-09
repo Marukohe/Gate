@@ -139,16 +139,13 @@ export function Sidebar({ onAddServer, onEditServer, onSelectSession, onClose }:
                         ? 'bg-accent text-accent-foreground'
                         : 'text-foreground/70 hover:bg-accent/50 hover:text-accent-foreground'
                     )}
-                    onClick={() => {
-                      if (isActive) {
-                        toggleCollapse(server.id);
-                      } else {
-                        setActiveServer(server.id);
-                        setCollapsed((s) => ({ ...s, [server.id]: false }));
-                      }
-                    }}
+                    onClick={() => { if (!isActive) setActiveServer(server.id); }}
                   >
-                    <span className="shrink-0 text-muted-foreground/60">
+                    <span
+                      role="button"
+                      className="shrink-0 text-muted-foreground/60 p-0.5 -m-0.5 rounded hover:bg-accent"
+                      onClick={(e) => { e.stopPropagation(); toggleCollapse(server.id); }}
+                    >
                       {(allSessions[server.id] ?? []).length === 0 || collapsed[server.id]
                         ? <ChevronRight className="h-3.5 w-3.5" />
                         : <ChevronDown className="h-3.5 w-3.5" />}
