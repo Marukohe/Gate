@@ -1,10 +1,11 @@
 import { useState, useRef, useCallback, type KeyboardEvent, type ChangeEvent } from 'react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { SendHorizontal, Paperclip, Loader2, X } from 'lucide-react';
+import { SendHorizontal, Paperclip, Loader2, X, Square } from 'lucide-react';
 import { useUIStore } from '@/stores/ui-store';
 import { useServerStore } from '@/stores/server-store';
 import { useSessionStore } from '@/stores/session-store';
+import { useWebSocket } from '@/hooks/use-websocket';
 import { getInitials, getAvatarColor } from '@/lib/server-utils';
 import { cn } from '@/lib/utils';
 
@@ -36,6 +37,16 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
 
   // Only Claude supports file uploads
   const canUpload = (activeSession?.provider ?? 'claude') === 'claude';
+
+  const agentStatus = useSessionStore((s) => activeSessionId ? s.agentStatus[activeSessionId] : undefined);
+  const isAgentWorking = agentStatus?.state === 'thinking' || agentStatus?.state === 'tool_call';
+  const { interruptSession } = useWebSocket();
+
+  const handleStop = () => {
+    if (activeServerId && activeSessionId) {
+      interruptSession(activeServerId, activeSessionId);
+    }
+  };
 
   // Track IME composition state via events (more reliable than isComposing)
   const composingRef = useRef(false);
@@ -170,9 +181,15 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
               </Button>
             </>
           )}
-          <Button size="icon-lg" onClick={handleSend} disabled={disabled || (!value.trim() && files.length === 0)}>
-            <SendHorizontal className="h-4 w-4" />
-          </Button>
+          {isAgentWorking ? (
+            <Button size="icon-lg" variant="destructive" onClick={handleStop} title="Stop">
+              <Square className="h-3.5 w-3.5 fill-current" />
+            </Button>
+          ) : (
+            <Button size="icon-lg" onClick={handleSend} disabled={disabled || (!value.trim() && files.length === 0)}>
+              <SendHorizontal className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>

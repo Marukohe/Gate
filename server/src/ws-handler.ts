@@ -6,7 +6,7 @@ import type { ProviderRegistry } from './providers/registry.js';
 import type { Database } from './db.js';
 
 interface ClientMessage {
-  type: 'connect' | 'input' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions' | 'list-cli-sessions' | 'load-more' | 'switch-provider' | 'reset-conversation' | 'resume-cli-session' | 'fetch-git-status' | 'fetch-git-diff' | 'fetch-pr-info' | 'git-commit' | 'git-create-pr' | 'revert-to-checkpoint' | 'list-checkpoints';
+  type: 'connect' | 'input' | 'interrupt' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions' | 'list-cli-sessions' | 'load-more' | 'switch-provider' | 'reset-conversation' | 'resume-cli-session' | 'fetch-git-status' | 'fetch-git-diff' | 'fetch-pr-info' | 'git-commit' | 'git-create-pr' | 'revert-to-checkpoint' | 'list-checkpoints';
   serverId: string;
   sessionId?: string;
   sessionName?: string;
@@ -346,6 +346,20 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                   } catch { /* channel may have closed */ }
                 }, 500);
               }
+            }
+            break;
+          }
+
+          case 'interrupt': {
+            if (!msg.sessionId) return;
+            if (sshManager.hasActiveChannel(msg.serverId, msg.sessionId)) {
+              // Escape key to exit any interactive prompt, then SIGINT (Ctrl+C) to stop generation
+              sshManager.writeRaw(msg.serverId, msg.sessionId, '\x1b');
+              sshManager.writeRaw(msg.serverId, msg.sessionId, '\x03');
+              // Second Ctrl+C after a short delay to handle cases where the first one is buffered
+              setTimeout(() => {
+                try { sshManager.writeRaw(msg.serverId, msg.sessionId!, '\x03'); } catch { /* ignore */ }
+              }, 150);
             }
             break;
           }
