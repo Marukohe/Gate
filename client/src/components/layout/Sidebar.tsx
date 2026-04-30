@@ -188,7 +188,7 @@ export function Sidebar({ onAddServer, onEditServer, onSelectSession, onClose }:
                       const isActiveSession = currentActiveSessionId === session.id;
                       const agent = agentStatus[session.id];
                       const git = gitInfo[session.id];
-                      const dirName = session.workingDir?.split('/').pop() ?? session.name;
+                      const dirName = session.name;
                       const label = agentLabel(agent);
 
                       return (
