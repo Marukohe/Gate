@@ -1,16 +1,9 @@
-import { useState } from 'react';
-import { Plus, Pencil, Trash2, MoreVertical, Moon, Sun, Bell, FolderOpen, GitBranch, ChevronDown, ChevronRight, Server } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Plus, Moon, Sun, Bell, FolderOpen, GitBranch as GitBranchIcon, ChevronDown, ChevronRight, Server } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from '@/components/ui/context-menu';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
   DropdownMenuLabel,
@@ -28,16 +21,18 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useServerStore, type Server as ServerType } from '@/stores/server-store';
 import { useSessionStore, type AgentStatus } from '@/stores/session-store';
+import { useWorkspaceStore } from '@/stores/workspace-store';
 import { useUIStore } from '@/stores/ui-store';
 import { requestNotificationPermission, ensureAudioContext } from '@/lib/notification';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { getInitials, getAvatarColor } from '@/lib/server-utils';
 
 interface SidebarProps {
   onAddServer: () => void;
   onEditServer: (server: ServerType) => void;
   onSelectSession?: (serverId: string, sessionId: string) => void;
+  onSelectWorkspace?: (workspaceId: string) => void;
+  onAddWorkspace?: () => void;
   onClose?: () => void;
 }
 
@@ -68,17 +63,20 @@ function agentLabel(status?: AgentStatus): string {
   return '';
 }
 
-export function Sidebar({ onAddServer, onEditServer, onSelectSession, onClose }: SidebarProps) {
+export function Sidebar({ onAddServer, onEditServer, onSelectSession, onSelectWorkspace, onAddWorkspace, onClose }: SidebarProps) {
   const servers = useServerStore((s) => s.servers);
   const activeServerId = useServerStore((s) => s.activeServerId);
-  const setActiveServer = useServerStore((s) => s.setActiveServer);
   const removeServer = useServerStore((s) => s.removeServer);
-  const activeSessionIds = useSessionStore((s) => s.activeSessionId);
-  const connectionStatus = useSessionStore((s) => s.connectionStatus);
   const allSessions = useSessionStore((s) => s.sessions);
   const agentStatus = useSessionStore((s) => s.agentStatus);
   const gitInfo = useSessionStore((s) => s.gitInfo);
   const currentActiveSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
+
+  const workspaceMap = useWorkspaceStore((s) => s.workspaces);
+  const workspaceList = useMemo(
+    () => Object.values(workspaceMap).sort((a, b) => (b.lastActivityAt ?? b.updatedAt) - (a.lastActivityAt ?? a.updatedAt)),
+    [workspaceMap],
+  );
 
   const darkMode = useUIStore((s) => s.darkMode);
   const toggleDarkMode = useUIStore((s) => s.toggleDarkMode);
@@ -90,17 +88,7 @@ export function Sidebar({ onAddServer, onEditServer, onSelectSession, onClose }:
   const setNotifySound = useUIStore((s) => s.setNotifySound);
   const [deleteTarget, setDeleteTarget] = useState<ServerType | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const toggleCollapse = (serverId: string) => setCollapsed((s) => ({ ...s, [serverId]: !s[serverId] }));
-
-  const statusInfo = (serverId: string) => {
-    const sessionId = activeSessionIds[serverId];
-    if (!sessionId) return { color: 'bg-muted-foreground/40', label: '' };
-    const status = connectionStatus[sessionId];
-    if (status === 'connected') return { color: 'bg-green-500', label: 'Connected' };
-    if (status === 'connecting') return { color: 'bg-yellow-500', label: 'Connecting...' };
-    if (status === 'error') return { color: 'bg-red-500', label: 'Error' };
-    return { color: 'bg-muted-foreground/40', label: '' };
-  };
+  const toggleCollapse = (key: string) => setCollapsed((s) => ({ ...s, [key]: !s[key] }));
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -122,74 +110,69 @@ export function Sidebar({ onAddServer, onEditServer, onSelectSession, onClose }:
       )}>
         {!isMobile && (
           <div className="px-3 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Servers
+            Workspaces
           </div>
         )}
         <div className={cn('overflow-y-auto px-2 space-y-1', !isMobile && 'flex-1')}>
-          {servers.map((server) => {
-            const isActive = activeServerId === server.id;
-            const status = statusInfo(server.id);
+          {/* Header row with Add workspace */}
+          <div className="flex items-center justify-between px-1 pt-1 pb-1">
+            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Workspaces</span>
+            {onAddWorkspace && (
+              <button
+                className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                onClick={() => { onAddWorkspace(); onClose?.(); }}
+                title="Add workspace"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Workspace list */}
+          {workspaceList.map((ws) => {
+            const workspaceSessions = (allSessions[ws.serverId] ?? []).filter((s) => s.workspaceId === ws.id);
+            const expanded = !collapsed[`ws:${ws.id}`];
+            const anyActive = workspaceSessions.some((s) => isAgentWorking(agentStatus[s.id]));
+            const server = servers.find((sv) => sv.id === ws.serverId);
             return (
-              <ContextMenu key={server.id}>
-                <ContextMenuTrigger asChild>
-                  <button
-                    className={cn(
-                      'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors',
-                      isActive
-                        ? 'bg-accent text-accent-foreground'
-                        : 'text-foreground/70 hover:bg-accent/50 hover:text-accent-foreground'
-                    )}
-                    onClick={() => { if (!isActive) setActiveServer(server.id); }}
+              <div key={ws.id}>
+                <button
+                  className={cn(
+                    'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm',
+                    'text-foreground/70 hover:bg-accent/50 hover:text-accent-foreground',
+                  )}
+                  onClick={() => { onSelectWorkspace?.(ws.id); onClose?.(); }}
+                >
+                  <span
+                    role="button"
+                    className="shrink-0 text-muted-foreground/60 p-0.5 -m-0.5 rounded hover:bg-accent"
+                    onClick={(e) => { e.stopPropagation(); toggleCollapse(`ws:${ws.id}`); }}
                   >
-                    <span
-                      role="button"
-                      className="shrink-0 text-muted-foreground/60 p-0.5 -m-0.5 rounded hover:bg-accent"
-                      onClick={(e) => { e.stopPropagation(); toggleCollapse(server.id); }}
-                    >
-                      {(allSessions[server.id] ?? []).length === 0 || collapsed[server.id]
-                        ? <ChevronRight className="h-3.5 w-3.5" />
-                        : <ChevronDown className="h-3.5 w-3.5" />}
-                    </span>
-                    <Server className={cn('h-3.5 w-3.5 shrink-0', isActive ? 'text-foreground' : 'text-muted-foreground/70')} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="truncate font-medium text-xs">{server.name}</span>
-                        <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', status.color)} />
-                      </div>
+                    {workspaceSessions.length === 0 || !expanded
+                      ? <ChevronRight className="h-3.5 w-3.5" />
+                      : <ChevronDown className="h-3.5 w-3.5" />}
+                  </span>
+                  <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate font-medium text-xs">{ws.name}</span>
+                      {anyActive && <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />}
                     </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                        <span
-                          role="button"
-                          className="shrink-0 rounded p-0.5 opacity-60 hover:bg-accent sm:opacity-0 sm:group-hover:opacity-100"
-                        >
-                          <MoreVertical className="h-3.5 w-3.5" />
-                        </span>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => onEditServer(server)}>
-                          <Pencil className="mr-2 h-4 w-4" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onClick={() => setDeleteTarget(server)}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </button>
-                </ContextMenuTrigger>
-                {!collapsed[server.id] && (allSessions[server.id] ?? []).length > 0 && (
+                    <div className="text-[10px] text-muted-foreground truncate">
+                      {server?.name ?? '?'}
+                      {ws.defaultBranch && (<><span className="mx-1">·</span><GitBranchIcon className="inline h-2.5 w-2.5 mr-0.5" />{ws.defaultBranch}</>)}
+                    </div>
+                  </div>
+                </button>
+                {expanded && workspaceSessions.length > 0 && (
                   <div className="ml-5 mt-1 border-l border-border/50 pl-0 space-y-px">
-                    {(allSessions[server.id] ?? []).map((session) => {
+                    {workspaceSessions.map((session) => {
                       const isActiveSession = currentActiveSessionId === session.id;
                       const agent = agentStatus[session.id];
                       const git = gitInfo[session.id];
                       const dirName = session.name;
                       const label = agentLabel(agent);
+                      const isWorktree = git?.worktree && git.worktree !== ws.repoPath;
 
                       return (
                         <button
@@ -198,11 +181,13 @@ export function Sidebar({ onAddServer, onEditServer, onSelectSession, onClose }:
                             'flex w-full items-center gap-2 rounded-r-md pl-3 pr-2 py-1.5 text-xs transition-colors',
                             isActiveSession
                               ? 'bg-primary/10 text-primary border-l-2 border-primary -ml-px'
-                              : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground'
+                              : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground',
                           )}
-                          onClick={() => { onSelectSession?.(server.id, session.id); onClose?.(); }}
+                          onClick={() => { onSelectSession?.(session.serverId, session.id); onClose?.(); }}
                         >
-                          <FolderOpen className={cn('h-3.5 w-3.5 shrink-0', isActiveSession ? 'text-primary' : 'text-muted-foreground/60')} />
+                          {isWorktree
+                            ? <GitBranchIcon className={cn('h-3.5 w-3.5 shrink-0', isActiveSession ? 'text-primary' : 'text-muted-foreground/60')} />
+                            : <FolderOpen className={cn('h-3.5 w-3.5 shrink-0', isActiveSession ? 'text-primary' : 'text-muted-foreground/60')} />}
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
                               <span className="truncate font-medium">{dirName}</span>
@@ -214,43 +199,74 @@ export function Sidebar({ onAddServer, onEditServer, onSelectSession, onClose }:
                                 <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', agentDot(agent))} />
                               )}
                             </div>
-                            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
-                              {git && (
-                                <span className="flex items-center gap-0.5 truncate">
-                                  <GitBranch className="h-2.5 w-2.5 shrink-0" />
-                                  {git.branch}
-                                </span>
-                              )}
-                              {label && (
-                                <span className={cn(
-                                  'truncate',
-                                  agent?.state === 'thinking' && 'text-blue-500',
-                                  agent?.state === 'tool_call' && 'text-purple-500',
-                                )}>
-                                  {label}
-                                </span>
-                              )}
-                            </div>
+                            {(git || label) && (
+                              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
+                                {git && (
+                                  <span className="flex items-center gap-0.5 truncate">
+                                    <GitBranchIcon className="h-2.5 w-2.5 shrink-0" />
+                                    {git.branch}
+                                  </span>
+                                )}
+                                {label && (
+                                  <span className={cn(
+                                    'truncate',
+                                    agent?.state === 'thinking' && 'text-blue-500',
+                                    agent?.state === 'tool_call' && 'text-purple-500',
+                                  )}>
+                                    {label}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </button>
                       );
                     })}
                   </div>
                 )}
-                <ContextMenuContent>
-                  <ContextMenuItem onClick={() => onEditServer(server)}>
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Edit
-                  </ContextMenuItem>
-                  <ContextMenuItem
-                    className="text-destructive focus:text-destructive"
-                    onClick={() => setDeleteTarget(server)}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </ContextMenuItem>
-                </ContextMenuContent>
-              </ContextMenu>
+              </div>
+            );
+          })}
+
+          {/* Loose sessions footer (per server) */}
+          {servers.map((server) => {
+            const loose = (allSessions[server.id] ?? []).filter((s) => s.workspaceId === null);
+            if (loose.length === 0) return null;
+            const expanded = !collapsed[`loose:${server.id}`];
+            return (
+              <div key={`loose-${server.id}`} className="mt-3">
+                <button
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
+                  onClick={() => toggleCollapse(`loose:${server.id}`)}
+                >
+                  {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                  <Server className="h-3.5 w-3.5" />
+                  <span className="truncate">Loose · {server.name}</span>
+                  <span className="ml-auto text-[10px]">{loose.length}</span>
+                </button>
+                {expanded && (
+                  <div className="ml-5 mt-1 border-l border-border/50 pl-0 space-y-px">
+                    {loose.map((session) => {
+                      const isActiveSession = currentActiveSessionId === session.id;
+                      return (
+                        <button
+                          key={session.id}
+                          className={cn(
+                            'flex w-full items-center gap-2 rounded-r-md pl-3 pr-2 py-1.5 text-xs transition-colors',
+                            isActiveSession
+                              ? 'bg-primary/10 text-primary border-l-2 border-primary -ml-px'
+                              : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground',
+                          )}
+                          onClick={() => { onSelectSession?.(server.id, session.id); onClose?.(); }}
+                        >
+                          <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                          <span className="truncate flex-1">{session.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
