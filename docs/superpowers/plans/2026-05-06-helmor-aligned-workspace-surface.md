@@ -137,11 +137,11 @@ git commit -m "feat(workspace): add workspace inspector panel"
 
 **Goal:** Provide a simple remote script surface without building a full IDE.
 
-- [ ] Add `server/src/repo-scripts.ts` to read optional `gate.json`.
-- [ ] Support `setup`, `run`, and `test` commands.
-- [ ] Add WS action for running a configured script in the workspace root.
-- [ ] Stream command output into Run tab state.
-- [ ] Detect URLs in output and expose an "Open" action when possible.
+- [x] Add `server/src/repo-scripts.ts` to read optional `gate.json`.
+- [x] Support `setup`, `run`, and `test` commands.
+- [x] Add WS action for running a configured script in the workspace root.
+- [x] Capture command output into Run tab state.
+- [x] Detect URLs in output and expose an "Open" action when possible.
 
 Verification:
 

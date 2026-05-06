@@ -2,6 +2,7 @@ import { Client, type ConnectConfig } from 'ssh2';
 import type { ClientChannel } from 'ssh2';
 import { EventEmitter } from 'events';
 import { readFileSync } from 'fs';
+import { parseRepoScripts, type RepoScripts } from './repo-scripts.js';
 
 export interface ServerConfig {
   id: string;
@@ -450,6 +451,15 @@ export class SSHManager extends EventEmitter {
     }
 
     return { workingDir: repoPath, gitInfo: await this.fetchGitInfo(serverId, repoPath) };
+  }
+
+  async readRepoScripts(serverId: string, workingDir: string): Promise<RepoScripts> {
+    const raw = await this.execCommand(serverId, `${shellCd(workingDir)} && cat gate.json 2>/dev/null || true`);
+    return parseRepoScripts(raw);
+  }
+
+  async runRepoScript(serverId: string, workingDir: string, command: string): Promise<string> {
+    return this.execCommand(serverId, `${shellCd(workingDir)} && ${command}`);
   }
 
   /** Upload a file to the remote server via SFTP. Returns the remote path. */

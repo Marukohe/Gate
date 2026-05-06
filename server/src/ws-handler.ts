@@ -5,6 +5,7 @@ import type { ParsedMessage, CLIProvider, OutputParser } from './providers/types
 import type { ProviderRegistry } from './providers/registry.js';
 import type { Database, Workspace, WorkspacePrState, WorkspaceStatus } from './db.js';
 import { buildWorkspaceInspector } from './workspace-inspector.js';
+import { extractUrls, type RepoScriptName } from './repo-scripts.js';
 
 /**
  * Single source of truth for workspace-scoped message types — these may omit
@@ -17,6 +18,7 @@ const WORKSPACE_MSG_TYPES = [
   'list-workspaces', 'create-workspace', 'delete-workspace', 'update-workspace',
   'set-workspace-status', 'pin-workspace', 'archive-workspace', 'restore-workspace',
   'start-workspace-task', 'list-workspace-branches', 'fetch-workspace-inspector',
+  'run-workspace-script',
 ] as const;
 type WorkspaceMsgType = typeof WORKSPACE_MSG_TYPES[number];
 
@@ -62,6 +64,7 @@ interface ClientMessage {
   branchName?: string;
   worktreeMode?: string;
   worktreePath?: string;
+  scriptName?: string;
 }
 
 interface ServerMessage {
@@ -72,7 +75,8 @@ interface ServerMessage {
     | 'git-status' | 'git-diff' | 'pr-info' | 'git-commit-result' | 'git-create-pr-result'
     | 'checkpoints' | 'checkpoint-reverted'
     | 'workspace-list' | 'workspace-update' | 'workspace-deleted' | 'session-update'
-    | 'workspace-branches' | 'workspace-inspector' | 'workspace-task-started' | 'workspace-error';
+    | 'workspace-branches' | 'workspace-inspector' | 'workspace-run-result'
+    | 'workspace-task-started' | 'workspace-error';
   serverId?: string;
   sessionId?: string | null;
   [key: string]: any;
@@ -129,6 +133,10 @@ function workspaceBranchMode(value?: string): 'current' | 'existing' | 'create' 
 
 function workspaceWorktreeMode(value?: string): 'main' | 'isolated' | 'existing' {
   return value === 'isolated' || value === 'existing' ? value : 'main';
+}
+
+function workspaceScriptName(value?: string): RepoScriptName | null {
+  return value === 'setup' || value === 'run' || value === 'test' ? value : null;
 }
 
 export function setupWebSocket(httpServer: HttpServer, db: Database, registry: ProviderRegistry): SSHManager {
@@ -662,7 +670,83 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               ws.send(JSON.stringify({ type: 'workspace-error', error: 'Workspace not found' }));
               break;
             }
+            if (sshManager.isConnected(inspector.serverId)) {
+              try {
+                inspector.scripts = await sshManager.readRepoScripts(inspector.serverId, inspector.workspace.repoPath);
+              } catch {
+                inspector.scripts = {};
+              }
+            }
             ws.send(JSON.stringify({ type: 'workspace-inspector', ...inspector }));
+            break;
+          }
+
+          case 'run-workspace-script': {
+            if (!msg.workspaceId) break;
+            const scriptName = workspaceScriptName(msg.scriptName);
+            if (!scriptName) {
+              ws.send(JSON.stringify({ type: 'workspace-error', error: 'Unknown workspace script' }));
+              break;
+            }
+            const workspace = db.getWorkspace(msg.workspaceId);
+            if (!workspace) {
+              ws.send(JSON.stringify({ type: 'workspace-error', error: 'Workspace not found' }));
+              break;
+            }
+            const configServer = db.getServer(workspace.serverId);
+            if (!configServer) {
+              ws.send(JSON.stringify({ type: 'workspace-error', error: 'Server not found' }));
+              break;
+            }
+
+            try {
+              if (!sshManager.isConnected(workspace.serverId)) {
+                await sshManager.connect({
+                  id: configServer.id,
+                  host: configServer.host,
+                  port: configServer.port,
+                  username: configServer.username,
+                  authType: configServer.authType as 'password' | 'privateKey',
+                  password: configServer.password ?? undefined,
+                  privateKeyPath: configServer.privateKeyPath ?? undefined,
+                });
+              } else {
+                await sshManager.ensureConnected(workspace.serverId);
+              }
+              const scripts = await sshManager.readRepoScripts(workspace.serverId, workspace.repoPath);
+              const command = scripts[scriptName];
+              if (!command) {
+                ws.send(JSON.stringify({ type: 'workspace-error', error: `Script not configured: ${scriptName}` }));
+                break;
+              }
+              broadcast(wss, {
+                type: 'workspace-run-result',
+                workspaceId: workspace.id,
+                scriptName,
+                status: 'running',
+                output: '',
+                urls: [],
+              });
+              const output = await sshManager.runRepoScript(workspace.serverId, workspace.repoPath, command);
+              broadcast(wss, {
+                type: 'workspace-run-result',
+                workspaceId: workspace.id,
+                scriptName,
+                status: 'done',
+                output,
+                urls: extractUrls(output),
+              });
+            } catch (err: any) {
+              broadcast(wss, {
+                type: 'workspace-run-result',
+                workspaceId: workspace.id,
+                scriptName,
+                status: 'error',
+                output: '',
+                urls: [],
+                error: err.message,
+              });
+            }
             break;
           }
 

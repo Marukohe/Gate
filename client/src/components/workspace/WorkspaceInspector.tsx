@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
-import { GitBranch, Play, SquareTerminal } from 'lucide-react';
+import { ExternalLink, GitBranch, Loader2, Play, SquareTerminal } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ChangesPanel } from '@/components/changes/ChangesPanel';
 import { PlanPanel } from '@/components/plan/PlanPanel';
@@ -22,9 +23,10 @@ function pickPrimarySession(workspaceId: string, primarySessionId: string | null
 export function WorkspaceInspector({ workspaceId, onSendToChat }: WorkspaceInspectorProps) {
   const workspace = useWorkspaceStore((s) => s.workspaces[workspaceId]);
   const snapshot = useWorkspaceStore((s) => s.inspectors[workspaceId]);
+  const runResult = useWorkspaceStore((s) => s.runResults[workspaceId]);
   const sessionsByServer = useSessionStore((s) => s.sessions);
   const gitInfo = useSessionStore((s) => s.gitInfo);
-  const { fetchWorkspaceInspector } = useWebSocket();
+  const { fetchWorkspaceInspector, runWorkspaceScript } = useWebSocket();
 
   useEffect(() => {
     fetchWorkspaceInspector(workspaceId);
@@ -79,9 +81,59 @@ export function WorkspaceInspector({ workspaceId, onSendToChat }: WorkspaceInspe
             <Play className="h-3.5 w-3.5" />
             Run
           </div>
-          <div className="mt-4 rounded border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
-            No scripts configured
-          </div>
+          {snapshot?.scripts && Object.keys(snapshot.scripts).length > 0 ? (
+            <div className="mt-3 space-y-3">
+              <div className="grid grid-cols-3 gap-1.5">
+                {(['setup', 'run', 'test'] as const).map((name) => (
+                  <Button
+                    key={name}
+                    variant="outline"
+                    size="sm"
+                    disabled={!snapshot.scripts[name] || runResult?.status === 'running'}
+                    onClick={() => runWorkspaceScript(workspaceId, name)}
+                    className="h-8 text-xs"
+                  >
+                    {runResult?.status === 'running' && runResult.scriptName === name ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : name}
+                  </Button>
+                ))}
+              </div>
+              {runResult && (
+                <div className="space-y-2">
+                  <div className="text-[11px] text-muted-foreground">
+                    {runResult.scriptName} · {runResult.status}
+                    {runResult.error ? ` · ${runResult.error}` : ''}
+                  </div>
+                  {runResult.urls.length > 0 && (
+                    <div className="space-y-1">
+                      {runResult.urls.map((url) => (
+                        <a
+                          key={url}
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex min-w-0 items-center gap-1.5 text-xs text-primary hover:underline"
+                        >
+                          <ExternalLink className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{url}</span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  {runResult.output && (
+                    <pre className="max-h-80 overflow-auto rounded bg-muted p-2 text-[11px] leading-relaxed">
+                      {runResult.output}
+                    </pre>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="mt-4 rounded border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+              No scripts configured
+            </div>
+          )}
         </TabsContent>
         <TabsContent value="terminal" className="min-h-0 flex-1 overflow-y-auto p-3">
           <div className="flex items-center gap-2 text-xs font-medium">
