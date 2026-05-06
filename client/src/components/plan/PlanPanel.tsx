@@ -12,17 +12,22 @@ const EMPTY_PLANS: Plan[] = [];
 
 interface PlanPanelProps {
   onSendToChat: (text: string) => void;
+  sessionId?: string | null;
 }
 
-export function PlanPanel({ onSendToChat }: PlanPanelProps) {
+export function PlanPanel({ onSendToChat, sessionId }: PlanPanelProps) {
   const activeServerId = useServerStore((s) => s.activeServerId);
-  const activeSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
-  const plans = usePlanStore((s) => activeSessionId ? (s.plans[activeSessionId] ?? EMPTY_PLANS) : EMPTY_PLANS);
+  const fallbackSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
+  const targetSessionId = sessionId ?? fallbackSessionId;
+  const plans = usePlanStore((s) => targetSessionId ? (s.plans[targetSessionId] ?? EMPTY_PLANS) : EMPTY_PLANS);
   const activePlanId = usePlanStore((s) => s.activePlanId);
+  const autoExtractedPlanId = usePlanStore((s) => targetSessionId ? s.autoExtractedPlanIds[targetSessionId] : undefined);
   const toggleStep = usePlanStore((s) => s.toggleStep);
   const updatePlan = usePlanStore((s) => s.updatePlan);
 
-  const activePlan = plans.find((p) => p.id === activePlanId);
+  const activePlan = plans.find((p) => p.id === activePlanId)
+    ?? plans.find((p) => p.id === autoExtractedPlanId)
+    ?? plans[0];
   const [editContent, setEditContent] = useState('');
   const [tab, setTab] = useState('view');
 
@@ -34,9 +39,9 @@ export function PlanPanel({ onSendToChat }: PlanPanelProps) {
   };
 
   const handleSave = () => {
-    if (!activePlan || !activeSessionId) return;
+    if (!activePlan || !targetSessionId) return;
     const { title, steps } = parseMarkdownChecklist(editContent);
-    updatePlan(activeSessionId, activePlan.id, { title, steps, content: editContent });
+    updatePlan(targetSessionId, activePlan.id, { title, steps, content: editContent });
     setTab('view');
   };
 
@@ -75,7 +80,7 @@ export function PlanPanel({ onSendToChat }: PlanPanelProps) {
               <PlanStepItem
                 key={step.id}
                 step={step}
-                onToggle={(stepId) => activeSessionId && toggleStep(activeSessionId, activePlan.id, stepId)}
+                onToggle={(stepId) => targetSessionId && toggleStep(targetSessionId, activePlan.id, stepId)}
               />
             ))}
           </div>

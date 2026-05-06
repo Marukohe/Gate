@@ -3,6 +3,7 @@ import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { PlanPanel } from '@/components/plan/PlanPanel';
 import { ChangesPanel } from '@/components/changes/ChangesPanel';
+import { WorkspaceInspector } from '@/components/workspace/WorkspaceInspector';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useUIStore } from '@/stores/ui-store';
 import type { Server } from '@/stores/server-store';
@@ -15,11 +16,12 @@ interface AppShellProps {
   onSelectSession?: (serverId: string, sessionId: string) => void;
   onSelectWorkspace?: (id: string) => void;
   onAddWorkspace?: () => void;
+  inspectorWorkspaceId?: string | null;
 }
 
 export function AppShell({
   mainView, onAddServer, onEditServer, onSendToChat, onSelectSession,
-  onSelectWorkspace, onAddWorkspace,
+  onSelectWorkspace, onAddWorkspace, inspectorWorkspaceId,
 }: AppShellProps) {
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
@@ -89,20 +91,26 @@ export function AppShell({
           {/* Desktop right panel — Changes (top) + Plan (bottom) */}
           {rightPanelOpen && (
             <div className="hidden w-72 shrink-0 overflow-hidden border-l lg:flex lg:flex-col">
-              <div className="flex-1 overflow-hidden">
-                <ChangesPanel />
-              </div>
-              {planPanelOpen && (
-                <div className="border-t overflow-hidden" style={{ maxHeight: '40%' }}>
-                  <PlanPanel onSendToChat={onSendToChat} />
-                </div>
+              {inspectorWorkspaceId ? (
+                <WorkspaceInspector workspaceId={inspectorWorkspaceId} onSendToChat={onSendToChat} />
+              ) : (
+                <>
+                  <div className="flex-1 overflow-hidden">
+                    <ChangesPanel />
+                  </div>
+                  {planPanelOpen && (
+                    <div className="border-t overflow-hidden" style={{ maxHeight: '40%' }}>
+                      <PlanPanel onSendToChat={onSendToChat} />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
         </div>
       </div>
 
-      {/* Mobile right panel — bottom sheet with Changes + Plan */}
+      {/* Mobile right panel — bottom sheet with workspace inspector or Changes + Plan */}
       <Sheet open={rightPanelOpen && isMobile} onOpenChange={setRightPanelOpen}>
         <SheetContent
           side="bottom"
@@ -116,11 +124,19 @@ export function AppShell({
             <SheetTitle>Changes & Plan</SheetTitle>
           </SheetHeader>
           <div className="max-h-[60dvh] overflow-y-auto">
-            <ChangesPanel />
-            {planPanelOpen && (
-              <div className="border-t">
-                <PlanPanel onSendToChat={onSendToChat} />
+            {inspectorWorkspaceId ? (
+              <div className="h-[60dvh]">
+                <WorkspaceInspector workspaceId={inspectorWorkspaceId} onSendToChat={onSendToChat} />
               </div>
+            ) : (
+              <>
+                <ChangesPanel />
+                {planPanelOpen && (
+                  <div className="border-t">
+                    <PlanPanel onSendToChat={onSendToChat} />
+                  </div>
+                )}
+              </>
             )}
           </div>
         </SheetContent>

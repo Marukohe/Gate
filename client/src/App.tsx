@@ -322,6 +322,11 @@ function App() {
       />
     );
   })();
+  const inspectorWorkspaceId = route.kind === 'workspace'
+    ? route.id
+    : route.kind === 'session'
+      ? allSessions[route.serverId]?.find((session) => session.id === route.sessionId)?.workspaceId ?? null
+      : null;
 
   return (
     <>
@@ -333,6 +338,7 @@ function App() {
         onSelectSession={handleSidebarSelectSession}
         onSelectWorkspace={handleSelectWorkspace}
         onAddWorkspace={() => setAddWorkspaceOpen(true)}
+        inspectorWorkspaceId={inspectorWorkspaceId}
       />
       <ServerDialog
         open={serverDialogOpen}

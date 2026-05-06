@@ -4,6 +4,7 @@ import { SSHManager, type ServerConfig } from './ssh-manager.js';
 import type { ParsedMessage, CLIProvider, OutputParser } from './providers/types.js';
 import type { ProviderRegistry } from './providers/registry.js';
 import type { Database, Workspace, WorkspacePrState, WorkspaceStatus } from './db.js';
+import { buildWorkspaceInspector } from './workspace-inspector.js';
 
 /**
  * Single source of truth for workspace-scoped message types — these may omit
@@ -15,7 +16,7 @@ import type { Database, Workspace, WorkspacePrState, WorkspaceStatus } from './d
 const WORKSPACE_MSG_TYPES = [
   'list-workspaces', 'create-workspace', 'delete-workspace', 'update-workspace',
   'set-workspace-status', 'pin-workspace', 'archive-workspace', 'restore-workspace',
-  'start-workspace-task', 'list-workspace-branches',
+  'start-workspace-task', 'list-workspace-branches', 'fetch-workspace-inspector',
 ] as const;
 type WorkspaceMsgType = typeof WORKSPACE_MSG_TYPES[number];
 
@@ -71,7 +72,7 @@ interface ServerMessage {
     | 'git-status' | 'git-diff' | 'pr-info' | 'git-commit-result' | 'git-create-pr-result'
     | 'checkpoints' | 'checkpoint-reverted'
     | 'workspace-list' | 'workspace-update' | 'workspace-deleted' | 'session-update'
-    | 'workspace-branches' | 'workspace-task-started' | 'workspace-error';
+    | 'workspace-branches' | 'workspace-inspector' | 'workspace-task-started' | 'workspace-error';
   serverId?: string;
   sessionId?: string | null;
   [key: string]: any;
@@ -651,6 +652,17 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                 error: `Branch list failed: ${err.message}`,
               }));
             }
+            break;
+          }
+
+          case 'fetch-workspace-inspector': {
+            if (!msg.workspaceId) break;
+            const inspector = buildWorkspaceInspector(db, msg.workspaceId);
+            if (!inspector) {
+              ws.send(JSON.stringify({ type: 'workspace-error', error: 'Workspace not found' }));
+              break;
+            }
+            ws.send(JSON.stringify({ type: 'workspace-inspector', ...inspector }));
             break;
           }
 

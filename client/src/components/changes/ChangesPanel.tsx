@@ -12,49 +12,56 @@ import { CreatePRDialog } from './CreatePRDialog';
 
 const EMPTY_PLANS: import('@/stores/plan-store').Plan[] = [];
 
-export function ChangesPanel() {
+interface ChangesPanelProps {
+  serverId?: string | null;
+  sessionId?: string | null;
+}
+
+export function ChangesPanel({ serverId, sessionId }: ChangesPanelProps = {}) {
   const activeServerId = useServerStore((s) => s.activeServerId);
-  const activeSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
-  const gitStatus = useGitStore((s) => activeSessionId ? s.status[activeSessionId] : undefined);
-  const selectedFile = useGitStore((s) => activeSessionId ? s.selectedFile[activeSessionId] : null);
+  const fallbackSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
+  const targetServerId = serverId ?? activeServerId;
+  const targetSessionId = sessionId ?? fallbackSessionId;
+  const gitStatus = useGitStore((s) => targetSessionId ? s.status[targetSessionId] : undefined);
+  const selectedFile = useGitStore((s) => targetSessionId ? s.selectedFile[targetSessionId] : null);
   const setSelectedFile = useGitStore((s) => s.setSelectedFile);
   const setActiveTab = useUIStore((s) => s.setActiveTab);
-  const prInfo = useGitStore((s) => activeSessionId ? s.prInfo[activeSessionId] : null);
-  const gitBranch = useSessionStore((s) => activeSessionId ? s.gitInfo[activeSessionId]?.branch : undefined);
+  const prInfo = useGitStore((s) => targetSessionId ? s.prInfo[targetSessionId] : null);
+  const gitBranch = useSessionStore((s) => targetSessionId ? s.gitInfo[targetSessionId]?.branch : undefined);
   const { fetchGitStatus, fetchGitDiff, gitCreatePR, fetchPRInfo } = useWebSocket();
 
   const activePlanId = usePlanStore((s) => s.activePlanId);
-  const sessionPlans = usePlanStore((s) => activeSessionId ? (s.plans[activeSessionId] ?? EMPTY_PLANS) : EMPTY_PLANS);
+  const sessionPlans = usePlanStore((s) => targetSessionId ? (s.plans[targetSessionId] ?? EMPTY_PLANS) : EMPTY_PLANS);
   const activePlan = activePlanId ? sessionPlans.find((p) => p.id === activePlanId) ?? null : null;
   const hasUnfinishedTodos = activePlan ? activePlan.steps.some((step) => !step.completed) : false;
 
   const [prDialogOpen, setPRDialogOpen] = useState(false);
 
   useEffect(() => {
-    if (!activeServerId || !activeSessionId) return;
-    fetchGitStatus(activeServerId, activeSessionId);
-    const interval = setInterval(() => fetchGitStatus(activeServerId, activeSessionId), 15_000);
+    if (!targetServerId || !targetSessionId) return;
+    fetchGitStatus(targetServerId, targetSessionId);
+    const interval = setInterval(() => fetchGitStatus(targetServerId, targetSessionId), 15_000);
     return () => clearInterval(interval);
     // fetchGitStatus is a stable useCallback — safe to omit from deps
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeServerId, activeSessionId]);
+  }, [targetServerId, targetSessionId]);
 
   useEffect(() => {
-    if (activeServerId && activeSessionId) {
-      fetchPRInfo(activeServerId, activeSessionId);
+    if (targetServerId && targetSessionId) {
+      fetchPRInfo(targetServerId, targetSessionId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeServerId, activeSessionId]);
+  }, [targetServerId, targetSessionId]);
 
   const handleFileClick = (path: string, isUntracked: boolean) => {
-    if (!activeSessionId || !activeServerId) return;
-    setSelectedFile(activeSessionId, path);
+    if (!targetSessionId || !targetServerId) return;
+    setSelectedFile(targetSessionId, path);
     setActiveTab('diff');
     // Untracked files aren't in git index, so use --no-index to show full content
     const diffArgs = isUntracked
       ? `--no-index /dev/null '${path}'`
       : `-- '${path}'`;
-    fetchGitDiff(activeServerId, activeSessionId, diffArgs);
+    fetchGitDiff(targetServerId, targetSessionId, diffArgs);
   };
 
   const totalChanges = (gitStatus?.staged.length ?? 0) + (gitStatus?.unstaged.length ?? 0) + (gitStatus?.untracked.length ?? 0);
@@ -72,7 +79,11 @@ export function ChangesPanel() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-1 py-1">
-          {!gitStatus && (
+          {!targetSessionId && (
+            <div className="py-8 text-center text-xs text-muted-foreground">No session selected</div>
+          )}
+
+          {targetSessionId && !gitStatus && (
             <div className="py-8 text-center text-xs text-muted-foreground">Loading...</div>
           )}
 
@@ -152,8 +163,8 @@ export function ChangesPanel() {
         open={prDialogOpen}
         onOpenChange={setPRDialogOpen}
         onSubmit={(title, body) => {
-          if (activeServerId && activeSessionId) {
-            gitCreatePR(activeServerId, activeSessionId, title, body);
+          if (targetServerId && targetSessionId) {
+            gitCreatePR(targetServerId, targetSessionId, title, body);
           }
         }}
         defaultBranch={gitBranch}

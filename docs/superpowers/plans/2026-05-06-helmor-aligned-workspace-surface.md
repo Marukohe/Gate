@@ -114,11 +114,11 @@ git commit -m "feat(workspace): add start composer for new work"
 
 **Goal:** Make the right panel workspace-aware instead of only active-session-aware.
 
-- [ ] Create `WorkspaceInspector.tsx` with tabs: Changes, Plan, Run, Terminal.
-- [ ] Reuse `ChangesPanel` and `PlanPanel` where possible, but pass workspace context.
-- [ ] Add `fetch-workspace-inspector` response shape for changes, PR state, scripts, and action status.
-- [ ] Make `AppShell` show inspector data for the selected workspace, even before a chat session is active.
-- [ ] Preserve existing mobile bottom sheet behavior.
+- [x] Create `WorkspaceInspector.tsx` with tabs: Changes, Plan, Run, Terminal.
+- [x] Reuse `ChangesPanel` and `PlanPanel` where possible, but pass workspace context.
+- [x] Add `fetch-workspace-inspector` response shape for changes, PR state, scripts, and action status.
+- [x] Make `AppShell` show inspector data for the selected workspace, even before a chat session is active.
+- [x] Preserve existing mobile bottom sheet behavior.
 
 Verification:
 

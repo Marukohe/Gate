@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { Session } from './session-store';
 
 export type WorkspaceStatus = 'backlog' | 'in-progress' | 'review' | 'done' | 'canceled';
 export type WorkspacePrState = 'none' | 'open' | 'closed' | 'merged' | 'unknown';
@@ -8,6 +9,21 @@ export interface WorkspaceBranchList {
   current: string;
   local: string[];
   remote: string[];
+}
+
+export interface WorkspaceInspectorSnapshot {
+  workspaceId: string;
+  serverId: string;
+  primarySession: Session | null;
+  visibleSessions: Session[];
+  actionSessions: Session[];
+  changes: null;
+  pr: {
+    url: string | null;
+    state: WorkspacePrState;
+  };
+  scripts: Record<string, string>;
+  actionStatus: null;
 }
 
 export interface WorkspaceWithAggregates {
@@ -36,10 +52,12 @@ export interface WorkspaceWithAggregates {
 interface WorkspaceStore {
   workspaces: Record<string, WorkspaceWithAggregates>;
   branches: Record<string, WorkspaceBranchList>;
+  inspectors: Record<string, WorkspaceInspectorSnapshot>;
   activeWorkspaceId: string | null;
   setWorkspaces: (list: WorkspaceWithAggregates[]) => void;
   upsertWorkspace: (ws: WorkspaceWithAggregates) => void;
   setBranches: (workspaceId: string, branches: WorkspaceBranchList) => void;
+  setInspector: (snapshot: WorkspaceInspectorSnapshot) => void;
   removeWorkspace: (id: string) => void;
   setActiveWorkspace: (id: string | null) => void;
   list: () => WorkspaceWithAggregates[];
@@ -51,6 +69,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
     (set, get) => ({
       workspaces: {},
       branches: {},
+      inspectors: {},
       activeWorkspaceId: null,
       setWorkspaces: (list) => set({
         workspaces: Object.fromEntries(list.map((w) => [w.id, w])),
@@ -61,12 +80,17 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       setBranches: (workspaceId, branches) => set((s) => ({
         branches: { ...s.branches, [workspaceId]: branches },
       })),
+      setInspector: (snapshot) => set((s) => ({
+        inspectors: { ...s.inspectors, [snapshot.workspaceId]: snapshot },
+      })),
       removeWorkspace: (id) => set((s) => {
         const { [id]: _drop, ...rest } = s.workspaces;
         const { [id]: _dropBranches, ...branches } = s.branches;
+        const { [id]: _dropInspector, ...inspectors } = s.inspectors;
         return {
           workspaces: rest,
           branches,
+          inspectors,
           activeWorkspaceId: s.activeWorkspaceId === id ? null : s.activeWorkspaceId,
         };
       }),
