@@ -15,6 +15,7 @@ import type { Database, Workspace, WorkspacePrState, WorkspaceStatus } from './d
 const WORKSPACE_MSG_TYPES = [
   'list-workspaces', 'create-workspace', 'delete-workspace', 'update-workspace',
   'set-workspace-status', 'pin-workspace', 'archive-workspace', 'restore-workspace',
+  'start-workspace-task',
 ] as const;
 type WorkspaceMsgType = typeof WORKSPACE_MSG_TYPES[number];
 
@@ -56,6 +57,9 @@ interface ClientMessage {
   pinned?: boolean;
   prUrl?: string | null;
   prState?: WorkspacePrState;
+  branchMode?: string;
+  branchName?: string;
+  worktreeMode?: string;
 }
 
 interface ServerMessage {
@@ -65,7 +69,7 @@ interface ServerMessage {
     | 'claude-sessions' | 'cli-sessions'
     | 'git-status' | 'git-diff' | 'pr-info' | 'git-commit-result' | 'git-create-pr-result'
     | 'checkpoints' | 'checkpoint-reverted'
-    | 'workspace-list' | 'workspace-update' | 'workspace-deleted' | 'session-update' | 'workspace-error';
+    | 'workspace-list' | 'workspace-update' | 'workspace-deleted' | 'session-update' | 'workspace-task-started' | 'workspace-error';
   serverId?: string;
   sessionId?: string | null;
   [key: string]: any;
@@ -109,6 +113,11 @@ function getProvider(db: Database, registry: ProviderRegistry, sessionId: string
   const provider = registry.get(providerName);
   if (!provider) throw new Error(`Unknown provider: ${providerName}`);
   return provider;
+}
+
+function titleFromGoal(goal: string): string {
+  const firstLine = goal.trim().split('\n').find((line) => line.trim().length > 0)?.trim() ?? 'Workspace task';
+  return firstLine.length > 60 ? `${firstLine.slice(0, 57)}...` : firstLine;
 }
 
 export function setupWebSocket(httpServer: HttpServer, db: Database, registry: ProviderRegistry): SSHManager {
@@ -588,6 +597,109 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             if (updated) {
               const enriched = await buildWorkspaceWithAggregates(updated, db, sshManager);
               broadcast(wss, { type: 'workspace-update', workspace: enriched });
+            }
+            break;
+          }
+
+          case 'start-workspace-task': {
+            if (!msg.workspaceId || !msg.goal?.trim()) break;
+            const workspace = db.getWorkspace(msg.workspaceId);
+            if (!workspace) {
+              ws.send(JSON.stringify({ type: 'workspace-error', error: 'Workspace not found' }));
+              break;
+            }
+            const goal = msg.goal.trim();
+            const providerName = msg.provider ?? 'claude';
+            const provider = registry.get(providerName);
+            if (!provider) {
+              ws.send(JSON.stringify({ type: 'workspace-error', error: `Unknown provider: ${providerName}` }));
+              break;
+            }
+
+            const session = db.createSession(
+              workspace.serverId,
+              titleFromGoal(goal),
+              workspace.repoPath,
+              providerName,
+              { workspaceId: workspace.id },
+            );
+            db.setWorkspacePrimarySession(workspace.id, session.id);
+            db.updateWorkspace(workspace.id, { goal, status: 'in-progress', primarySessionId: session.id });
+            db.saveMessage({
+              sessionId: session.id,
+              type: 'user',
+              content: goal,
+              timestamp: Date.now(),
+            });
+            db.updateSessionActivity(session.id);
+
+            const sessions = db.listSessions(workspace.serverId);
+            broadcast(wss, { type: 'sessions', serverId: workspace.serverId, sessions });
+
+            const updated = db.getWorkspace(workspace.id);
+            let enriched: WorkspaceWithAggregates | null = null;
+            if (updated) {
+              enriched = await buildWorkspaceWithAggregates(updated, db, sshManager);
+              broadcast(wss, { type: 'workspace-update', workspace: enriched });
+            }
+
+            const configServer = db.getServer(workspace.serverId);
+            if (!configServer) {
+              ws.send(JSON.stringify({ type: 'workspace-error', error: 'Server not found' }));
+              break;
+            }
+
+            try {
+              if (!sshManager.isConnected(workspace.serverId)) {
+                await sshManager.connect({
+                  id: configServer.id,
+                  host: configServer.host,
+                  port: configServer.port,
+                  username: configServer.username,
+                  authType: configServer.authType as 'password' | 'privateKey',
+                  password: configServer.password ?? undefined,
+                  privateKeyPath: configServer.privateKeyPath ?? undefined,
+                });
+              } else {
+                await sshManager.ensureConnected(workspace.serverId);
+              }
+
+              const caps = provider.getCapabilities();
+              const cmd = provider.buildCommand({
+                workingDir: workspace.repoPath,
+                initialContext: caps.supportsStdin ? undefined : goal,
+              });
+              if (!caps.supportsStdin) perMessageSessions.add(session.id);
+              await sshManager.startCLI(workspace.serverId, session.id, cmd);
+              if (caps.supportsStdin) {
+                setTimeout(() => {
+                  try {
+                    sshManager.sendInput(workspace.serverId, session.id, provider.formatInput(goal));
+                  } catch { /* channel may have closed */ }
+                }, 500);
+              }
+
+              ws.send(JSON.stringify({
+                type: 'workspace-task-started',
+                serverId: workspace.serverId,
+                workspace: enriched ?? undefined,
+                workspaceId: workspace.id,
+                session,
+              }));
+            } catch (err: any) {
+              broadcast(wss, {
+                type: 'status',
+                serverId: workspace.serverId,
+                sessionId: session.id,
+                status: 'error',
+                error: err.message,
+              });
+              ws.send(JSON.stringify({
+                type: 'workspace-error',
+                serverId: workspace.serverId,
+                sessionId: session.id,
+                error: `Workspace task start failed: ${err.message}`,
+              }));
             }
             break;
           }

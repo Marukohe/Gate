@@ -221,6 +221,24 @@ function setupSocket() {
       case 'workspace-update':
         if (data.workspace) useWorkspaceStore.getState().upsertWorkspace(data.workspace);
         break;
+      case 'workspace-task-started':
+        if (data.workspace) useWorkspaceStore.getState().upsertWorkspace(data.workspace);
+        if (data.session) {
+          const sessionStore = useSessionStore.getState();
+          const list = sessionStore.sessions[data.session.serverId] ?? [];
+          if (!list.find((s) => s.id === data.session.id)) {
+            sessionStore.addSession(data.session.serverId, data.session);
+          }
+          sessionStore.setActiveSession(data.session.serverId, data.session.id);
+          window.dispatchEvent(new CustomEvent('gate:workspace-task-started', {
+            detail: {
+              serverId: data.session.serverId,
+              sessionId: data.session.id,
+              workspaceId: data.session.workspaceId,
+            },
+          }));
+        }
+        break;
       case 'workspace-deleted': {
         useWorkspaceStore.getState().removeWorkspace(data.workspaceId);
         // Drop any sessions returned in removedSessionIds from the session-store
@@ -363,6 +381,11 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'restore-workspace', workspaceId }));
   }, []);
 
+  const startWorkspaceTask = useCallback((workspaceId: string, goal: string, provider?: string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'start-workspace-task', workspaceId, goal, provider }));
+  }, []);
+
   const disconnectSession = useCallback((serverId: string, sessionId: string) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: 'disconnect', serverId, sessionId }));
@@ -475,5 +498,5 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'load-more', serverId, sessionId, beforeTimestamp }));
   }, []);
 
-  return { connectToSession, sendInput, interruptSession, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, resetConversation, resumeCliSession, loadMoreMessages, fetchGitStatus, fetchGitDiff, fetchPRInfo, gitCommit, gitCreatePR, revertToCheckpoint, listCheckpoints, listWorkspaces, createWorkspace, deleteWorkspace, updateWorkspace, setWorkspaceStatus, pinWorkspace, archiveWorkspace, restoreWorkspace };
+  return { connectToSession, sendInput, interruptSession, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, resetConversation, resumeCliSession, loadMoreMessages, fetchGitStatus, fetchGitDiff, fetchPRInfo, gitCommit, gitCreatePR, revertToCheckpoint, listCheckpoints, listWorkspaces, createWorkspace, deleteWorkspace, updateWorkspace, setWorkspaceStatus, pinWorkspace, archiveWorkspace, restoreWorkspace, startWorkspaceTask };
 }

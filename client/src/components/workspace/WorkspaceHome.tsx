@@ -2,9 +2,10 @@ import { GitBranch, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useWorkspaceStore } from '@/stores/workspace-store';
-import { useSessionStore, Session } from '@/stores/session-store';
+import { useSessionStore, type Session } from '@/stores/session-store';
 import { useServerStore } from '@/stores/server-store';
 import { useWebSocket } from '@/hooks/use-websocket';
+import { WorkspaceStart } from './WorkspaceStart';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -14,10 +15,11 @@ import { useState, useMemo } from 'react';
 interface WorkspaceHomeProps {
   workspaceId: string;
   onNewSession: () => void;
+  onStartTask: (workspaceId: string, goal: string, provider: string) => void;
   onSelectSession: (serverId: string, sessionId: string) => void;
 }
 
-export function WorkspaceHome({ workspaceId, onNewSession, onSelectSession }: WorkspaceHomeProps) {
+export function WorkspaceHome({ workspaceId, onNewSession, onStartTask, onSelectSession }: WorkspaceHomeProps) {
   const ws = useWorkspaceStore((s) => s.workspaces[workspaceId]);
   // Subscribe to the sessions Record itself (stable shape) and filter in-render
   // with useMemo. A selector that calls sessionsByWorkspace() would construct a
@@ -26,7 +28,7 @@ export function WorkspaceHome({ workspaceId, onNewSession, onSelectSession }: Wo
   const sessions = useMemo(() => {
     const out: Session[] = [];
     for (const list of Object.values(sessionsByServer)) {
-      for (const s of list) if (s.workspaceId === workspaceId) out.push(s);
+      for (const s of list) if (s.workspaceId === workspaceId && !s.isHidden) out.push(s);
     }
     return out;
   }, [sessionsByServer, workspaceId]);
@@ -86,6 +88,12 @@ export function WorkspaceHome({ workspaceId, onNewSession, onSelectSession }: Wo
           </Button>
         </div>
       </div>
+
+      <WorkspaceStart
+        workspaceName={ws.name}
+        defaultBranch={ws.defaultBranch}
+        onStart={(goal, provider) => onStartTask(ws.id, goal, provider)}
+      />
 
       <section className="px-6 py-4">
         <h2 className="text-sm font-semibold mb-2">Sessions ({sessions.length})</h2>

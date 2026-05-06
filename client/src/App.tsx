@@ -34,7 +34,7 @@ function App() {
   const setSessions = useSessionStore((s) => s.setSessions);
   const setActiveSession = useSessionStore((s) => s.setActiveSession);
 
-  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, loadMoreMessages, listCheckpoints, listWorkspaces } = useWebSocket();
+  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, loadMoreMessages, listCheckpoints, listWorkspaces, startWorkspaceTask } = useWebSocket();
 
   const setActiveWorkspace = useWorkspaceStore((s) => s.setActiveWorkspace);
   const workspaces = useWorkspaceStore((s) => s.workspaces);
@@ -46,6 +46,19 @@ function App() {
     (serverId: string, sessionId: string) => setRoute({ kind: 'session', serverId, sessionId }),
     [],
   );
+
+  useEffect(() => {
+    const handleStarted = (event: Event) => {
+      const detail = (event as CustomEvent<{ serverId?: string; sessionId?: string; workspaceId?: string | null }>).detail;
+      if (!detail?.serverId || !detail.sessionId) return;
+      setActiveServer(detail.serverId);
+      setActiveSession(detail.serverId, detail.sessionId);
+      if (detail.workspaceId) setActiveWorkspace(detail.workspaceId);
+      enterSession(detail.serverId, detail.sessionId);
+    };
+    window.addEventListener('gate:workspace-task-started', handleStarted);
+    return () => window.removeEventListener('gate:workspace-task-started', handleStarted);
+  }, [setActiveServer, setActiveSession, setActiveWorkspace, enterSession]);
 
   // Reset route to home when the routed-to session or workspace is removed from its store.
   // Without this, a workspace deletion that cascades the active session leaves ChatView
@@ -249,6 +262,10 @@ function App() {
     setCreateOpen(true);
   }, [setActiveServer]);
 
+  const handleStartWorkspaceTask = useCallback((workspaceId: string, goal: string, provider: string) => {
+    startWorkspaceTask(workspaceId, goal, provider);
+  }, [startWorkspaceTask]);
+
   const handleCreateSessionFromDialog = useCallback((name: string, workingDir: string | null, claudeSessionId?: string | null, provider?: string) => {
     if (!activeServerId) return;
     // Pass workspaceId so the server links the new session immediately rather than
@@ -291,6 +308,7 @@ function App() {
         <WorkspaceHome
           workspaceId={route.id}
           onNewSession={() => handleNewSessionInWorkspace(route.id)}
+          onStartTask={handleStartWorkspaceTask}
           onSelectSession={handleSidebarSelectSession}
         />
       );
