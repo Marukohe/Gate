@@ -67,10 +67,10 @@ git commit -m "feat(workspace): add status and archive metadata"
 
 **Goal:** Replace the Phase A workspace grid with a compact grouped work queue.
 
-- [ ] Group workspaces by `Pinned`, `In Progress`, `Review`, `Backlog`, `Done`, `Archived/Canceled`.
-- [ ] Render each workspace as a dense row/card with status, server, branch, active run, dirty count, PR state, goal/session title, and last activity.
-- [ ] Add row actions for status, pin, archive, delete.
-- [ ] Keep Active Runs, but make it secondary to the workspace groups.
+- [x] Group workspaces by `Pinned`, `In Progress`, `Review`, `Backlog`, `Done`, `Archived/Canceled`.
+- [x] Render each workspace as a dense row/card with status, server, branch, active run, dirty count, PR state, goal/session title, and last activity.
+- [x] Add row actions for status, pin, archive, and restore.
+- [x] Keep Active Runs, but make it secondary to the workspace groups.
 - [ ] Verify mobile sheet/card layout.
 
 Verification:
