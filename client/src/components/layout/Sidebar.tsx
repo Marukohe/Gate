@@ -1,14 +1,25 @@
 import { useState, useMemo } from 'react';
-import { Plus, Moon, Sun, Bell, FolderOpen, GitBranch as GitBranchIcon, ChevronDown, ChevronRight, Server } from 'lucide-react';
+import { Plus, Moon, Sun, Bell, FolderOpen, GitBranch as GitBranchIcon, ChevronDown, ChevronRight, Server, MoreHorizontal, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuCheckboxItem,
+  DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useServerStore, type Server as ServerType } from '@/stores/server-store';
 import { useSessionStore, type AgentStatus } from '@/stores/session-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
@@ -22,6 +33,7 @@ interface SidebarProps {
   onEditServer: (server: ServerType) => void;
   onSelectSession?: (serverId: string, sessionId: string) => void;
   onSelectWorkspace?: (workspaceId: string) => void;
+  onDeleteSession?: (serverId: string, sessionId: string) => void;
   onAddWorkspace?: () => void;
   onClose?: () => void;
 }
@@ -64,7 +76,7 @@ function looseSessionName(name: string, workingDir: string | null): string {
   return name || basename(workingDir) || 'Session';
 }
 
-export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSession, onSelectWorkspace, onAddWorkspace, onClose }: SidebarProps) {
+export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSession, onSelectWorkspace, onDeleteSession, onAddWorkspace, onClose }: SidebarProps) {
   const servers = useServerStore((s) => s.servers);
   const activeServerId = useServerStore((s) => s.activeServerId);
   const allSessions = useSessionStore((s) => s.sessions);
@@ -87,11 +99,17 @@ export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSess
   const setNotifyToast = useUIStore((s) => s.setNotifyToast);
   const setNotifySound = useUIStore((s) => s.setNotifySound);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [deleteTarget, setDeleteTarget] = useState<{ serverId: string; sessionId: string; name: string } | null>(null);
   // Workspace entries: absent key → expanded (default), true → collapsed.
   const toggleCollapse = (key: string) => setCollapsed((s) => ({ ...s, [key]: !s[key] }));
   // Loose footer entries: absent/true key → collapsed (default), explicit false → expanded.
   // Using a separate toggle keeps the workspace default-expanded behavior intact.
   const toggleLoose = (key: string) => setCollapsed((s) => ({ ...s, [key]: s[key] === false }));
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    onDeleteSession?.(deleteTarget.serverId, deleteTarget.sessionId);
+    setDeleteTarget(null);
+  };
 
   // When onClose is set we're inside the mobile bottom sheet — skip fixed sizing
   const isMobile = !!onClose;
@@ -240,54 +258,80 @@ export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSess
                       const label = agentLabel(agent);
                       const title = looseSessionName(session.name, session.workingDir);
                       return (
-                        <button
+                        <div
                           key={session.id}
                           className={cn(
-                            'flex w-full items-center gap-2 rounded-r-md pl-3 pr-2 py-1.5 text-xs transition-colors',
+                            'group flex w-full items-center gap-2 rounded-r-md pl-3 pr-2 py-1.5 text-xs transition-colors',
                             isActiveSession
                               ? 'bg-primary/10 text-primary border-l-2 border-primary -ml-px'
                               : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground',
                           )}
-                          onClick={() => { onSelectSession?.(server.id, session.id); onClose?.(); }}
                         >
-                          <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className="truncate font-medium">{title}</span>
-                              {isAgentWorking(agent) ? (
-                                <span className={cn('agent-dots shrink-0', agentDotsColor(agent))}>
-                                  <span /><span /><span />
-                                </span>
-                              ) : (
-                                <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', agentDot(agent))} />
-                              )}
-                            </div>
-                            {(git || label || session.workingDir) && (
-                              <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                                {git && (
-                                  <span className="flex items-center gap-0.5 truncate">
-                                    <GitBranchIcon className="h-2.5 w-2.5 shrink-0" />
-                                    {git.branch}
+                          <button
+                            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                            onClick={() => { onSelectSession?.(server.id, session.id); onClose?.(); }}
+                          >
+                            <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="truncate font-medium">{title}</span>
+                                {isAgentWorking(agent) ? (
+                                  <span className={cn('agent-dots shrink-0', agentDotsColor(agent))}>
+                                    <span /><span /><span />
                                   </span>
-                                )}
-                                {label && (
-                                  <span className={cn(
-                                    'truncate',
-                                    agent?.state === 'thinking' && 'text-blue-500',
-                                    agent?.state === 'tool_call' && 'text-purple-500',
-                                  )}>
-                                    {label}
-                                  </span>
-                                )}
-                                {session.workingDir && (
-                                  <span className="truncate font-mono" title={session.workingDir}>
-                                    {session.workingDir}
-                                  </span>
+                                ) : (
+                                  <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', agentDot(agent))} />
                                 )}
                               </div>
-                            )}
-                          </div>
-                        </button>
+                              {(git || label || session.workingDir) && (
+                                <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                  {git && (
+                                    <span className="flex items-center gap-0.5 truncate">
+                                      <GitBranchIcon className="h-2.5 w-2.5 shrink-0" />
+                                      {git.branch}
+                                    </span>
+                                  )}
+                                  {label && (
+                                    <span className={cn(
+                                      'truncate',
+                                      agent?.state === 'thinking' && 'text-blue-500',
+                                      agent?.state === 'tool_call' && 'text-purple-500',
+                                    )}>
+                                      {label}
+                                    </span>
+                                  )}
+                                  {session.workingDir && (
+                                    <span className="truncate font-mono" title={session.workingDir}>
+                                      {session.workingDir}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </button>
+                          {onDeleteSession && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  className="rounded p-1 text-muted-foreground/60 opacity-100 hover:bg-accent hover:text-accent-foreground sm:opacity-0 sm:group-hover:opacity-100"
+                                  title="Session actions"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <MoreHorizontal className="h-3.5 w-3.5" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => setDeleteTarget({ serverId: server.id, sessionId: session.id, name: title })}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
@@ -352,6 +396,22 @@ export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSess
           </Button>
         </div>
       </div>
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete loose session</AlertDialogTitle>
+            <AlertDialogDescription>
+              Delete "{deleteTarget?.name}"? All messages in this session will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

@@ -204,15 +204,23 @@ function App() {
     createSession(activeServerId, name, workingDir, claudeSessionId, provider);
   }, [activeServerId, createSession]);
 
-  const handleDeleteSession = useCallback((sessionId: string) => {
-    if (!activeServerId) return;
-    deleteSession(activeServerId, sessionId);
-    // Clean up associated store data
+  const clearDeletedSessionState = useCallback((sessionId: string) => {
     useChatStore.getState().clearMessages(sessionId);
     const planState = usePlanStore.getState();
     const planId = planState.autoExtractedPlanIds[sessionId];
     if (planId && planState.activePlanId === planId) planState.setActivePlan(null);
-  }, [activeServerId, deleteSession]);
+  }, []);
+
+  const handleDeleteSession = useCallback((sessionId: string) => {
+    if (!activeServerId) return;
+    deleteSession(activeServerId, sessionId);
+    clearDeletedSessionState(sessionId);
+  }, [activeServerId, deleteSession, clearDeletedSessionState]);
+
+  const handleDeleteSessionFromSidebar = useCallback((serverId: string, sessionId: string) => {
+    deleteSession(serverId, sessionId);
+    clearDeletedSessionState(sessionId);
+  }, [deleteSession, clearDeletedSessionState]);
 
   const handleSelectSession = useCallback((sessionId: string) => {
     if (!activeServerId) return;
@@ -328,6 +336,7 @@ function App() {
         onSendToChat={handleSend}
         onSelectSession={handleSidebarSelectSession}
         onSelectWorkspace={handleSelectWorkspace}
+        onDeleteSession={handleDeleteSessionFromSidebar}
         onAddWorkspace={() => setAddWorkspaceOpen(true)}
         inspectorWorkspaceId={inspectorWorkspaceId}
       />
