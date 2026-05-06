@@ -9,16 +9,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { useServerStore, type Server as ServerType } from '@/stores/server-store';
 import { useSessionStore, type AgentStatus } from '@/stores/session-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
@@ -63,10 +53,9 @@ function agentLabel(status?: AgentStatus): string {
   return '';
 }
 
-export function Sidebar({ onAddServer, onEditServer, onSelectSession, onSelectWorkspace, onAddWorkspace, onClose }: SidebarProps) {
+export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSession, onSelectWorkspace, onAddWorkspace, onClose }: SidebarProps) {
   const servers = useServerStore((s) => s.servers);
   const activeServerId = useServerStore((s) => s.activeServerId);
-  const removeServer = useServerStore((s) => s.removeServer);
   const allSessions = useSessionStore((s) => s.sessions);
   const agentStatus = useSessionStore((s) => s.agentStatus);
   const gitInfo = useSessionStore((s) => s.gitInfo);
@@ -86,18 +75,8 @@ export function Sidebar({ onAddServer, onEditServer, onSelectSession, onSelectWo
   const setNotifyBrowser = useUIStore((s) => s.setNotifyBrowser);
   const setNotifyToast = useUIStore((s) => s.setNotifyToast);
   const setNotifySound = useUIStore((s) => s.setNotifySound);
-  const [deleteTarget, setDeleteTarget] = useState<ServerType | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const toggleCollapse = (key: string) => setCollapsed((s) => ({ ...s, [key]: !s[key] }));
-
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    const res = await fetch(`/api/servers/${deleteTarget.id}`, { method: 'DELETE' });
-    if (res.ok) {
-      removeServer(deleteTarget.id);
-    }
-    setDeleteTarget(null);
-  };
 
   // When onClose is set we're inside the mobile bottom sheet — skip fixed sizing
   const isMobile = !!onClose;
@@ -326,23 +305,6 @@ export function Sidebar({ onAddServer, onEditServer, onSelectSession, onSelectWo
           </Button>
         </div>
       </div>
-
-      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete server</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete "{deleteTarget?.name}"? This will also remove all sessions and messages for this server.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 }
