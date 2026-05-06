@@ -128,11 +128,6 @@ export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSess
             const expanded = !collapsed[`ws:${ws.id}`];
             const anyActive = workspaceSessions.some((s) => isAgentWorking(agentStatus[s.id]));
             const server = servers.find((sv) => sv.id === ws.serverId);
-            const primarySession = workspaceSessions.find((session) => session.id === ws.primarySessionId)
-              ?? workspaceSessions[0]
-              ?? null;
-            const currentBranch = primarySession ? gitInfo[primarySession.id]?.branch : null;
-            const branchLabel = currentBranch ?? (workspaceSessions.length === 0 ? ws.defaultBranch : null);
             return (
               <div key={ws.id}>
                 <button
@@ -151,21 +146,13 @@ export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSess
                       ? <ChevronRight className="h-3.5 w-3.5" />
                       : <ChevronDown className="h-3.5 w-3.5" />}
                   </span>
-                  <FolderOpen className="h-5 w-5 shrink-0 text-muted-foreground/70" />
+                  <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground/70" />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       <span className="truncate font-medium text-xs">{ws.name}</span>
+                      <span className="text-[10px] text-muted-foreground">·</span>
+                      <span className="truncate text-[10px] text-muted-foreground">{server?.name ?? '?'}</span>
                       {anyActive && <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground truncate">
-                      <span>{server?.name ?? '?'}</span>
-                      {branchLabel && (
-                        <>
-                          <span className="mx-1">·</span>
-                          <GitBranchIcon className="inline h-2.5 w-2.5 mr-0.5" />
-                          <span className="font-mono">{branchLabel}</span>
-                        </>
-                      )}
                     </div>
                   </div>
                 </button>
