@@ -35,6 +35,15 @@ export interface WorkspaceRunState {
   updatedAt: number;
 }
 
+export interface WorkspaceActionState {
+  action: 'push' | 'create-pr' | 'mark-review' | 'mark-done' | 'mark-canceled';
+  status: 'running' | 'done' | 'error';
+  output?: string;
+  url?: string;
+  error?: string;
+  updatedAt: number;
+}
+
 export interface WorkspaceWithAggregates {
   id: string;
   serverId: string;
@@ -63,12 +72,14 @@ interface WorkspaceStore {
   branches: Record<string, WorkspaceBranchList>;
   inspectors: Record<string, WorkspaceInspectorSnapshot>;
   runResults: Record<string, WorkspaceRunState>;
+  actionResults: Record<string, WorkspaceActionState>;
   activeWorkspaceId: string | null;
   setWorkspaces: (list: WorkspaceWithAggregates[]) => void;
   upsertWorkspace: (ws: WorkspaceWithAggregates) => void;
   setBranches: (workspaceId: string, branches: WorkspaceBranchList) => void;
   setInspector: (snapshot: WorkspaceInspectorSnapshot) => void;
   setRunResult: (workspaceId: string, result: Omit<WorkspaceRunState, 'updatedAt'>) => void;
+  setActionResult: (workspaceId: string, result: Omit<WorkspaceActionState, 'updatedAt'>) => void;
   removeWorkspace: (id: string) => void;
   setActiveWorkspace: (id: string | null) => void;
   list: () => WorkspaceWithAggregates[];
@@ -82,6 +93,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       branches: {},
       inspectors: {},
       runResults: {},
+      actionResults: {},
       activeWorkspaceId: null,
       setWorkspaces: (list) => set({
         workspaces: Object.fromEntries(list.map((w) => [w.id, w])),
@@ -101,16 +113,24 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           [workspaceId]: { ...result, updatedAt: Date.now() },
         },
       })),
+      setActionResult: (workspaceId, result) => set((s) => ({
+        actionResults: {
+          ...s.actionResults,
+          [workspaceId]: { ...result, updatedAt: Date.now() },
+        },
+      })),
       removeWorkspace: (id) => set((s) => {
         const { [id]: _drop, ...rest } = s.workspaces;
         const { [id]: _dropBranches, ...branches } = s.branches;
         const { [id]: _dropInspector, ...inspectors } = s.inspectors;
         const { [id]: _dropRun, ...runResults } = s.runResults;
+        const { [id]: _dropAction, ...actionResults } = s.actionResults;
         return {
           workspaces: rest,
           branches,
           inspectors,
           runResults,
+          actionResults,
           activeWorkspaceId: s.activeWorkspaceId === id ? null : s.activeWorkspaceId,
         };
       }),

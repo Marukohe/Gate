@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ChangesPanel } from '@/components/changes/ChangesPanel';
 import { PlanPanel } from '@/components/plan/PlanPanel';
+import { WorkspaceActionBar } from './WorkspaceActionBar';
 import { useSessionStore, type Session } from '@/stores/session-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 import { useWebSocket } from '@/hooks/use-websocket';
@@ -61,6 +62,8 @@ export function WorkspaceInspector({ workspaceId, onSendToChat }: WorkspaceInspe
           {worktree && <span className="truncate font-mono">{worktree}</span>}
         </div>
       </div>
+
+      <WorkspaceActionBar workspaceId={workspaceId} branch={branch} />
 
       <Tabs defaultValue="changes" className="flex min-h-0 flex-1 flex-col">
         <TabsList className="mx-2 mt-2 grid grid-cols-4">

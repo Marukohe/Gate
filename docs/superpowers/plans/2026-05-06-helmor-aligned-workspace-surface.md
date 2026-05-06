@@ -161,12 +161,12 @@ git commit -m "feat(workspace): run repo scripts from inspector"
 
 **Goal:** Attach commit/push/PR workflow to the workspace.
 
-- [ ] Add `server/src/workspace-actions.ts` for deterministic actions: commit, push, create PR, open PR.
-- [ ] Add `run-workspace-action` WS handler.
-- [ ] Add hidden action sessions for AI-assisted review/fix actions only.
-- [ ] Update workspace status automatically: create/open PR -> `review`, merged/done -> `done`.
-- [ ] Surface action failures in the inspector.
-- [ ] Add workspace action buttons in `WorkspaceActionBar`.
+- [x] Add `server/src/workspace-actions.ts` for deterministic actions: push, create PR, and status markers.
+- [x] Add `run-workspace-action` WS handler.
+- [x] Add hidden action sessions for AI-assisted review/fix actions only.
+- [x] Update workspace status automatically: create/open PR -> `review`, merged/done -> `done`.
+- [x] Surface action failures in the inspector.
+- [x] Add workspace action buttons in `WorkspaceActionBar`.
 
 Verification:
 

@@ -6,6 +6,7 @@ import type { ProviderRegistry } from './providers/registry.js';
 import type { Database, Workspace, WorkspacePrState, WorkspaceStatus } from './db.js';
 import { buildWorkspaceInspector } from './workspace-inspector.js';
 import { extractUrls, type RepoScriptName } from './repo-scripts.js';
+import { normalizeWorkspaceAction, workspaceActionUpdate } from './workspace-actions.js';
 
 /**
  * Single source of truth for workspace-scoped message types — these may omit
@@ -18,7 +19,7 @@ const WORKSPACE_MSG_TYPES = [
   'list-workspaces', 'create-workspace', 'delete-workspace', 'update-workspace',
   'set-workspace-status', 'pin-workspace', 'archive-workspace', 'restore-workspace',
   'start-workspace-task', 'list-workspace-branches', 'fetch-workspace-inspector',
-  'run-workspace-script',
+  'run-workspace-script', 'run-workspace-action',
 ] as const;
 type WorkspaceMsgType = typeof WORKSPACE_MSG_TYPES[number];
 
@@ -65,6 +66,7 @@ interface ClientMessage {
   worktreeMode?: string;
   worktreePath?: string;
   scriptName?: string;
+  action?: string;
 }
 
 interface ServerMessage {
@@ -75,7 +77,7 @@ interface ServerMessage {
     | 'git-status' | 'git-diff' | 'pr-info' | 'git-commit-result' | 'git-create-pr-result'
     | 'checkpoints' | 'checkpoint-reverted'
     | 'workspace-list' | 'workspace-update' | 'workspace-deleted' | 'session-update'
-    | 'workspace-branches' | 'workspace-inspector' | 'workspace-run-result'
+    | 'workspace-branches' | 'workspace-inspector' | 'workspace-run-result' | 'workspace-action-result'
     | 'workspace-task-started' | 'workspace-error';
   serverId?: string;
   sessionId?: string | null;
@@ -744,6 +746,80 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                 status: 'error',
                 output: '',
                 urls: [],
+                error: err.message,
+              });
+            }
+            break;
+          }
+
+          case 'run-workspace-action': {
+            if (!msg.workspaceId) break;
+            const action = normalizeWorkspaceAction(msg.action);
+            if (!action) {
+              ws.send(JSON.stringify({ type: 'workspace-error', error: 'Unknown workspace action' }));
+              break;
+            }
+            const workspace = db.getWorkspace(msg.workspaceId);
+            if (!workspace) {
+              ws.send(JSON.stringify({ type: 'workspace-error', error: 'Workspace not found' }));
+              break;
+            }
+
+            if (action.startsWith('mark-')) {
+              db.updateWorkspace(workspace.id, workspaceActionUpdate(action));
+              const updated = db.getWorkspace(workspace.id);
+              if (updated) {
+                const enriched = await buildWorkspaceWithAggregates(updated, db, sshManager);
+                broadcast(wss, { type: 'workspace-update', workspace: enriched });
+              }
+              broadcast(wss, { type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'done' });
+              break;
+            }
+
+            const configServer = db.getServer(workspace.serverId);
+            if (!configServer) {
+              ws.send(JSON.stringify({ type: 'workspace-error', error: 'Server not found' }));
+              break;
+            }
+            const inspector = buildWorkspaceInspector(db, workspace.id);
+            const workingDir = inspector?.primarySession?.workingDir ?? workspace.repoPath;
+
+            try {
+              if (!sshManager.isConnected(workspace.serverId)) {
+                await sshManager.connect({
+                  id: configServer.id,
+                  host: configServer.host,
+                  port: configServer.port,
+                  username: configServer.username,
+                  authType: configServer.authType as 'password' | 'privateKey',
+                  password: configServer.password ?? undefined,
+                  privateKeyPath: configServer.privateKeyPath ?? undefined,
+                });
+              } else {
+                await sshManager.ensureConnected(workspace.serverId);
+              }
+
+              broadcast(wss, { type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'running' });
+              if (action === 'push') {
+                const output = await sshManager.gitPush(workspace.serverId, workingDir);
+                broadcast(wss, { type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'done', output });
+              } else if (action === 'create-pr') {
+                const title = msg.title?.trim() || workspace.goal || workspace.name;
+                const url = await sshManager.gitCreatePR(workspace.serverId, workingDir, title, msg.body ?? '');
+                db.updateWorkspace(workspace.id, workspaceActionUpdate(action, { url }));
+                const updated = db.getWorkspace(workspace.id);
+                if (updated) {
+                  const enriched = await buildWorkspaceWithAggregates(updated, db, sshManager);
+                  broadcast(wss, { type: 'workspace-update', workspace: enriched });
+                }
+                broadcast(wss, { type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'done', url });
+              }
+            } catch (err: any) {
+              broadcast(wss, {
+                type: 'workspace-action-result',
+                workspaceId: workspace.id,
+                action,
+                status: 'error',
                 error: err.message,
               });
             }

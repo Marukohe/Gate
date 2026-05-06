@@ -509,6 +509,11 @@ export class SSHManager extends EventEmitter {
     return stdout.trim();
   }
 
+  async gitPush(serverId: string, workingDir: string): Promise<string> {
+    const { stdout } = await this.runCommand(serverId, workingDir, 'git push -u origin HEAD');
+    return stdout.trim();
+  }
+
   /** Get PR info for current branch. */
   async fetchPRInfo(serverId: string, workingDir: string): Promise<string> {
     const { stdout } = await this.runCommand(serverId, workingDir,

@@ -256,6 +256,17 @@ function setupSocket() {
           });
         }
         break;
+      case 'workspace-action-result':
+        if (data.workspaceId && data.action) {
+          useWorkspaceStore.getState().setActionResult(data.workspaceId, {
+            action: data.action,
+            status: data.status ?? 'done',
+            output: data.output,
+            url: data.url,
+            error: data.error,
+          });
+        }
+        break;
       case 'workspace-task-started':
         if (data.workspace) useWorkspaceStore.getState().upsertWorkspace(data.workspace);
         if (data.session) {
@@ -431,6 +442,11 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'run-workspace-script', workspaceId, scriptName }));
   }, []);
 
+  const runWorkspaceAction = useCallback((workspaceId: string, action: string, options?: { title?: string; body?: string }) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'run-workspace-action', workspaceId, action, ...options }));
+  }, []);
+
   const startWorkspaceTask = useCallback((workspaceId: string, goal: string, options?: {
     provider?: string;
     branchMode?: string;
@@ -554,5 +570,5 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'load-more', serverId, sessionId, beforeTimestamp }));
   }, []);
 
-  return { connectToSession, sendInput, interruptSession, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, resetConversation, resumeCliSession, loadMoreMessages, fetchGitStatus, fetchGitDiff, fetchPRInfo, gitCommit, gitCreatePR, revertToCheckpoint, listCheckpoints, listWorkspaces, createWorkspace, deleteWorkspace, updateWorkspace, setWorkspaceStatus, pinWorkspace, archiveWorkspace, restoreWorkspace, listWorkspaceBranches, fetchWorkspaceInspector, runWorkspaceScript, startWorkspaceTask };
+  return { connectToSession, sendInput, interruptSession, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, resetConversation, resumeCliSession, loadMoreMessages, fetchGitStatus, fetchGitDiff, fetchPRInfo, gitCommit, gitCreatePR, revertToCheckpoint, listCheckpoints, listWorkspaces, createWorkspace, deleteWorkspace, updateWorkspace, setWorkspaceStatus, pinWorkspace, archiveWorkspace, restoreWorkspace, listWorkspaceBranches, fetchWorkspaceInspector, runWorkspaceScript, runWorkspaceAction, startWorkspaceTask };
 }
