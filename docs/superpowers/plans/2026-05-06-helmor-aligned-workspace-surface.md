@@ -42,12 +42,12 @@
 
 **Goal:** Add the minimum persisted state needed for a work-queue Command Center.
 
-- [ ] Add `WorkspaceStatus` type and columns: `status`, `goal`, `pinnedAt`, `archivedAt`, `primarySessionId`, `prUrl`, `prState`.
-- [ ] Add `sessions.isHidden`, `sessions.actionKind`, and `sessions.unreadCount`.
-- [ ] Extend DB CRUD and `WorkspaceWithAggregates`.
-- [ ] Add WS messages: `set-workspace-status`, `pin-workspace`, `archive-workspace`, `restore-workspace`.
-- [ ] Update workspace store and websocket handlers.
-- [ ] Add server tests for defaults, status update, pinning, archive/restore, and hidden session filtering.
+- [x] Add `WorkspaceStatus` type and columns: `status`, `goal`, `pinnedAt`, `archivedAt`, `primarySessionId`, `prUrl`, `prState`.
+- [x] Add `sessions.isHidden`, `sessions.actionKind`, and `sessions.unreadCount`.
+- [x] Extend DB CRUD and `WorkspaceWithAggregates`.
+- [x] Add WS messages: `set-workspace-status`, `pin-workspace`, `archive-workspace`, `restore-workspace`.
+- [x] Update workspace store and websocket handlers.
+- [x] Add server tests for defaults, status update, pinning, archive/restore, and hidden session filtering.
 
 Verification:
 

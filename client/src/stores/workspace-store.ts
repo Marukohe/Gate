@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+export type WorkspaceStatus = 'backlog' | 'in-progress' | 'review' | 'done' | 'canceled';
+export type WorkspacePrState = 'none' | 'open' | 'closed' | 'merged' | 'unknown';
+
 export interface WorkspaceWithAggregates {
   id: string;
   serverId: string;
@@ -9,6 +12,13 @@ export interface WorkspaceWithAggregates {
   defaultBranch: string | null;
   name: string;
   autoOpenLastSession: boolean;
+  status: WorkspaceStatus;
+  goal: string | null;
+  pinnedAt: number | null;
+  archivedAt: number | null;
+  primarySessionId: string | null;
+  prUrl: string | null;
+  prState: WorkspacePrState;
   createdAt: number;
   updatedAt: number;
   totalSessionCount: number;
@@ -48,6 +58,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       }),
       setActiveWorkspace: (id) => set({ activeWorkspaceId: id }),
       list: () => Object.values(get().workspaces).sort((a, b) =>
+        (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0) ||
         (b.lastActivityAt ?? b.updatedAt) - (a.lastActivityAt ?? a.updatedAt),
       ),
       getForSession: (workspaceId) => workspaceId ? get().workspaces[workspaceId] : undefined,

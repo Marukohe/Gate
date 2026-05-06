@@ -165,15 +165,25 @@ describe('Database', () => {
       expect(ws.defaultBranch).toBe('main');
       expect(ws.name).toBe('proj');
       expect(ws.autoOpenLastSession).toBe(false);
+      expect(ws.status).toBe('backlog');
+      expect(ws.goal).toBeNull();
+      expect(ws.pinnedAt).toBeNull();
+      expect(ws.archivedAt).toBeNull();
+      expect(ws.primarySessionId).toBeNull();
+      expect(ws.prUrl).toBeNull();
+      expect(ws.prState).toBe('none');
       expect(typeof ws.createdAt).toBe('number');
       expect(typeof ws.updatedAt).toBe('number');
     });
 
-    it('adds workspaceId and workspaceProbedAt columns to sessions', () => {
+    it('adds workspace metadata columns to sessions', () => {
       const server = db.createServer({ name: 'S1', host: '10.0.0.1', port: 22, username: 'root', authType: 'password', password: 'p' });
       const session = db.createSession(server.id, 'test');
       expect(session.workspaceId ?? null).toBeNull();
       expect(session.workspaceProbedAt ?? null).toBeNull();
+      expect(session.isHidden).toBe(false);
+      expect(session.actionKind).toBeNull();
+      expect(session.unreadCount).toBe(0);
     });
   });
 
@@ -201,10 +211,35 @@ describe('Database', () => {
     it('updateWorkspace patches name and autoOpenLastSession', () => {
       const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
       const a = db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
-      db.updateWorkspace(a.id, { name: 'renamed', autoOpenLastSession: true });
+      db.updateWorkspace(a.id, {
+        name: 'renamed',
+        autoOpenLastSession: true,
+        status: 'review',
+        goal: 'ship the thing',
+        pinnedAt: 123,
+        prUrl: 'https://github.com/foo/bar/pull/1',
+        prState: 'open',
+      });
       const got = db.getWorkspace(a.id)!;
       expect(got.name).toBe('renamed');
       expect(got.autoOpenLastSession).toBe(true);
+      expect(got.status).toBe('review');
+      expect(got.goal).toBe('ship the thing');
+      expect(got.pinnedAt).toBe(123);
+      expect(got.prUrl).toBe('https://github.com/foo/bar/pull/1');
+      expect(got.prState).toBe('open');
+    });
+
+    it('archives and restores workspaces without deleting sessions', () => {
+      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
+      const w = db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
+      const sess = db.createSession(s.id, 'sess', null, undefined, { workspaceId: w.id });
+      db.archiveWorkspace(w.id);
+      const archived = db.getWorkspace(w.id)!;
+      expect(archived.archivedAt).not.toBeNull();
+      expect(db.getSession(sess.id)).toBeDefined();
+      db.restoreWorkspace(w.id);
+      expect(db.getWorkspace(w.id)!.archivedAt).toBeNull();
     });
 
     it('deleteWorkspace cascades to sessions', () => {
@@ -221,6 +256,16 @@ describe('Database', () => {
       const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
       db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
       expect(() => db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a2' })).toThrow();
+    });
+
+    it('sets primary session for a workspace', () => {
+      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
+      const w = db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
+      const sess = db.createSession(s.id, 'sess', null, undefined, { workspaceId: w.id });
+      db.setWorkspacePrimarySession(w.id, sess.id);
+      expect(db.getWorkspace(w.id)?.primarySessionId).toBe(sess.id);
+      db.setWorkspacePrimarySession(w.id, null);
+      expect(db.getWorkspace(w.id)?.primarySessionId).toBeNull();
     });
   });
 
@@ -259,6 +304,24 @@ describe('Database', () => {
       const agg = db.aggregateWorkspace(w.id);
       expect(agg.totalSessionCount).toBe(2);
       expect(agg.lastActivityAt).toBe(200);
+    });
+
+    it('hides action sessions from default session lists and aggregates', () => {
+      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
+      const w = db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
+      const visible = db.createSession(s.id, 'visible', null, undefined, { workspaceId: w.id });
+      const hidden = db.createSession(s.id, 'hidden', null, undefined, { workspaceId: w.id, isHidden: true, actionKind: 'create-pr' });
+      db.saveMessage({ sessionId: visible.id, type: 'assistant', content: 'x', timestamp: 100 });
+      db.saveMessage({ sessionId: hidden.id, type: 'assistant', content: 'y', timestamp: 200 });
+
+      expect(db.listSessions(s.id).map((session) => session.id)).toEqual([visible.id]);
+      expect(db.listSessions(s.id, { includeHidden: true }).map((session) => session.id).sort()).toEqual([hidden.id, visible.id].sort());
+      expect(db.getSession(hidden.id)?.isHidden).toBe(true);
+      expect(db.getSession(hidden.id)?.actionKind).toBe('create-pr');
+
+      const agg = db.aggregateWorkspace(w.id);
+      expect(agg.totalSessionCount).toBe(1);
+      expect(agg.lastActivityAt).toBe(100);
     });
 
     it('aggregateWorkspace returns null lastActivityAt when no messages', () => {

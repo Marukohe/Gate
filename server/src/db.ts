@@ -26,6 +26,9 @@ export interface Session {
   chatStartedAt: number | null; // boundary timestamp: only show messages after this
   workspaceId: string | null;
   workspaceProbedAt: number | null;
+  isHidden: boolean;
+  actionKind: string | null;
+  unreadCount: number;
   createdAt: number;
   lastActiveAt: number;
 }
@@ -59,14 +62,43 @@ export interface Workspace {
   defaultBranch: string | null;
   name: string;
   autoOpenLastSession: boolean;
+  status: WorkspaceStatus;
+  goal: string | null;
+  pinnedAt: number | null;
+  archivedAt: number | null;
+  primarySessionId: string | null;
+  prUrl: string | null;
+  prState: WorkspacePrState;
   createdAt: number;
   updatedAt: number;
 }
 
-export type CreateWorkspaceInput = Omit<Workspace, 'id' | 'createdAt' | 'updatedAt' | 'autoOpenLastSession'> & {
-  autoOpenLastSession?: boolean;
+export type WorkspaceStatus = 'backlog' | 'in-progress' | 'review' | 'done' | 'canceled';
+export type WorkspacePrState = 'none' | 'open' | 'closed' | 'merged' | 'unknown';
+export type SessionListOptions = { includeHidden?: boolean };
+export type CreateSessionOptions = {
+  workspaceId?: string | null;
+  isHidden?: boolean;
+  actionKind?: string | null;
 };
-export type UpdateWorkspaceInput = Partial<Pick<Workspace, 'name' | 'autoOpenLastSession' | 'defaultBranch' | 'remoteUrl'>>;
+
+export type CreateWorkspaceInput = Omit<
+  Workspace,
+  'id' | 'createdAt' | 'updatedAt' | 'autoOpenLastSession' | 'status' | 'goal' | 'pinnedAt' | 'archivedAt' | 'primarySessionId' | 'prUrl' | 'prState'
+> & {
+  autoOpenLastSession?: boolean;
+  status?: WorkspaceStatus;
+  goal?: string | null;
+  pinnedAt?: number | null;
+  archivedAt?: number | null;
+  primarySessionId?: string | null;
+  prUrl?: string | null;
+  prState?: WorkspacePrState;
+};
+export type UpdateWorkspaceInput = Partial<Pick<
+  Workspace,
+  'name' | 'autoOpenLastSession' | 'defaultBranch' | 'remoteUrl' | 'status' | 'goal' | 'pinnedAt' | 'archivedAt' | 'primarySessionId' | 'prUrl' | 'prState'
+>>;
 
 export interface WorkspaceAggregate {
   totalSessionCount: number;
@@ -82,9 +114,9 @@ export interface Database {
   listServers(): Server[];
   updateServer(id: string, updates: Partial<CreateServerInput>): void;
   deleteServer(id: string): void;
-  createSession(serverId: string, name: string, workingDir?: string | null, provider?: string): Session;
+  createSession(serverId: string, name: string, workingDir?: string | null, provider?: string, options?: CreateSessionOptions): Session;
   getSession(id: string): Session | undefined;
-  listSessions(serverId: string): Session[];
+  listSessions(serverId: string, options?: SessionListOptions): Session[];
   deleteSession(id: string): void;
   renameSession(id: string, name: string): void;
   updateSessionActivity(id: string): void;
@@ -111,10 +143,39 @@ export interface Database {
   upsertWorkspaceByPath(input: CreateWorkspaceInput): Workspace;
   updateWorkspace(id: string, updates: UpdateWorkspaceInput): void;
   deleteWorkspace(id: string): void;
+  archiveWorkspace(id: string): void;
+  restoreWorkspace(id: string): void;
   setSessionWorkspace(sessionId: string, workspaceId: string | null): void;
+  setWorkspacePrimarySession(workspaceId: string, sessionId: string | null): void;
   markSessionProbed(sessionId: string): void;
   aggregateWorkspace(workspaceId: string): WorkspaceAggregate;
   close(): void;
+}
+
+type WorkspaceRow = Omit<Workspace, 'autoOpenLastSession'> & { autoOpenLastSession: number };
+type SessionRow = Omit<Session, 'isHidden'> & { isHidden: number };
+
+function mapWorkspaceRow(row: WorkspaceRow): Workspace {
+  return {
+    ...row,
+    autoOpenLastSession: !!row.autoOpenLastSession,
+    status: row.status ?? 'backlog',
+    goal: row.goal ?? null,
+    pinnedAt: row.pinnedAt ?? null,
+    archivedAt: row.archivedAt ?? null,
+    primarySessionId: row.primarySessionId ?? null,
+    prUrl: row.prUrl ?? null,
+    prState: row.prState ?? 'none',
+  };
+}
+
+function mapSessionRow(row: SessionRow): Session {
+  return {
+    ...row,
+    isHidden: !!row.isHidden,
+    actionKind: row.actionKind ?? null,
+    unreadCount: row.unreadCount ?? 0,
+  };
 }
 
 export function createDb(dbPath: string): Database {
@@ -193,6 +254,9 @@ export function createDb(dbPath: string): Database {
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_checkpoints_sessionId ON checkpoints(sessionId)'); } catch { /* already exists */ }
   try { db.exec('ALTER TABLE sessions ADD COLUMN workspaceId TEXT'); } catch { /* already exists */ }
   try { db.exec('ALTER TABLE sessions ADD COLUMN workspaceProbedAt INTEGER'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE sessions ADD COLUMN isHidden INTEGER NOT NULL DEFAULT 0'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE sessions ADD COLUMN actionKind TEXT'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE sessions ADD COLUMN unreadCount INTEGER NOT NULL DEFAULT 0'); } catch { /* already exists */ }
   try { db.exec(`CREATE TABLE IF NOT EXISTS workspaces (
   id TEXT PRIMARY KEY,
   serverId TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
@@ -201,12 +265,29 @@ export function createDb(dbPath: string): Database {
   defaultBranch TEXT,
   name TEXT NOT NULL,
   autoOpenLastSession INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'backlog',
+  goal TEXT,
+  pinnedAt INTEGER,
+  archivedAt INTEGER,
+  primarySessionId TEXT,
+  prUrl TEXT,
+  prState TEXT NOT NULL DEFAULT 'none',
   createdAt INTEGER NOT NULL,
   updatedAt INTEGER NOT NULL,
   UNIQUE(serverId, repoPath)
 )`); } catch { /* already exists */ }
+  try { db.exec("ALTER TABLE workspaces ADD COLUMN status TEXT NOT NULL DEFAULT 'backlog'"); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE workspaces ADD COLUMN goal TEXT'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE workspaces ADD COLUMN pinnedAt INTEGER'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE workspaces ADD COLUMN archivedAt INTEGER'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE workspaces ADD COLUMN primarySessionId TEXT'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE workspaces ADD COLUMN prUrl TEXT'); } catch { /* already exists */ }
+  try { db.exec("ALTER TABLE workspaces ADD COLUMN prState TEXT NOT NULL DEFAULT 'none'"); } catch { /* already exists */ }
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_workspaces_serverId ON workspaces(serverId)'); } catch { /* already exists */ }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_workspaces_status ON workspaces(status)'); } catch { /* already exists */ }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_workspaces_archivedAt ON workspaces(archivedAt)'); } catch { /* already exists */ }
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_workspaceId ON sessions(workspaceId)'); } catch { /* already exists */ }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_isHidden ON sessions(isHidden)'); } catch { /* already exists */ }
 
   return {
     createServer(input) {
@@ -239,24 +320,46 @@ export function createDb(dbPath: string): Database {
       db.prepare('DELETE FROM servers WHERE id = ?').run(id);
     },
 
-    createSession(serverId, name, workingDir?, provider?) {
+    createSession(serverId, name, workingDir?, provider?, options?) {
       const id = randomUUID();
       const now = Date.now();
       const dir = workingDir ?? null;
       const prov = provider ?? 'claude';
       db.prepare(`
-        INSERT INTO sessions (id, serverId, name, tmuxSession, workingDir, provider, createdAt, lastActiveAt)
-        VALUES (?, ?, ?, '', ?, ?, ?, ?)
-      `).run(id, serverId, name, dir, prov, now, now);
-      return { id, serverId, name, claudeSessionId: null, cliSessionId: null, provider: prov, providerSessionMap: null, workingDir: dir, chatStartedAt: null, workspaceId: null, workspaceProbedAt: null, createdAt: now, lastActiveAt: now };
+        INSERT INTO sessions (id, serverId, name, tmuxSession, workingDir, provider, workspaceId, isHidden, actionKind, unreadCount, createdAt, lastActiveAt)
+        VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, 0, ?, ?)
+      `).run(
+        id, serverId, name, dir, prov,
+        options?.workspaceId ?? null,
+        options?.isHidden ? 1 : 0,
+        options?.actionKind ?? null,
+        now, now,
+      );
+      return {
+        id, serverId, name,
+        claudeSessionId: null, cliSessionId: null,
+        provider: prov, providerSessionMap: null,
+        workingDir: dir, chatStartedAt: null,
+        workspaceId: options?.workspaceId ?? null,
+        workspaceProbedAt: null,
+        isHidden: !!options?.isHidden,
+        actionKind: options?.actionKind ?? null,
+        unreadCount: 0,
+        createdAt: now, lastActiveAt: now,
+      };
     },
 
     getSession(id) {
-      return db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as Session | undefined;
+      const row = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined;
+      return row ? mapSessionRow(row) : undefined;
     },
 
-    listSessions(serverId) {
-      return db.prepare('SELECT * FROM sessions WHERE serverId = ? ORDER BY lastActiveAt DESC').all(serverId) as Session[];
+    listSessions(serverId, options) {
+      const includeHidden = options?.includeHidden ?? false;
+      const rows = includeHidden
+        ? db.prepare('SELECT * FROM sessions WHERE serverId = ? ORDER BY lastActiveAt DESC').all(serverId) as SessionRow[]
+        : db.prepare('SELECT * FROM sessions WHERE serverId = ? AND COALESCE(isHidden, 0) = 0 ORDER BY lastActiveAt DESC').all(serverId) as SessionRow[];
+      return rows.map(mapSessionRow);
     },
 
     deleteSession(id) {
@@ -408,36 +511,53 @@ export function createDb(dbPath: string): Database {
       const id = randomUUID();
       const now = Date.now();
       db.prepare(`
-        INSERT INTO workspaces (id, serverId, repoPath, remoteUrl, defaultBranch, name, autoOpenLastSession, createdAt, updatedAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO workspaces (
+          id, serverId, repoPath, remoteUrl, defaultBranch, name,
+          autoOpenLastSession, status, goal, pinnedAt, archivedAt,
+          primarySessionId, prUrl, prState, createdAt, updatedAt
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id, input.serverId, input.repoPath,
         input.remoteUrl ?? null, input.defaultBranch ?? null, input.name,
-        input.autoOpenLastSession ? 1 : 0, now, now,
+        input.autoOpenLastSession ? 1 : 0,
+        input.status ?? 'backlog',
+        input.goal ?? null,
+        input.pinnedAt ?? null,
+        input.archivedAt ?? null,
+        input.primarySessionId ?? null,
+        input.prUrl ?? null,
+        input.prState ?? 'none',
+        now, now,
       );
       return {
         id, serverId: input.serverId, repoPath: input.repoPath,
         remoteUrl: input.remoteUrl ?? null, defaultBranch: input.defaultBranch ?? null,
         name: input.name, autoOpenLastSession: !!input.autoOpenLastSession,
+        status: input.status ?? 'backlog',
+        goal: input.goal ?? null,
+        pinnedAt: input.pinnedAt ?? null,
+        archivedAt: input.archivedAt ?? null,
+        primarySessionId: input.primarySessionId ?? null,
+        prUrl: input.prUrl ?? null,
+        prState: input.prState ?? 'none',
         createdAt: now, updatedAt: now,
       };
     },
 
     listWorkspaces() {
-      const rows = db.prepare('SELECT * FROM workspaces ORDER BY updatedAt DESC').all() as any[];
-      return rows.map((r) => ({ ...r, autoOpenLastSession: !!r.autoOpenLastSession })) as Workspace[];
+      const rows = db.prepare('SELECT * FROM workspaces ORDER BY COALESCE(pinnedAt, 0) DESC, updatedAt DESC').all() as WorkspaceRow[];
+      return rows.map(mapWorkspaceRow);
     },
 
     getWorkspace(id) {
-      const r = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id) as any | undefined;
-      if (!r) return undefined;
-      return { ...r, autoOpenLastSession: !!r.autoOpenLastSession } as Workspace;
+      const r = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id) as WorkspaceRow | undefined;
+      return r ? mapWorkspaceRow(r) : undefined;
     },
 
     getWorkspaceByPath(serverId, repoPath) {
-      const r = db.prepare('SELECT * FROM workspaces WHERE serverId = ? AND repoPath = ?').get(serverId, repoPath) as any | undefined;
-      if (!r) return undefined;
-      return { ...r, autoOpenLastSession: !!r.autoOpenLastSession } as Workspace;
+      const r = db.prepare('SELECT * FROM workspaces WHERE serverId = ? AND repoPath = ?').get(serverId, repoPath) as WorkspaceRow | undefined;
+      return r ? mapWorkspaceRow(r) : undefined;
     },
 
     upsertWorkspaceByPath(input) {
@@ -451,7 +571,7 @@ export function createDb(dbPath: string): Database {
       if (fields.length === 0) return;
       const setClauses = fields.map(([k]) => `${k} = ?`).join(', ');
       const values = fields.map(([k, v]) => k === 'autoOpenLastSession' ? (v ? 1 : 0) : v);
-      values.push(Date.now() as any);
+      values.push(Date.now());
       db.prepare(`UPDATE workspaces SET ${setClauses}, updatedAt = ? WHERE id = ?`).run(...values, id);
     },
 
@@ -464,8 +584,21 @@ export function createDb(dbPath: string): Database {
       });
       tx();
     },
+
+    archiveWorkspace(id) {
+      db.prepare(`UPDATE workspaces SET archivedAt = ?, updatedAt = ? WHERE id = ?`).run(Date.now(), Date.now(), id);
+    },
+
+    restoreWorkspace(id) {
+      db.prepare('UPDATE workspaces SET archivedAt = NULL, updatedAt = ? WHERE id = ?').run(Date.now(), id);
+    },
+
     setSessionWorkspace(sessionId, workspaceId) {
       db.prepare('UPDATE sessions SET workspaceId = ? WHERE id = ?').run(workspaceId, sessionId);
+    },
+
+    setWorkspacePrimarySession(workspaceId, sessionId) {
+      db.prepare('UPDATE workspaces SET primarySessionId = ?, updatedAt = ? WHERE id = ?').run(sessionId, Date.now(), workspaceId);
     },
 
     markSessionProbed(sessionId) {
@@ -475,11 +608,11 @@ export function createDb(dbPath: string): Database {
     aggregateWorkspace(workspaceId) {
       const row = db.prepare(`
         SELECT
-          (SELECT COUNT(*) FROM sessions WHERE workspaceId = ?) AS totalSessionCount,
+          (SELECT COUNT(*) FROM sessions WHERE workspaceId = ? AND COALESCE(isHidden, 0) = 0) AS totalSessionCount,
           (SELECT MAX(m.timestamp)
              FROM messages m
              JOIN sessions s ON s.id = m.sessionId
-             WHERE s.workspaceId = ?) AS lastActivityAt
+             WHERE s.workspaceId = ? AND COALESCE(s.isHidden, 0) = 0) AS lastActivityAt
       `).get(workspaceId, workspaceId) as { totalSessionCount: number; lastActivityAt: number | null };
       return {
         totalSessionCount: row.totalSessionCount,

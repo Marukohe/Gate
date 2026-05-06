@@ -3,7 +3,7 @@ import type { Server as HttpServer } from 'http';
 import { SSHManager, type ServerConfig } from './ssh-manager.js';
 import type { ParsedMessage, CLIProvider, OutputParser } from './providers/types.js';
 import type { ProviderRegistry } from './providers/registry.js';
-import type { Database, Workspace } from './db.js';
+import type { Database, Workspace, WorkspacePrState, WorkspaceStatus } from './db.js';
 
 /**
  * Single source of truth for workspace-scoped message types — these may omit
@@ -14,6 +14,7 @@ import type { Database, Workspace } from './db.js';
  */
 const WORKSPACE_MSG_TYPES = [
   'list-workspaces', 'create-workspace', 'delete-workspace', 'update-workspace',
+  'set-workspace-status', 'pin-workspace', 'archive-workspace', 'restore-workspace',
 ] as const;
 type WorkspaceMsgType = typeof WORKSPACE_MSG_TYPES[number];
 
@@ -50,6 +51,11 @@ interface ClientMessage {
   repoPath?: string;
   workspaceName?: string;
   autoOpenLastSession?: boolean;
+  workspaceStatus?: WorkspaceStatus;
+  goal?: string | null;
+  pinned?: boolean;
+  prUrl?: string | null;
+  prState?: WorkspacePrState;
 }
 
 interface ServerMessage {
@@ -509,7 +515,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             // Mirror the delete-session cleanup: flush parser before deleting
             // so any final buffered message isn't lost, and clear the
             // perMessageSessions entry to prevent leaks for Codex-style sessions.
-            const wsSessions = db.listSessions(workspace.serverId).filter((s) => s.workspaceId === workspace.id);
+            const wsSessions = db.listSessions(workspace.serverId, { includeHidden: true }).filter((s) => s.workspaceId === workspace.id);
             for (const s of wsSessions) {
               if (sshManager.hasActiveChannel(workspace.serverId, s.id)) sshManager.stopSession(workspace.serverId, s.id);
               const parser = parsers.get(s.id);
@@ -529,7 +535,55 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             db.updateWorkspace(msg.workspaceId, {
               name: msg.workspaceName,
               autoOpenLastSession: msg.autoOpenLastSession,
+              status: msg.workspaceStatus,
+              goal: msg.goal,
+              prUrl: msg.prUrl,
+              prState: msg.prState,
             });
+            const updated = db.getWorkspace(msg.workspaceId);
+            if (updated) {
+              const enriched = await buildWorkspaceWithAggregates(updated, db, sshManager);
+              broadcast(wss, { type: 'workspace-update', workspace: enriched });
+            }
+            break;
+          }
+
+          case 'set-workspace-status': {
+            if (!msg.workspaceId || !msg.workspaceStatus) break;
+            db.updateWorkspace(msg.workspaceId, { status: msg.workspaceStatus });
+            const updated = db.getWorkspace(msg.workspaceId);
+            if (updated) {
+              const enriched = await buildWorkspaceWithAggregates(updated, db, sshManager);
+              broadcast(wss, { type: 'workspace-update', workspace: enriched });
+            }
+            break;
+          }
+
+          case 'pin-workspace': {
+            if (!msg.workspaceId || msg.pinned === undefined) break;
+            db.updateWorkspace(msg.workspaceId, { pinnedAt: msg.pinned ? Date.now() : null });
+            const updated = db.getWorkspace(msg.workspaceId);
+            if (updated) {
+              const enriched = await buildWorkspaceWithAggregates(updated, db, sshManager);
+              broadcast(wss, { type: 'workspace-update', workspace: enriched });
+            }
+            break;
+          }
+
+          case 'archive-workspace': {
+            if (!msg.workspaceId) break;
+            db.archiveWorkspace(msg.workspaceId);
+            const updated = db.getWorkspace(msg.workspaceId);
+            if (updated) {
+              const enriched = await buildWorkspaceWithAggregates(updated, db, sshManager);
+              broadcast(wss, { type: 'workspace-update', workspace: enriched });
+            }
+            break;
+          }
+
+          case 'restore-workspace': {
+            if (!msg.workspaceId) break;
+            db.restoreWorkspace(msg.workspaceId);
             const updated = db.getWorkspace(msg.workspaceId);
             if (updated) {
               const enriched = await buildWorkspaceWithAggregates(updated, db, sshManager);

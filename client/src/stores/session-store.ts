@@ -21,6 +21,9 @@ export interface Session {
   workingDir: string | null;
   workspaceId: string | null;
   workspaceProbedAt: number | null;
+  isHidden: boolean;
+  actionKind: string | null;
+  unreadCount: number;
   createdAt: number;
   lastActiveAt: number;
 }

@@ -6,7 +6,7 @@ import { useChatStore } from '../stores/chat-store';
 import { usePlanModeStore } from '../stores/plan-mode-store';
 import { useUIStore } from '../stores/ui-store';
 import { useGitStore, parseGitStatusPorcelain } from '../stores/git-store';
-import { useWorkspaceStore } from '../stores/workspace-store';
+import { useWorkspaceStore, type WorkspacePrState, type WorkspaceStatus } from '../stores/workspace-store';
 import { triggerTaskNotification } from '../lib/notification';
 
 let ws: WebSocket | null = null;
@@ -322,14 +322,45 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'delete-workspace', workspaceId }));
   }, []);
 
-  const updateWorkspace = useCallback((workspaceId: string, updates: { name?: string; autoOpenLastSession?: boolean }) => {
+  const updateWorkspace = useCallback((workspaceId: string, updates: {
+    name?: string;
+    autoOpenLastSession?: boolean;
+    status?: WorkspaceStatus;
+    goal?: string | null;
+    prUrl?: string | null;
+    prState?: WorkspacePrState;
+  }) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({
       type: 'update-workspace',
       workspaceId,
       workspaceName: updates.name,
       autoOpenLastSession: updates.autoOpenLastSession,
+      workspaceStatus: updates.status,
+      goal: updates.goal,
+      prUrl: updates.prUrl,
+      prState: updates.prState,
     }));
+  }, []);
+
+  const setWorkspaceStatus = useCallback((workspaceId: string, status: WorkspaceStatus) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'set-workspace-status', workspaceId, workspaceStatus: status }));
+  }, []);
+
+  const pinWorkspace = useCallback((workspaceId: string, pinned: boolean) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'pin-workspace', workspaceId, pinned }));
+  }, []);
+
+  const archiveWorkspace = useCallback((workspaceId: string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'archive-workspace', workspaceId }));
+  }, []);
+
+  const restoreWorkspace = useCallback((workspaceId: string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'restore-workspace', workspaceId }));
   }, []);
 
   const disconnectSession = useCallback((serverId: string, sessionId: string) => {
@@ -444,5 +475,5 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'load-more', serverId, sessionId, beforeTimestamp }));
   }, []);
 
-  return { connectToSession, sendInput, interruptSession, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, resetConversation, resumeCliSession, loadMoreMessages, fetchGitStatus, fetchGitDiff, fetchPRInfo, gitCommit, gitCreatePR, revertToCheckpoint, listCheckpoints, listWorkspaces, createWorkspace, deleteWorkspace, updateWorkspace };
+  return { connectToSession, sendInput, interruptSession, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, resetConversation, resumeCliSession, loadMoreMessages, fetchGitStatus, fetchGitDiff, fetchPRInfo, gitCommit, gitCreatePR, revertToCheckpoint, listCheckpoints, listWorkspaces, createWorkspace, deleteWorkspace, updateWorkspace, setWorkspaceStatus, pinWorkspace, archiveWorkspace, restoreWorkspace };
 }
