@@ -1,10 +1,12 @@
 import { useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
 import { useSessionStore } from '../stores/session-store';
 import { useServerStore } from '../stores/server-store';
 import { useChatStore } from '../stores/chat-store';
 import { usePlanModeStore } from '../stores/plan-mode-store';
 import { useUIStore } from '../stores/ui-store';
 import { useGitStore, parseGitStatusPorcelain } from '../stores/git-store';
+import { useWorkspaceStore } from '../stores/workspace-store';
 import { triggerTaskNotification } from '../lib/notification';
 
 let ws: WebSocket | null = null;
@@ -39,6 +41,7 @@ function stores() {
     chat: useChatStore.getState(),
     planMode: usePlanModeStore.getState(),
     git: useGitStore.getState(),
+    workspace: useWorkspaceStore.getState(),
   };
 }
 
@@ -208,6 +211,36 @@ function setupSocket() {
           session.setCheckpoints(data.sessionId, data.checkpoints ?? []);
         }
         break;
+      case 'workspace-list':
+        useWorkspaceStore.getState().setWorkspaces(data.workspaces ?? []);
+        break;
+      case 'workspace-update':
+        if (data.workspace) useWorkspaceStore.getState().upsertWorkspace(data.workspace);
+        break;
+      case 'workspace-deleted': {
+        useWorkspaceStore.getState().removeWorkspace(data.workspaceId);
+        // Drop any sessions returned in removedSessionIds from the session-store
+        const removedIds: string[] = data.removedSessionIds ?? [];
+        if (removedIds.length > 0) {
+          const sessionStore = useSessionStore.getState();
+          const all = sessionStore.sessions;
+          for (const [serverId, list] of Object.entries(all)) {
+            for (const s of list) {
+              if (removedIds.includes(s.id)) sessionStore.removeSession(serverId, s.id);
+            }
+          }
+        }
+        break;
+      }
+      case 'session-update':
+        // session-update carries the full Session row after probe-and-link
+        if (data.session) {
+          useSessionStore.getState().updateSession(data.session.serverId, data.session);
+        }
+        break;
+      case 'workspace-error':
+        toast.error(data.error ?? 'Workspace error');
+        break;
     }
   };
 
@@ -268,6 +301,31 @@ export function useWebSocket() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: 'interrupt', serverId, sessionId }));
     stores().session.setAgentStatus(sessionId, { state: 'idle' });
+  }, []);
+
+  const listWorkspaces = useCallback(() => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'list-workspaces' }));
+  }, []);
+
+  const createWorkspace = useCallback((serverId: string, repoPath: string, name?: string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'create-workspace', serverId, repoPath, workspaceName: name }));
+  }, []);
+
+  const deleteWorkspace = useCallback((workspaceId: string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'delete-workspace', workspaceId }));
+  }, []);
+
+  const updateWorkspace = useCallback((workspaceId: string, updates: { name?: string; autoOpenLastSession?: boolean }) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({
+      type: 'update-workspace',
+      workspaceId,
+      workspaceName: updates.name,
+      autoOpenLastSession: updates.autoOpenLastSession,
+    }));
   }, []);
 
   const disconnectSession = useCallback((serverId: string, sessionId: string) => {
@@ -382,5 +440,5 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'load-more', serverId, sessionId, beforeTimestamp }));
   }, []);
 
-  return { connectToSession, sendInput, interruptSession, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, resetConversation, resumeCliSession, loadMoreMessages, fetchGitStatus, fetchGitDiff, fetchPRInfo, gitCommit, gitCreatePR, revertToCheckpoint, listCheckpoints };
+  return { connectToSession, sendInput, interruptSession, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, resetConversation, resumeCliSession, loadMoreMessages, fetchGitStatus, fetchGitDiff, fetchPRInfo, gitCommit, gitCreatePR, revertToCheckpoint, listCheckpoints, listWorkspaces, createWorkspace, deleteWorkspace, updateWorkspace };
 }
