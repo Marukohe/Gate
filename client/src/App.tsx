@@ -224,25 +224,15 @@ function App() {
     setActiveSession(activeServerId, sessionId);
   }, [activeServerId, activeSessionId, setActiveSession, connectToSession]);
 
-  // Picking a workspace: if auto-open is on AND it has sessions, jump straight
-  // to the most-recent session's chat. Otherwise land on Workspace Home.
+  // Workspace rows open the board; session rows open chat. This keeps the
+  // overall workspace view reachable without a refresh.
   const handleSelectWorkspace = useCallback((id: string) => {
     const workspace = workspaces[id];
     if (!workspace) return;
     setActiveWorkspace(id);
     setActiveServer(workspace.serverId);
-    if (workspace.autoOpenLastSession) {
-      const wsSessions = useSessionStore.getState().sessionsByWorkspace(id);
-      if (wsSessions.length > 0) {
-        const mostRecent = [...wsSessions].sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0];
-        setActiveSession(workspace.serverId, mostRecent.id);
-        connectToSession(workspace.serverId, mostRecent.id);
-        enterSession(workspace.serverId, mostRecent.id);
-        return;
-      }
-    }
     enterWorkspace(id);
-  }, [workspaces, setActiveWorkspace, setActiveServer, setActiveSession, connectToSession, enterSession, enterWorkspace]);
+  }, [workspaces, setActiveWorkspace, setActiveServer, enterWorkspace]);
 
   // Sidebar / Workspace Home / Command Center can all open a session: route to chat
   // and connect, also setting active workspace if the session is linked to one.
@@ -301,6 +291,7 @@ function App() {
           onListCliSessions={listCliSessions}
           onSendToSession={handleSendToSession}
           onLoadMore={handleLoadMore}
+          onOpenWorkspace={handleSelectWorkspace}
         />
       );
     }

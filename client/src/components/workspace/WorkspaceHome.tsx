@@ -1,6 +1,5 @@
 import { GitBranch, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 import { useSessionStore, type Session } from '@/stores/session-store';
 import { useServerStore } from '@/stores/server-store';
@@ -37,7 +36,7 @@ export function WorkspaceHome({ workspaceId, onNewSession, onStartTask, onSelect
   const agentStatus = useSessionStore((s) => s.agentStatus);
   const serverName = useServerStore((s) => s.servers.find((sv) => sv.id === ws?.serverId)?.name ?? '');
   const workspaceBranches = useWorkspaceStore((s) => s.branches[workspaceId]);
-  const { updateWorkspace, deleteWorkspace, listWorkspaceBranches } = useWebSocket();
+  const { deleteWorkspace, listWorkspaceBranches } = useWebSocket();
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
@@ -155,15 +154,7 @@ export function WorkspaceHome({ workspaceId, onNewSession, onStartTask, onSelect
 
       <section className="px-6 py-4 border-t mt-auto">
         <h2 className="text-sm font-semibold mb-2">Settings</h2>
-        <label className="flex items-center justify-between gap-4 text-sm cursor-pointer">
-          <span>Auto-open most recent session when entering this workspace</span>
-          <Checkbox
-            checked={ws.autoOpenLastSession}
-            onCheckedChange={(checked) => updateWorkspace(ws.id, { autoOpenLastSession: !!checked })}
-          />
-        </label>
-
-        <div className="mt-4">
+        <div>
           <Button variant="outline" size="sm" className="text-destructive" onClick={() => setConfirmDelete(true)}>
             <Trash2 className="h-4 w-4" /> Delete workspace
           </Button>
