@@ -24,6 +24,8 @@ export interface Session {
   providerSessionMap: string | null; // JSON: { [provider]: cliSessionId }
   workingDir: string | null;
   chatStartedAt: number | null; // boundary timestamp: only show messages after this
+  workspaceId: string | null;
+  workspaceProbedAt: number | null;
   createdAt: number;
   lastActiveAt: number;
 }
@@ -47,6 +49,28 @@ export interface Checkpoint {
   gitBranch: string;
   gitCommitSha: string;
   createdAt: number;
+}
+
+export interface Workspace {
+  id: string;
+  serverId: string;
+  repoPath: string;
+  remoteUrl: string | null;
+  defaultBranch: string | null;
+  name: string;
+  autoOpenLastSession: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type CreateWorkspaceInput = Omit<Workspace, 'id' | 'createdAt' | 'updatedAt' | 'autoOpenLastSession'> & {
+  autoOpenLastSession?: boolean;
+};
+export type UpdateWorkspaceInput = Partial<Pick<Workspace, 'name' | 'autoOpenLastSession' | 'defaultBranch' | 'remoteUrl'>>;
+
+export interface WorkspaceAggregate {
+  totalSessionCount: number;
+  lastActivityAt: number | null;
 }
 
 export type CreateServerInput = Omit<Server, 'id' | 'createdAt'>;
@@ -80,6 +104,16 @@ export interface Database {
   saveCheckpoint(sessionId: string, messageTimestamp: number, gitRef: string, gitBranch: string, gitCommitSha: string): Checkpoint;
   listCheckpoints(sessionId: string): Checkpoint[];
   deleteCheckpointsAfter(sessionId: string, afterTimestamp: number): void;
+  createWorkspace(input: CreateWorkspaceInput): Workspace;
+  listWorkspaces(): Workspace[];
+  getWorkspace(id: string): Workspace | undefined;
+  getWorkspaceByPath(serverId: string, repoPath: string): Workspace | undefined;
+  upsertWorkspaceByPath(input: CreateWorkspaceInput): Workspace;
+  updateWorkspace(id: string, updates: UpdateWorkspaceInput): void;
+  deleteWorkspace(id: string): void;
+  setSessionWorkspace(sessionId: string, workspaceId: string | null): void;
+  markSessionProbed(sessionId: string): void;
+  aggregateWorkspace(workspaceId: string): WorkspaceAggregate;
   close(): void;
 }
 
@@ -110,6 +144,22 @@ export function createDb(dbPath: string): Database {
   createdAt INTEGER NOT NULL
 )`); } catch { /* already exists */ }
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_checkpoints_sessionId ON checkpoints(sessionId)'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE sessions ADD COLUMN workspaceId TEXT'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE sessions ADD COLUMN workspaceProbedAt INTEGER'); } catch { /* already exists */ }
+  try { db.exec(`CREATE TABLE IF NOT EXISTS workspaces (
+  id TEXT PRIMARY KEY,
+  serverId TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+  repoPath TEXT NOT NULL,
+  remoteUrl TEXT,
+  defaultBranch TEXT,
+  name TEXT NOT NULL,
+  autoOpenLastSession INTEGER NOT NULL DEFAULT 0,
+  createdAt INTEGER NOT NULL,
+  updatedAt INTEGER NOT NULL,
+  UNIQUE(serverId, repoPath)
+)`); } catch { /* already exists */ }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_workspaces_serverId ON workspaces(serverId)'); } catch { /* already exists */ }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_workspaceId ON sessions(workspaceId)'); } catch { /* already exists */ }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS servers (
@@ -196,7 +246,7 @@ export function createDb(dbPath: string): Database {
         INSERT INTO sessions (id, serverId, name, tmuxSession, workingDir, provider, createdAt, lastActiveAt)
         VALUES (?, ?, ?, '', ?, ?, ?, ?)
       `).run(id, serverId, name, dir, prov, now, now);
-      return { id, serverId, name, claudeSessionId: null, cliSessionId: null, provider: prov, providerSessionMap: null, workingDir: dir, chatStartedAt: null, createdAt: now, lastActiveAt: now };
+      return { id, serverId, name, claudeSessionId: null, cliSessionId: null, provider: prov, providerSessionMap: null, workingDir: dir, chatStartedAt: null, workspaceId: null, workspaceProbedAt: null, createdAt: now, lastActiveAt: now };
     },
 
     getSession(id) {
@@ -351,6 +401,17 @@ export function createDb(dbPath: string): Database {
     deleteCheckpointsAfter(sessionId, afterTimestamp) {
       db.prepare('DELETE FROM checkpoints WHERE sessionId = ? AND messageTimestamp > ?').run(sessionId, afterTimestamp);
     },
+
+    createWorkspace() { throw new Error('not implemented'); },
+    listWorkspaces() { return []; },
+    getWorkspace() { return undefined; },
+    getWorkspaceByPath() { return undefined; },
+    upsertWorkspaceByPath() { throw new Error('not implemented'); },
+    updateWorkspace() { /* not implemented */ },
+    deleteWorkspace() { /* not implemented */ },
+    setSessionWorkspace() { /* not implemented */ },
+    markSessionProbed() { /* not implemented */ },
+    aggregateWorkspace() { return { totalSessionCount: 0, lastActivityAt: null }; },
 
     close() {
       db.close();

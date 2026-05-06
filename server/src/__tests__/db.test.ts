@@ -147,4 +147,33 @@ describe('Database', () => {
       expect(msgs[0].provider).toBe('codex');
     });
   });
+
+  describe('workspaces schema', () => {
+    it('creates a workspace row with all expected fields', () => {
+      const server = db.createServer({ name: 'S1', host: '10.0.0.1', port: 22, username: 'root', authType: 'password', password: 'p' });
+      const ws = db.createWorkspace({
+        serverId: server.id,
+        repoPath: '/home/user/proj',
+        remoteUrl: 'git@github.com:foo/bar.git',
+        defaultBranch: 'main',
+        name: 'proj',
+      });
+      expect(ws.id).toBeDefined();
+      expect(ws.serverId).toBe(server.id);
+      expect(ws.repoPath).toBe('/home/user/proj');
+      expect(ws.remoteUrl).toBe('git@github.com:foo/bar.git');
+      expect(ws.defaultBranch).toBe('main');
+      expect(ws.name).toBe('proj');
+      expect(ws.autoOpenLastSession).toBe(false);
+      expect(typeof ws.createdAt).toBe('number');
+      expect(typeof ws.updatedAt).toBe('number');
+    });
+
+    it('adds workspaceId and workspaceProbedAt columns to sessions', () => {
+      const server = db.createServer({ name: 'S1', host: '10.0.0.1', port: 22, username: 'root', authType: 'password', password: 'p' });
+      const session = db.createSession(server.id, 'test');
+      expect(session.workspaceId ?? null).toBeNull();
+      expect(session.workspaceProbedAt ?? null).toBeNull();
+    });
+  });
 });
