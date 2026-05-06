@@ -291,7 +291,7 @@ function App() {
         onEditServer={(server) => { setEditingServer(server); setServerDialogOpen(true); }}
         onSendToChat={handleSend}
         onSelectSession={handleSidebarSelectSession}
-        onSelectWorkspace={enterWorkspace}
+        onSelectWorkspace={handleSelectWorkspace}
         onAddWorkspace={() => setAddWorkspaceOpen(true)}
       />
       <ServerDialog
