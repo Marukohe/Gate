@@ -2,6 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Historical baseline plan. The current codebase contains the Phase A workspace foundation; the checkbox state below is stale and should not be used as the source of truth for new product work.
+
+**Follow-up:** Use `docs/superpowers/plans/2026-05-06-helmor-aligned-workspace-surface.md` for the next Helmor-aligned workspace surface pass.
+
 **Goal:** Promote remote git repositories to a first-class `Workspace` concept, restructure the sidebar to be workspace-centric, and add a Command Center landing page that aggregates running agents and workspaces. Spec: `docs/superpowers/specs/2026-04-30-workspace-and-command-center-design.md`.
 
 **Architecture:** SQLite gains a `workspaces` table; sessions get `workspaceId` + `workspaceProbedAt` columns. WebSocket protocol gains workspace CRUD + a lazy-migration step on every successful connect (probes the working dir's git common-dir on the remote and upserts/links a workspace). Frontend gains a `workspace-store`, a workspace-centric Sidebar, an `AddWorkspaceDialog`, a `WorkspaceHome` page, and a `CommandCenter` landing page; `App.tsx` switches from server-first to workspace-first routing.

@@ -1,15 +1,20 @@
 # Phase A: Workspace Abstraction + Command Center — Design
 
-**Status:** Approved through brainstorm; pending implementation plan
+**Status:** Baseline implemented; retained as Phase A foundation
 **Date:** 2026-04-30
 **Phase:** A (foundation for the multi-agent / multi-workspace developer workstation roadmap)
 **Predecessors:** P0–P2 conductor-inspired work (sessions, worktrees, checkpoints, agent-team review, todo-gated PR)
+**Follow-up:** `docs/superpowers/specs/2026-05-06-helmor-aligned-workspace-surface-design.md`
 
 ---
 
 ## Goal
 
 Promote "remote git repository" to a first-class concept (`Workspace`) in Gate, replace the server-centric sidebar with a workspace-centric one, and introduce a Command Center landing page that aggregates running agents and workspace state. This is the foundation that later phases (B agent orchestration, C skills, D terminal/preview, E scheduled tasks) will attach to.
+
+## Current Baseline
+
+Phase A established the repository/workspace/session relationship and the first workspace-centric routes. It intentionally remains a foundation layer: workspaces are still mostly containers for sessions. The next product step is Phase A.1, which promotes a workspace into a task/delivery surface with status grouping, a start composer, a workspace inspector, and delivery actions.
 
 ## Non-Goals (Phase A)
 
