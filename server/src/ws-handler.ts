@@ -3,11 +3,20 @@ import type { Server as HttpServer } from 'http';
 import { SSHManager, type ServerConfig } from './ssh-manager.js';
 import type { ParsedMessage, CLIProvider, OutputParser } from './providers/types.js';
 import type { ProviderRegistry } from './providers/registry.js';
-import type { Database } from './db.js';
+import type { Database, Workspace } from './db.js';
 
 interface ClientMessage {
-  type: 'connect' | 'input' | 'interrupt' | 'disconnect' | 'create-session' | 'delete-session' | 'fetch-git-info' | 'list-branches' | 'switch-branch' | 'exec' | 'sync-transcript' | 'list-claude-sessions' | 'list-cli-sessions' | 'load-more' | 'switch-provider' | 'reset-conversation' | 'resume-cli-session' | 'fetch-git-status' | 'fetch-git-diff' | 'fetch-pr-info' | 'git-commit' | 'git-create-pr' | 'revert-to-checkpoint' | 'list-checkpoints';
-  serverId: string;
+  type:
+    | 'connect' | 'input' | 'interrupt' | 'disconnect'
+    | 'create-session' | 'delete-session'
+    | 'fetch-git-info' | 'list-branches' | 'switch-branch'
+    | 'exec' | 'sync-transcript'
+    | 'list-claude-sessions' | 'list-cli-sessions'
+    | 'load-more' | 'switch-provider' | 'reset-conversation' | 'resume-cli-session'
+    | 'fetch-git-status' | 'fetch-git-diff' | 'fetch-pr-info' | 'git-commit' | 'git-create-pr'
+    | 'revert-to-checkpoint' | 'list-checkpoints'
+    | 'list-workspaces' | 'create-workspace' | 'delete-workspace' | 'update-workspace';
+  serverId?: string;       // workspace messages may not have a serverId
   sessionId?: string;
   sessionName?: string;
   workingDir?: string;
@@ -23,13 +32,56 @@ interface ClientMessage {
   body?: string;
   diffArgs?: string;
   checkpointId?: string;
+
+  // workspace messages
+  workspaceId?: string;
+  repoPath?: string;
+  workspaceName?: string;
+  autoOpenLastSession?: boolean;
 }
 
 interface ServerMessage {
-  type: 'message' | 'status' | 'history' | 'history-prepend' | 'sessions' | 'git-info' | 'branches' | 'sync-result' | 'claude-sessions' | 'cli-sessions' | 'git-status' | 'git-diff' | 'pr-info' | 'git-commit-result' | 'git-create-pr-result' | 'checkpoints' | 'checkpoint-reverted';
-  serverId: string;
+  type:
+    | 'message' | 'status' | 'history' | 'history-prepend' | 'sessions'
+    | 'git-info' | 'branches' | 'sync-result'
+    | 'claude-sessions' | 'cli-sessions'
+    | 'git-status' | 'git-diff' | 'pr-info' | 'git-commit-result' | 'git-create-pr-result'
+    | 'checkpoints' | 'checkpoint-reverted'
+    | 'workspace-list' | 'workspace-update' | 'workspace-deleted' | 'session-update' | 'workspace-error';
+  serverId?: string;
   sessionId?: string | null;
   [key: string]: any;
+}
+
+export interface WorkspaceWithAggregates extends Workspace {
+  totalSessionCount: number;
+  lastActivityAt: number | null;
+  activeSessionCount: number;
+  dirtyFileCount: number | null;
+}
+
+async function buildWorkspaceWithAggregates(
+  ws: Workspace, db: Database, sshManager: SSHManager,
+): Promise<WorkspaceWithAggregates> {
+  const agg = db.aggregateWorkspace(ws.id);
+  // Count active SSH channels for sessions in this workspace.
+  const sessions = db.listSessions(ws.serverId).filter((s) => s.workspaceId === ws.id);
+  let activeSessionCount = 0;
+  for (const s of sessions) {
+    if (sshManager.hasActiveChannel(ws.serverId, s.id)) activeSessionCount += 1;
+  }
+  // Cheap dirty count: only attempt when SSH is already connected to avoid
+  // forcing a connect on every list-workspaces. Counts non-empty porcelain lines.
+  let dirtyFileCount: number | null = null;
+  if (sshManager.isConnected(ws.serverId)) {
+    try {
+      const raw = await sshManager.fetchGitStatus(ws.serverId, ws.repoPath);
+      dirtyFileCount = raw.split('\n').filter((l) => l.length > 0).length;
+    } catch {
+      dirtyFileCount = null;
+    }
+  }
+  return { ...ws, ...agg, activeSessionCount, dirtyFileCount };
 }
 
 /** Look up the CLIProvider for a session, falling back to default. */
@@ -180,11 +232,23 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
       }
 
       try {
+        // Workspace CRUD messages may omit serverId; everything else requires it.
+        const workspaceMsgTypes = new Set([
+          'list-workspaces', 'create-workspace', 'delete-workspace', 'update-workspace',
+        ]);
+        if (!workspaceMsgTypes.has(msg.type) && !msg.serverId) {
+          ws.send(JSON.stringify({ type: 'status', status: 'error', error: 'serverId required' }));
+          return;
+        }
+        // Local alias narrows `serverId` to `string` for all non-workspace cases without
+        // having to update every existing handler. Workspace cases that need it should
+        // re-check `msg.serverId` explicitly (see `create-workspace`).
+        const serverId = msg.serverId as string;
         switch (msg.type) {
           case 'connect': {
-            const server = db.getServer(msg.serverId);
+            const server = db.getServer(serverId);
             if (!server) {
-              ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, status: 'error', error: 'Server not found' }));
+              ws.send(JSON.stringify({ type: 'status', serverId: serverId, status: 'error', error: 'Server not found' }));
               return;
             }
 
@@ -293,19 +357,19 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             // Auto-checkpoint: snapshot git state before sending to CLI
             {
               const cpSession = db.getSession(msg.sessionId);
-              if (cpSession?.workingDir && sshManager.isConnected(msg.serverId)) {
+              if (cpSession?.workingDir && sshManager.isConnected(serverId)) {
                 const cpTimestamp = Date.now();
                 const tagName = `gate-cp-${msg.sessionId.slice(0, 8)}-${cpTimestamp}`;
-                sshManager.createCheckpoint(msg.serverId, cpSession.workingDir, tagName).then(({ branch, commitSha }) => {
+                sshManager.createCheckpoint(serverId, cpSession.workingDir, tagName).then(({ branch, commitSha }) => {
                   db.saveCheckpoint(msg.sessionId!, cpTimestamp, tagName, branch, commitSha);
                 }).catch(() => { /* checkpoint is best-effort */ });
               }
             }
 
             const inputCaps = inputProvider.getCapabilities();
-            if (inputCaps.supportsStdin && sshManager.hasActiveChannel(msg.serverId, msg.sessionId)) {
+            if (inputCaps.supportsStdin && sshManager.hasActiveChannel(serverId, msg.sessionId)) {
               // Interactive provider with running CLI: write to stdin
-              sshManager.sendInput(msg.serverId, msg.sessionId, inputProvider.formatInput(msg.text));
+              sshManager.sendInput(serverId, msg.sessionId, inputProvider.formatInput(msg.text));
             } else {
               // Per-message provider (e.g. Codex) or dead channel: launch new CLI
               // Clean up previous parser so a fresh one is created for the new process
@@ -324,8 +388,8 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               perMessageSessions.add(msg.sessionId);
 
               // Ensure SSH is connected before launching
-              if (!sshManager.isConnected(msg.serverId)) {
-                const server = db.getServer(msg.serverId);
+              if (!sshManager.isConnected(serverId)) {
+                const server = db.getServer(serverId);
                 if (server) {
                   await sshManager.connect({
                     id: server.id, host: server.host, port: server.port,
@@ -335,14 +399,14 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                 }
               }
 
-              await sshManager.startCLI(msg.serverId, msg.sessionId, cmd);
+              await sshManager.startCLI(serverId, msg.sessionId, cmd);
 
               // Interactive providers need the first message sent after the process starts.
               if (inputCaps.supportsStdin) {
                 // Small delay for CLI to initialize before writing stdin
                 setTimeout(() => {
                   try {
-                    sshManager.sendInput(msg.serverId, msg.sessionId!, inputProvider.formatInput(msg.text!));
+                    sshManager.sendInput(serverId, msg.sessionId!, inputProvider.formatInput(msg.text!));
                   } catch { /* channel may have closed */ }
                 }, 500);
               }
@@ -352,14 +416,78 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
 
           case 'interrupt': {
             if (!msg.sessionId) return;
-            if (sshManager.hasActiveChannel(msg.serverId, msg.sessionId)) {
+            if (sshManager.hasActiveChannel(serverId, msg.sessionId)) {
               // Escape key to exit any interactive prompt, then SIGINT (Ctrl+C) to stop generation
-              sshManager.writeRaw(msg.serverId, msg.sessionId, '\x1b');
-              sshManager.writeRaw(msg.serverId, msg.sessionId, '\x03');
+              sshManager.writeRaw(serverId, msg.sessionId, '\x1b');
+              sshManager.writeRaw(serverId, msg.sessionId, '\x03');
               // Second Ctrl+C after a short delay to handle cases where the first one is buffered
               setTimeout(() => {
-                try { sshManager.writeRaw(msg.serverId, msg.sessionId!, '\x03'); } catch { /* ignore */ }
+                try { sshManager.writeRaw(serverId, msg.sessionId!, '\x03'); } catch { /* ignore */ }
               }, 150);
+            }
+            break;
+          }
+
+          case 'list-workspaces': {
+            const workspaces = db.listWorkspaces();
+            const enriched = await Promise.all(workspaces.map((w) => buildWorkspaceWithAggregates(w, db, sshManager)));
+            ws.send(JSON.stringify({ type: 'workspace-list', workspaces: enriched }));
+            break;
+          }
+
+          case 'create-workspace': {
+            if (!serverId || !msg.repoPath) {
+              ws.send(JSON.stringify({ type: 'workspace-error', error: 'serverId and repoPath required' }));
+              break;
+            }
+            try {
+              await sshManager.ensureConnected(serverId);
+            } catch (err: any) {
+              ws.send(JSON.stringify({ type: 'workspace-error', error: `SSH connect failed: ${err.message}` }));
+              break;
+            }
+            const probe = await sshManager.probeGitRepo(serverId, msg.repoPath);
+            if (!probe) {
+              ws.send(JSON.stringify({ type: 'workspace-error', error: `Path is not a git repository: ${msg.repoPath}` }));
+              break;
+            }
+            const workspace = db.upsertWorkspaceByPath({
+              serverId: serverId,
+              repoPath: probe.canonicalPath,
+              remoteUrl: probe.remoteUrl,
+              defaultBranch: probe.defaultBranch,
+              name: msg.workspaceName?.trim() || probe.canonicalPath.split('/').filter(Boolean).pop() || 'workspace',
+            });
+            const enriched = await buildWorkspaceWithAggregates(workspace, db, sshManager);
+            broadcast(wss, { type: 'workspace-update', workspace: enriched });
+            break;
+          }
+
+          case 'delete-workspace': {
+            if (!msg.workspaceId) break;
+            const workspace = db.getWorkspace(msg.workspaceId);
+            if (!workspace) break;
+            // Stop any active channels for sessions in this workspace
+            const wsSessions = db.listSessions(workspace.serverId).filter((s) => s.workspaceId === workspace.id);
+            for (const s of wsSessions) {
+              if (sshManager.hasActiveChannel(workspace.serverId, s.id)) sshManager.stopSession(workspace.serverId, s.id);
+              parsers.delete(s.id);
+            }
+            db.deleteWorkspace(msg.workspaceId);
+            broadcast(wss, { type: 'workspace-deleted', workspaceId: msg.workspaceId, removedSessionIds: wsSessions.map((s) => s.id) });
+            break;
+          }
+
+          case 'update-workspace': {
+            if (!msg.workspaceId) break;
+            db.updateWorkspace(msg.workspaceId, {
+              name: msg.workspaceName,
+              autoOpenLastSession: msg.autoOpenLastSession,
+            });
+            const updated = db.getWorkspace(msg.workspaceId);
+            if (updated) {
+              const enriched = await buildWorkspaceWithAggregates(updated, db, sshManager);
+              broadcast(wss, { type: 'workspace-update', workspace: enriched });
             }
             break;
           }
@@ -370,49 +498,49 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               if (parser) parser.flush();
               parsers.delete(msg.sessionId);
               perMessageSessions.delete(msg.sessionId);
-              sshManager.stopSession(msg.serverId, msg.sessionId);
+              sshManager.stopSession(serverId, msg.sessionId);
             } else {
               // Disconnect all sessions for this server
-              const sessions = db.listSessions(msg.serverId);
+              const sessions = db.listSessions(serverId);
               for (const s of sessions) {
                 const parser = parsers.get(s.id);
                 if (parser) parser.flush();
                 parsers.delete(s.id);
                 perMessageSessions.delete(s.id);
               }
-              await sshManager.disconnect(msg.serverId);
+              await sshManager.disconnect(serverId);
             }
             break;
           }
 
           case 'create-session': {
             const name = msg.sessionName || 'New Session';
-            const session = db.createSession(msg.serverId, name, msg.workingDir || null, msg.provider);
+            const session = db.createSession(serverId, name, msg.workingDir || null, msg.provider);
             // Pre-fill CLI session ID if binding to an existing terminal session
             if (msg.claudeSessionId) {
               db.updateClaudeSessionId(session.id, msg.claudeSessionId);
               session.claudeSessionId = msg.claudeSessionId;
               session.cliSessionId = msg.claudeSessionId;
             }
-            const sessions = db.listSessions(msg.serverId);
-            broadcast(wss, { type: 'sessions', serverId: msg.serverId, sessions });
+            const sessions = db.listSessions(serverId);
+            broadcast(wss, { type: 'sessions', serverId: serverId, sessions });
             // Also tell the sender which session was created
-            ws.send(JSON.stringify({ type: 'session-created', serverId: msg.serverId, session }));
+            ws.send(JSON.stringify({ type: 'session-created', serverId: serverId, session }));
             break;
           }
 
           case 'delete-session': {
             if (!msg.sessionId) return;
             // Stop the channel if running
-            sshManager.stopSession(msg.serverId, msg.sessionId);
+            sshManager.stopSession(serverId, msg.sessionId);
             const parser = parsers.get(msg.sessionId);
             if (parser) parser.flush();
             parsers.delete(msg.sessionId);
             perMessageSessions.delete(msg.sessionId);
             // Delete from DB (cascade deletes messages)
             db.deleteSession(msg.sessionId);
-            const sessions = db.listSessions(msg.serverId);
-            broadcast(wss, { type: 'sessions', serverId: msg.serverId, sessions });
+            const sessions = db.listSessions(serverId);
+            broadcast(wss, { type: 'sessions', serverId: serverId, sessions });
             break;
           }
 
@@ -420,10 +548,10 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             if (!msg.sessionId) return;
             const gitSession = db.getSession(msg.sessionId);
             if (!gitSession?.workingDir) return;
-            if (!sshManager.isConnected(msg.serverId)) return;
-            const gitInfo = await sshManager.fetchGitInfo(msg.serverId, gitSession.workingDir);
+            if (!sshManager.isConnected(serverId)) return;
+            const gitInfo = await sshManager.fetchGitInfo(serverId, gitSession.workingDir);
             if (gitInfo) {
-              broadcast(wss, { type: 'git-info', serverId: msg.serverId, sessionId: msg.sessionId, ...gitInfo });
+              broadcast(wss, { type: 'git-info', serverId: serverId, sessionId: msg.sessionId, ...gitInfo });
             }
             break;
           }
@@ -432,9 +560,9 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             if (!msg.sessionId) return;
             const brSession = db.getSession(msg.sessionId);
             if (!brSession?.workingDir) return;
-            if (!sshManager.isConnected(msg.serverId)) return;
-            const branches = await sshManager.listBranches(msg.serverId, brSession.workingDir);
-            ws.send(JSON.stringify({ type: 'branches', serverId: msg.serverId, sessionId: msg.sessionId, ...branches }));
+            if (!sshManager.isConnected(serverId)) return;
+            const branches = await sshManager.listBranches(serverId, brSession.workingDir);
+            ws.send(JSON.stringify({ type: 'branches', serverId: serverId, sessionId: msg.sessionId, ...branches }));
             break;
           }
 
@@ -442,16 +570,16 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             if (!msg.sessionId || !msg.branch) return;
             const swSession = db.getSession(msg.sessionId);
             if (!swSession?.workingDir) return;
-            if (!sshManager.isConnected(msg.serverId)) return;
-            const newInfo = await sshManager.switchBranch(msg.serverId, swSession.workingDir, msg.branch);
-            broadcast(wss, { type: 'git-info', serverId: msg.serverId, sessionId: msg.sessionId, ...newInfo });
+            if (!sshManager.isConnected(serverId)) return;
+            const newInfo = await sshManager.switchBranch(serverId, swSession.workingDir, msg.branch);
+            broadcast(wss, { type: 'git-info', serverId: serverId, sessionId: msg.sessionId, ...newInfo });
             break;
           }
 
           case 'exec': {
             if (!msg.sessionId || !msg.command) return;
-            if (!sshManager.isConnected(msg.serverId)) {
-              ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: 'Not connected to server' }));
+            if (!sshManager.isConnected(serverId)) {
+              ws.send(JSON.stringify({ type: 'status', serverId: serverId, sessionId: msg.sessionId, status: 'error', error: 'Not connected to server' }));
               return;
             }
 
@@ -467,7 +595,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             });
             db.updateSessionActivity(msg.sessionId);
 
-            const { stdout, stderr, exitCode } = await sshManager.runCommand(msg.serverId, execDir, msg.command);
+            const { stdout, stderr, exitCode } = await sshManager.runCommand(serverId, execDir, msg.command);
             const output = (stdout + stderr).trimEnd();
             const resultContent = exitCode !== 0 ? `${output}\n[exit code: ${exitCode}]` : output;
 
@@ -482,23 +610,23 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
 
             db.saveMessage(resultMessage);
             db.updateSessionActivity(msg.sessionId);
-            broadcast(wss, { type: 'message', serverId: msg.serverId, sessionId: msg.sessionId, message: resultMessage });
+            broadcast(wss, { type: 'message', serverId: serverId, sessionId: msg.sessionId, message: resultMessage });
             break;
           }
 
           case 'list-claude-sessions':
           case 'list-cli-sessions': {
             if (!msg.workingDir) return;
-            const lsServer = db.getServer(msg.serverId);
+            const lsServer = db.getServer(serverId);
             if (!lsServer) {
-              console.log('[list-cli-sessions] server not found:', msg.serverId);
-              ws.send(JSON.stringify({ type: 'cli-sessions', serverId: msg.serverId, sessions: [] }));
+              console.log('[list-cli-sessions] server not found:', serverId);
+              ws.send(JSON.stringify({ type: 'cli-sessions', serverId: serverId, sessions: [] }));
               return;
             }
 
             try {
               // Ensure SSH is connected (dialog may open before any session connects)
-              if (!sshManager.isConnected(msg.serverId)) {
+              if (!sshManager.isConnected(serverId)) {
                 console.log('[list-cli-sessions] SSH not connected, auto-connecting...');
                 const config: ServerConfig = {
                   id: lsServer.id,
@@ -516,19 +644,19 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               const providerName = msg.provider ?? 'claude';
               const lsProvider = registry.get(providerName);
               if (!lsProvider) {
-                ws.send(JSON.stringify({ type: 'cli-sessions', serverId: msg.serverId, sessions: [] }));
+                ws.send(JSON.stringify({ type: 'cli-sessions', serverId: serverId, sessions: [] }));
                 return;
               }
 
-              const runCommand = async (command: string) => sshManager.runCommand(msg.serverId, null, command);
+              const runCommand = async (command: string) => sshManager.runCommand(serverId, null, command);
               const remoteSessions = await lsProvider.listRemoteSessions(runCommand, msg.workingDir);
               const sessionIds = remoteSessions.map((s) => s.id);
 
               console.log('[list-cli-sessions] found %d sessions', sessionIds.length);
-              ws.send(JSON.stringify({ type: 'cli-sessions', serverId: msg.serverId, sessions: sessionIds }));
+              ws.send(JSON.stringify({ type: 'cli-sessions', serverId: serverId, sessions: sessionIds }));
             } catch (err: any) {
               console.error('[list-cli-sessions] error:', err.message);
-              ws.send(JSON.stringify({ type: 'cli-sessions', serverId: msg.serverId, sessions: [] }));
+              ws.send(JSON.stringify({ type: 'cli-sessions', serverId: serverId, sessions: [] }));
             }
             break;
           }
@@ -538,21 +666,21 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             const syncSession = db.getSession(msg.sessionId);
             const syncCliSessionId = syncSession?.cliSessionId ?? syncSession?.claudeSessionId;
             if (!syncCliSessionId) {
-              ws.send(JSON.stringify({ type: 'sync-result', serverId: msg.serverId, sessionId: msg.sessionId, success: false, error: 'No CLI session ID found. Start a conversation first.' }));
+              ws.send(JSON.stringify({ type: 'sync-result', serverId: serverId, sessionId: msg.sessionId, success: false, error: 'No CLI session ID found. Start a conversation first.' }));
               return;
             }
-            if (!sshManager.isConnected(msg.serverId)) {
-              ws.send(JSON.stringify({ type: 'sync-result', serverId: msg.serverId, sessionId: msg.sessionId, success: false, error: 'Not connected to server' }));
+            if (!sshManager.isConnected(serverId)) {
+              ws.send(JSON.stringify({ type: 'sync-result', serverId: serverId, sessionId: msg.sessionId, success: false, error: 'Not connected to server' }));
               return;
             }
 
             try {
               const syncProvider = getProvider(db, registry, msg.sessionId);
-              const runCommand = async (command: string) => sshManager.runCommand(msg.serverId, null, command);
+              const runCommand = async (command: string) => sshManager.runCommand(serverId, null, command);
               const transcriptMessages = await syncProvider.syncTranscript(runCommand, syncCliSessionId, syncSession?.workingDir ?? undefined);
 
               if (transcriptMessages.length === 0) {
-                ws.send(JSON.stringify({ type: 'sync-result', serverId: msg.serverId, sessionId: msg.sessionId, success: true, added: 0 }));
+                ws.send(JSON.stringify({ type: 'sync-result', serverId: serverId, sessionId: msg.sessionId, success: true, added: 0 }));
                 return;
               }
 
@@ -595,10 +723,10 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               } else {
                 allMessages = db.getMessages(msg.sessionId!);
               }
-              ws.send(JSON.stringify({ type: 'history', serverId: msg.serverId, sessionId: msg.sessionId, messages: allMessages }));
-              ws.send(JSON.stringify({ type: 'sync-result', serverId: msg.serverId, sessionId: msg.sessionId, success: true, added: newMessages.length }));
+              ws.send(JSON.stringify({ type: 'history', serverId: serverId, sessionId: msg.sessionId, messages: allMessages }));
+              ws.send(JSON.stringify({ type: 'sync-result', serverId: serverId, sessionId: msg.sessionId, success: true, added: newMessages.length }));
             } catch (err: any) {
-              ws.send(JSON.stringify({ type: 'sync-result', serverId: msg.serverId, sessionId: msg.sessionId, success: false, error: err.message }));
+              ws.send(JSON.stringify({ type: 'sync-result', serverId: serverId, sessionId: msg.sessionId, success: false, error: err.message }));
             }
             break;
           }
@@ -608,7 +736,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             const olderMessages = db.getMessagesBefore(msg.sessionId, msg.beforeTimestamp);
             ws.send(JSON.stringify({
               type: 'history-prepend',
-              serverId: msg.serverId,
+              serverId: serverId,
               sessionId: msg.sessionId,
               messages: olderMessages,
               hasMore: olderMessages.length >= 100,
@@ -625,16 +753,16 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             const currentProvider = registry.get(currentProviderName);
             const targetProvider = registry.get(msg.provider);
             if (!currentProvider || !targetProvider) {
-              ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: `Unknown provider: ${msg.provider}` }));
+              ws.send(JSON.stringify({ type: 'status', serverId: serverId, sessionId: msg.sessionId, status: 'error', error: `Unknown provider: ${msg.provider}` }));
               return;
             }
 
             try {
               // Step 1: Request summary from current CLI (if connected)
               let summary = '';
-              if (sshManager.hasActiveChannel(msg.serverId, msg.sessionId)) {
+              if (sshManager.hasActiveChannel(serverId, msg.sessionId)) {
                 const summaryPrompt = currentProvider.requestSummary();
-                sshManager.sendInput(msg.serverId, msg.sessionId, currentProvider.formatInput(summaryPrompt));
+                sshManager.sendInput(serverId, msg.sessionId, currentProvider.formatInput(summaryPrompt));
 
                 // Wait for assistant response with timeout
                 summary = await new Promise<string>((resolve) => {
@@ -665,14 +793,14 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               // Step 2: Disconnect current CLI
               const spParser = parsers.get(msg.sessionId);
               if (spParser) { spParser.flush(); parsers.delete(msg.sessionId); }
-              sshManager.stopSession(msg.serverId, msg.sessionId);
+              sshManager.stopSession(serverId, msg.sessionId);
 
               // Step 3: Update session provider in DB (saves current cliSessionId, restores target's)
               db.updateSessionProvider(msg.sessionId, msg.provider);
               broadcast(wss, {
                 type: 'sessions',
-                serverId: msg.serverId,
-                sessions: db.listSessions(msg.serverId),
+                serverId: serverId,
+                sessions: db.listSessions(serverId),
               });
 
               // Check if we can resume an existing session for the target provider
@@ -697,14 +825,14 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                 provider: msg.provider,
               };
               db.saveMessage(switchMsg);
-              broadcast(wss, { type: 'message', serverId: msg.serverId, sessionId: msg.sessionId, message: switchMsg });
+              broadcast(wss, { type: 'message', serverId: serverId, sessionId: msg.sessionId, message: switchMsg });
 
               // Step 5: Launch new CLI with context
-              const spServer = db.getServer(msg.serverId);
+              const spServer = db.getServer(serverId);
               if (!spServer) return;
 
               // Ensure SSH connected
-              if (!sshManager.isConnected(msg.serverId)) {
+              if (!sshManager.isConnected(serverId)) {
                 const config: ServerConfig = {
                   id: spServer.id, host: spServer.host, port: spServer.port,
                   username: spServer.username, authType: spServer.authType as 'password' | 'privateKey',
@@ -724,13 +852,13 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                   // Per-message providers need context in the command itself
                   initialContext: targetCaps.supportsStdin ? undefined : (summary || undefined),
                 });
-                await sshManager.startCLI(msg.serverId, msg.sessionId, cmd);
+                await sshManager.startCLI(serverId, msg.sessionId, cmd);
                 // Always send summary via stdin so the target provider gets cross-provider context
                 if (summary) {
                   setTimeout(() => {
                     try {
                       sshManager.sendInput(
-                        msg.serverId,
+                        serverId,
                         msg.sessionId!,
                         targetProvider.formatInput(summary),
                       );
@@ -745,10 +873,10 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                 perMessageSessions.add(msg.sessionId);
               }
 
-              broadcast(wss, { type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'connected' });
+              broadcast(wss, { type: 'status', serverId: serverId, sessionId: msg.sessionId, status: 'connected' });
             } catch (err: any) {
               console.error('[switch-provider] error:', err.message);
-              ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: err.message }));
+              ws.send(JSON.stringify({ type: 'status', serverId: serverId, sessionId: msg.sessionId, status: 'error', error: err.message }));
             }
             break;
           }
@@ -762,7 +890,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               // Stop current CLI
               const rcParser = parsers.get(msg.sessionId);
               if (rcParser) { rcParser.flush(); parsers.delete(msg.sessionId); }
-              sshManager.stopSession(msg.serverId, msg.sessionId);
+              sshManager.stopSession(serverId, msg.sessionId);
 
               // Clear CLI session ID so next launch won't --resume
               db.clearCliSessionId(msg.sessionId);
@@ -782,13 +910,13 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               db.saveMessage(rcMsg);
 
               // Send clean slate to frontend
-              broadcast(wss, { type: 'history', serverId: msg.serverId, sessionId: msg.sessionId, messages: [], hasMore: false });
+              broadcast(wss, { type: 'history', serverId: serverId, sessionId: msg.sessionId, messages: [], hasMore: false });
 
               // Re-launch CLI without resume
-              const rcServer = db.getServer(msg.serverId);
+              const rcServer = db.getServer(serverId);
               if (!rcServer) return;
 
-              if (!sshManager.isConnected(msg.serverId)) {
+              if (!sshManager.isConnected(serverId)) {
                 const config: ServerConfig = {
                   id: rcServer.id, host: rcServer.host, port: rcServer.port,
                   username: rcServer.username, authType: rcServer.authType as 'password' | 'privateKey',
@@ -805,15 +933,15 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                 const cmd = rcProvider.buildCommand({
                   workingDir: rcSession.workingDir ?? undefined,
                 });
-                await sshManager.startCLI(msg.serverId, msg.sessionId, cmd);
+                await sshManager.startCLI(serverId, msg.sessionId, cmd);
               } else {
                 perMessageSessions.add(msg.sessionId);
               }
 
-              broadcast(wss, { type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'connected' });
+              broadcast(wss, { type: 'status', serverId: serverId, sessionId: msg.sessionId, status: 'connected' });
             } catch (err: any) {
               console.error('[reset-conversation] error:', err.message);
-              ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: err.message }));
+              ws.send(JSON.stringify({ type: 'status', serverId: serverId, sessionId: msg.sessionId, status: 'error', error: err.message }));
             }
             break;
           }
@@ -827,7 +955,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               // Stop current CLI
               const rsParser = parsers.get(msg.sessionId);
               if (rsParser) { rsParser.flush(); parsers.delete(msg.sessionId); }
-              sshManager.stopSession(msg.serverId, msg.sessionId);
+              sshManager.stopSession(serverId, msg.sessionId);
 
               // Update cliSessionId to the selected one
               db.updateCliSessionId(msg.sessionId, msg.claudeSessionId);
@@ -837,7 +965,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               let syncedMessages: ParsedMessage[] = [];
               try {
                 const rsProvider = getProvider(db, registry, msg.sessionId);
-                const runCommand = async (command: string) => sshManager.runCommand(msg.serverId, null, command);
+                const runCommand = async (command: string) => sshManager.runCommand(serverId, null, command);
                 syncedMessages = await rsProvider.syncTranscript(runCommand, msg.claudeSessionId, rsSession.workingDir ?? undefined);
               } catch { /* sync is best-effort */ }
 
@@ -884,13 +1012,13 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               // Send history with synced messages
               const rsMessages = db.getMessagesAfter(msg.sessionId, chatBoundary);
               const rsTotalCount = db.getMessageCountAfter(msg.sessionId, chatBoundary);
-              broadcast(wss, { type: 'history', serverId: msg.serverId, sessionId: msg.sessionId, messages: rsMessages, hasMore: rsTotalCount > rsMessages.length });
+              broadcast(wss, { type: 'history', serverId: serverId, sessionId: msg.sessionId, messages: rsMessages, hasMore: rsTotalCount > rsMessages.length });
 
               // Re-launch CLI with --resume
-              const rsServer = db.getServer(msg.serverId);
+              const rsServer = db.getServer(serverId);
               if (!rsServer) return;
 
-              if (!sshManager.isConnected(msg.serverId)) {
+              if (!sshManager.isConnected(serverId)) {
                 const config: ServerConfig = {
                   id: rsServer.id, host: rsServer.host, port: rsServer.port,
                   username: rsServer.username, authType: rsServer.authType as 'password' | 'privateKey',
@@ -908,15 +1036,15 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                   resumeSessionId: msg.claudeSessionId,
                   workingDir: rsSession.workingDir ?? undefined,
                 });
-                await sshManager.startCLI(msg.serverId, msg.sessionId, cmd);
+                await sshManager.startCLI(serverId, msg.sessionId, cmd);
               } else {
                 perMessageSessions.add(msg.sessionId);
               }
 
-              broadcast(wss, { type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'connected' });
+              broadcast(wss, { type: 'status', serverId: serverId, sessionId: msg.sessionId, status: 'connected' });
             } catch (err: any) {
               console.error('[resume-cli-session] error:', err.message);
-              ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: err.message }));
+              ws.send(JSON.stringify({ type: 'status', serverId: serverId, sessionId: msg.sessionId, status: 'error', error: err.message }));
             }
             break;
           }
@@ -925,9 +1053,9 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             if (!msg.sessionId) return;
             const gsSession = db.getSession(msg.sessionId);
             if (!gsSession?.workingDir) return;
-            if (!sshManager.isConnected(msg.serverId)) return;
-            const raw = await sshManager.fetchGitStatus(msg.serverId, gsSession.workingDir);
-            ws.send(JSON.stringify({ type: 'git-status', serverId: msg.serverId, sessionId: msg.sessionId, raw }));
+            if (!sshManager.isConnected(serverId)) return;
+            const raw = await sshManager.fetchGitStatus(serverId, gsSession.workingDir);
+            ws.send(JSON.stringify({ type: 'git-status', serverId: serverId, sessionId: msg.sessionId, raw }));
             break;
           }
 
@@ -935,9 +1063,9 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             if (!msg.sessionId) return;
             const gdSession = db.getSession(msg.sessionId);
             if (!gdSession?.workingDir) return;
-            if (!sshManager.isConnected(msg.serverId)) return;
-            const diff = await sshManager.fetchGitDiff(msg.serverId, gdSession.workingDir, msg.diffArgs ?? '');
-            ws.send(JSON.stringify({ type: 'git-diff', serverId: msg.serverId, sessionId: msg.sessionId, diff }));
+            if (!sshManager.isConnected(serverId)) return;
+            const diff = await sshManager.fetchGitDiff(serverId, gdSession.workingDir, msg.diffArgs ?? '');
+            ws.send(JSON.stringify({ type: 'git-diff', serverId: serverId, sessionId: msg.sessionId, diff }));
             break;
           }
 
@@ -945,9 +1073,9 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             if (!msg.sessionId) return;
             const prSession = db.getSession(msg.sessionId);
             if (!prSession?.workingDir) return;
-            if (!sshManager.isConnected(msg.serverId)) return;
-            const prJson = await sshManager.fetchPRInfo(msg.serverId, prSession.workingDir);
-            ws.send(JSON.stringify({ type: 'pr-info', serverId: msg.serverId, sessionId: msg.sessionId, data: prJson }));
+            if (!sshManager.isConnected(serverId)) return;
+            const prJson = await sshManager.fetchPRInfo(serverId, prSession.workingDir);
+            ws.send(JSON.stringify({ type: 'pr-info', serverId: serverId, sessionId: msg.sessionId, data: prJson }));
             break;
           }
 
@@ -955,12 +1083,12 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             if (!msg.sessionId || !msg.message) return;
             const gcSession = db.getSession(msg.sessionId);
             if (!gcSession?.workingDir) return;
-            if (!sshManager.isConnected(msg.serverId)) return;
+            if (!sshManager.isConnected(serverId)) return;
             try {
-              const result = await sshManager.gitCommit(msg.serverId, gcSession.workingDir, msg.message, msg.files);
-              ws.send(JSON.stringify({ type: 'git-commit-result', serverId: msg.serverId, sessionId: msg.sessionId, success: true, output: result }));
+              const result = await sshManager.gitCommit(serverId, gcSession.workingDir, msg.message, msg.files);
+              ws.send(JSON.stringify({ type: 'git-commit-result', serverId: serverId, sessionId: msg.sessionId, success: true, output: result }));
             } catch (err: any) {
-              ws.send(JSON.stringify({ type: 'git-commit-result', serverId: msg.serverId, sessionId: msg.sessionId, success: false, error: err.message }));
+              ws.send(JSON.stringify({ type: 'git-commit-result', serverId: serverId, sessionId: msg.sessionId, success: false, error: err.message }));
             }
             break;
           }
@@ -969,12 +1097,12 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             if (!msg.sessionId || !msg.title) return;
             const cpSession = db.getSession(msg.sessionId);
             if (!cpSession?.workingDir) return;
-            if (!sshManager.isConnected(msg.serverId)) return;
+            if (!sshManager.isConnected(serverId)) return;
             try {
-              const url = await sshManager.gitCreatePR(msg.serverId, cpSession.workingDir, msg.title, msg.body ?? '');
-              ws.send(JSON.stringify({ type: 'git-create-pr-result', serverId: msg.serverId, sessionId: msg.sessionId, success: true, url }));
+              const url = await sshManager.gitCreatePR(serverId, cpSession.workingDir, msg.title, msg.body ?? '');
+              ws.send(JSON.stringify({ type: 'git-create-pr-result', serverId: serverId, sessionId: msg.sessionId, success: true, url }));
             } catch (err: any) {
-              ws.send(JSON.stringify({ type: 'git-create-pr-result', serverId: msg.serverId, sessionId: msg.sessionId, success: false, error: err.message }));
+              ws.send(JSON.stringify({ type: 'git-create-pr-result', serverId: serverId, sessionId: msg.sessionId, success: false, error: err.message }));
             }
             break;
           }
@@ -983,19 +1111,19 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             if (!msg.sessionId || !msg.checkpointId) return;
             const rvSession = db.getSession(msg.sessionId);
             if (!rvSession?.workingDir) return;
-            if (!sshManager.isConnected(msg.serverId)) return;
+            if (!sshManager.isConnected(serverId)) return;
 
             try {
               // Find the checkpoint
               const checkpoints = db.listCheckpoints(msg.sessionId);
               const checkpoint = checkpoints.find((cp) => cp.id === msg.checkpointId);
               if (!checkpoint) {
-                ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: 'Checkpoint not found' }));
+                ws.send(JSON.stringify({ type: 'status', serverId: serverId, sessionId: msg.sessionId, status: 'error', error: 'Checkpoint not found' }));
                 return;
               }
 
               // Revert git state
-              await sshManager.revertToCheckpoint(msg.serverId, rvSession.workingDir, checkpoint.gitRef);
+              await sshManager.revertToCheckpoint(serverId, rvSession.workingDir, checkpoint.gitRef);
 
               // Delete checkpoints after this one
               db.deleteCheckpointsAfter(msg.sessionId, checkpoint.messageTimestamp);
@@ -1005,18 +1133,18 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
 
               // Reload history for client
               const messages = db.getMessagesAfter(msg.sessionId, checkpoint.messageTimestamp);
-              broadcast(wss, { type: 'history', serverId: msg.serverId, sessionId: msg.sessionId, messages, hasMore: true });
-              broadcast(wss, { type: 'checkpoint-reverted', serverId: msg.serverId, sessionId: msg.sessionId, checkpointId: msg.checkpointId });
+              broadcast(wss, { type: 'history', serverId: serverId, sessionId: msg.sessionId, messages, hasMore: true });
+              broadcast(wss, { type: 'checkpoint-reverted', serverId: serverId, sessionId: msg.sessionId, checkpointId: msg.checkpointId });
 
               // Refresh git info
-              const gitInfo = await sshManager.fetchGitInfo(msg.serverId, rvSession.workingDir);
-              if (gitInfo) broadcast(wss, { type: 'git-info', serverId: msg.serverId, sessionId: msg.sessionId, ...gitInfo });
+              const gitInfo = await sshManager.fetchGitInfo(serverId, rvSession.workingDir);
+              if (gitInfo) broadcast(wss, { type: 'git-info', serverId: serverId, sessionId: msg.sessionId, ...gitInfo });
 
               // Refresh git status
-              const raw = await sshManager.fetchGitStatus(msg.serverId, rvSession.workingDir);
-              broadcast(wss, { type: 'git-status', serverId: msg.serverId, sessionId: msg.sessionId, raw });
+              const raw = await sshManager.fetchGitStatus(serverId, rvSession.workingDir);
+              broadcast(wss, { type: 'git-status', serverId: serverId, sessionId: msg.sessionId, raw });
             } catch (err: any) {
-              ws.send(JSON.stringify({ type: 'status', serverId: msg.serverId, sessionId: msg.sessionId, status: 'error', error: err.message }));
+              ws.send(JSON.stringify({ type: 'status', serverId: serverId, sessionId: msg.sessionId, status: 'error', error: err.message }));
             }
             break;
           }
@@ -1024,7 +1152,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
           case 'list-checkpoints': {
             if (!msg.sessionId) return;
             const checkpoints = db.listCheckpoints(msg.sessionId);
-            ws.send(JSON.stringify({ type: 'checkpoints', serverId: msg.serverId, sessionId: msg.sessionId, checkpoints }));
+            ws.send(JSON.stringify({ type: 'checkpoints', serverId: serverId, sessionId: msg.sessionId, checkpoints }));
             break;
           }
         }
