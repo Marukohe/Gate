@@ -102,25 +102,19 @@ export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSess
         'flex flex-col bg-muted/40',
         isMobile ? 'w-full' : 'h-full w-64 border-r',
       )}>
-        {!isMobile && (
-          <div className="px-3 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Workspaces
-          </div>
-        )}
+        <div className={cn('flex items-center justify-between px-3 pb-2', !isMobile && 'pt-[max(0.75rem,env(safe-area-inset-top))]')}>
+          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Workspaces</span>
+          {onAddWorkspace && (
+            <button
+              className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              onClick={() => { onAddWorkspace(); onClose?.(); }}
+              title="Add workspace"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
         <div className={cn('overflow-y-auto px-2 space-y-1', !isMobile && 'flex-1')}>
-          {/* Header row with Add workspace */}
-          <div className="flex items-center justify-between px-1 pt-1 pb-1">
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Workspaces</span>
-            {onAddWorkspace && (
-              <button
-                className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                onClick={() => { onAddWorkspace(); onClose?.(); }}
-                title="Add workspace"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
 
           {/* Workspace list */}
           {workspaceList.map((ws) => {
