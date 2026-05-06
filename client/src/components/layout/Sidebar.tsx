@@ -151,7 +151,7 @@ export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSess
                       ? <ChevronRight className="h-3.5 w-3.5" />
                       : <ChevronDown className="h-3.5 w-3.5" />}
                   </span>
-                  <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground/70" />
+                  <FolderOpen className="h-5 w-5 shrink-0 text-muted-foreground/70" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <span className="truncate font-medium text-xs">{ws.name}</span>
@@ -162,6 +162,7 @@ export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSess
                       {branchLabel && (
                         <>
                           <span className="mx-1">·</span>
+                          <GitBranchIcon className="inline h-2.5 w-2.5 mr-0.5" />
                           <span className="font-mono">{branchLabel}</span>
                         </>
                       )}
