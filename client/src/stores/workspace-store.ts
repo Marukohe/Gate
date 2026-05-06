@@ -4,6 +4,12 @@ import { persist } from 'zustand/middleware';
 export type WorkspaceStatus = 'backlog' | 'in-progress' | 'review' | 'done' | 'canceled';
 export type WorkspacePrState = 'none' | 'open' | 'closed' | 'merged' | 'unknown';
 
+export interface WorkspaceBranchList {
+  current: string;
+  local: string[];
+  remote: string[];
+}
+
 export interface WorkspaceWithAggregates {
   id: string;
   serverId: string;
@@ -29,9 +35,11 @@ export interface WorkspaceWithAggregates {
 
 interface WorkspaceStore {
   workspaces: Record<string, WorkspaceWithAggregates>;
+  branches: Record<string, WorkspaceBranchList>;
   activeWorkspaceId: string | null;
   setWorkspaces: (list: WorkspaceWithAggregates[]) => void;
   upsertWorkspace: (ws: WorkspaceWithAggregates) => void;
+  setBranches: (workspaceId: string, branches: WorkspaceBranchList) => void;
   removeWorkspace: (id: string) => void;
   setActiveWorkspace: (id: string | null) => void;
   list: () => WorkspaceWithAggregates[];
@@ -42,6 +50,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
   persist(
     (set, get) => ({
       workspaces: {},
+      branches: {},
       activeWorkspaceId: null,
       setWorkspaces: (list) => set({
         workspaces: Object.fromEntries(list.map((w) => [w.id, w])),
@@ -49,10 +58,15 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       upsertWorkspace: (ws) => set((s) => ({
         workspaces: { ...s.workspaces, [ws.id]: ws },
       })),
+      setBranches: (workspaceId, branches) => set((s) => ({
+        branches: { ...s.branches, [workspaceId]: branches },
+      })),
       removeWorkspace: (id) => set((s) => {
         const { [id]: _drop, ...rest } = s.workspaces;
+        const { [id]: _dropBranches, ...branches } = s.branches;
         return {
           workspaces: rest,
+          branches,
           activeWorkspaceId: s.activeWorkspaceId === id ? null : s.activeWorkspaceId,
         };
       }),

@@ -6,6 +6,7 @@ import { ServerDialog } from '@/components/server/ServerDialog';
 import { CreateSessionDialog } from '@/components/chat/CreateSessionDialog';
 import { CommandCenter } from '@/components/home/CommandCenter';
 import { WorkspaceHome } from '@/components/workspace/WorkspaceHome';
+import type { WorkspaceStartOptions } from '@/components/workspace/WorkspaceStart';
 import { AddWorkspaceDialog } from '@/components/workspace/AddWorkspaceDialog';
 import { useServerStore, type Server } from '@/stores/server-store';
 import { useSessionStore } from '@/stores/session-store';
@@ -262,8 +263,8 @@ function App() {
     setCreateOpen(true);
   }, [setActiveServer]);
 
-  const handleStartWorkspaceTask = useCallback((workspaceId: string, goal: string, provider: string) => {
-    startWorkspaceTask(workspaceId, goal, provider);
+  const handleStartWorkspaceTask = useCallback((workspaceId: string, goal: string, options: WorkspaceStartOptions) => {
+    startWorkspaceTask(workspaceId, goal, options);
   }, [startWorkspaceTask]);
 
   const handleCreateSessionFromDialog = useCallback((name: string, workingDir: string | null, claudeSessionId?: string | null, provider?: string) => {

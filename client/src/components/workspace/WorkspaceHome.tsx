@@ -10,12 +10,13 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
+import type { WorkspaceStartOptions } from './WorkspaceStart';
 
 interface WorkspaceHomeProps {
   workspaceId: string;
   onNewSession: () => void;
-  onStartTask: (workspaceId: string, goal: string, provider: string) => void;
+  onStartTask: (workspaceId: string, goal: string, options: WorkspaceStartOptions) => void;
   onSelectSession: (serverId: string, sessionId: string) => void;
 }
 
@@ -35,8 +36,13 @@ export function WorkspaceHome({ workspaceId, onNewSession, onStartTask, onSelect
   const gitInfo = useSessionStore((s) => s.gitInfo);
   const agentStatus = useSessionStore((s) => s.agentStatus);
   const serverName = useServerStore((s) => s.servers.find((sv) => sv.id === ws?.serverId)?.name ?? '');
-  const { updateWorkspace, deleteWorkspace } = useWebSocket();
+  const workspaceBranches = useWorkspaceStore((s) => s.branches[workspaceId]);
+  const { updateWorkspace, deleteWorkspace, listWorkspaceBranches } = useWebSocket();
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  useEffect(() => {
+    if (ws) listWorkspaceBranches(ws.id);
+  }, [ws, listWorkspaceBranches]);
 
   function relativeTime(ts: number | null | undefined): string {
     if (!ts) return '—';
@@ -92,7 +98,9 @@ export function WorkspaceHome({ workspaceId, onNewSession, onStartTask, onSelect
       <WorkspaceStart
         workspaceName={ws.name}
         defaultBranch={ws.defaultBranch}
-        onStart={(goal, provider) => onStartTask(ws.id, goal, provider)}
+        branches={workspaceBranches}
+        existingWorktrees={worktreeBindings.map((binding) => binding.path)}
+        onStart={(goal, options) => onStartTask(ws.id, goal, options)}
       />
 
       <section className="px-6 py-4">

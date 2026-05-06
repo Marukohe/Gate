@@ -91,7 +91,7 @@ git commit -m "feat(command-center): group workspaces by delivery status"
 **Goal:** Make starting work the primary empty/workspace-home experience.
 
 - [x] Create `WorkspaceStart.tsx` with prompt textarea and provider selector.
-- [ ] Add branch picker and worktree mode selector.
+- [x] Add branch picker and worktree mode selector.
 - [x] Add `start-workspace-task` WS message.
 - [x] On submit, create the primary session, set `workspace.goal`, set status `in-progress`, and send the goal as input.
 - [x] Keep the existing session/worktree list as secondary content below the composer or in a compact tab.

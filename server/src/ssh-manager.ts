@@ -29,12 +29,32 @@ export interface BranchList {
   remote: string[];
 }
 
+export interface WorkspaceStartGitOptions {
+  branchMode?: 'current' | 'existing' | 'create';
+  branchName?: string | null;
+  worktreeMode?: 'main' | 'isolated' | 'existing';
+  worktreePath?: string | null;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 /** Return a shell-safe cd expression. Replaces leading ~ with $HOME so it works unquoted. */
 function shellCd(dir: string): string {
   if (dir === '~' || dir.startsWith('~/')) {
-    return `cd $HOME${dir.slice(1)}`;
+    const suffix = dir.slice(2);
+    return suffix ? `cd "$HOME/${suffix.replace(/"/g, '\\"')}"` : 'cd "$HOME"';
   }
-  return `cd '${dir}'`;
+  return `cd ${shellQuote(dir)}`;
+}
+
+function worktreeSlug(branchName: string): string {
+  return branchName
+    .replace(/^[^/]+\//, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || `task-${Date.now()}`;
 }
 
 export interface GitProbeResult {
@@ -370,10 +390,66 @@ export class SSHManager extends EventEmitter {
 
   /** Switch branch and return the new git info. */
   async switchBranch(serverId: string, workingDir: string, branch: string): Promise<GitInfo> {
-    await this.execCommand(serverId, `${shellCd(workingDir)} && git checkout '${branch}'`);
+    await this.execCommand(serverId, `${shellCd(workingDir)} && git checkout ${shellQuote(branch)}`);
     const info = await this.fetchGitInfo(serverId, workingDir);
     if (!info) throw new Error('Failed to read git info after checkout');
     return info;
+  }
+
+  /** Prepare the checkout/worktree to use before starting a workspace task. */
+  async prepareWorkspaceStart(
+    serverId: string,
+    repoPath: string,
+    options: WorkspaceStartGitOptions,
+  ): Promise<{ workingDir: string; gitInfo: GitInfo | null }> {
+    const branchMode = options.branchMode ?? 'current';
+    const branchName = options.branchName?.trim() || null;
+    const worktreeMode = options.worktreeMode ?? 'main';
+
+    if (worktreeMode === 'existing') {
+      if (!options.worktreePath?.trim()) throw new Error('Existing worktree path required');
+      const workingDir = options.worktreePath.trim();
+      if (branchMode === 'existing') {
+        if (!branchName) throw new Error('Branch name required');
+        return { workingDir, gitInfo: await this.switchBranch(serverId, workingDir, branchName) };
+      }
+      if (branchMode === 'create') {
+        if (!branchName) throw new Error('Branch name required');
+        await this.execCommand(serverId, `${shellCd(workingDir)} && git check-ref-format --branch ${shellQuote(branchName)} && git checkout -b ${shellQuote(branchName)}`);
+      }
+      return { workingDir, gitInfo: await this.fetchGitInfo(serverId, workingDir) };
+    }
+
+    if (worktreeMode === 'isolated') {
+      if (branchMode === 'current' || !branchName) {
+        throw new Error('A branch name is required for an isolated worktree');
+      }
+      await this.execCommand(serverId, `${shellCd(repoPath)} && git check-ref-format --branch ${shellQuote(branchName)}`);
+      const slug = worktreeSlug(branchName);
+      const target = await this.execCommand(serverId,
+        `${shellCd(repoPath)} && parent=$(dirname "$(git rev-parse --show-toplevel)") && ` +
+        `base=$(basename "$(git rev-parse --show-toplevel)") && target="$parent/$base-${slug}" && ` +
+        'i=1; while [ -e "$target" ]; do target="$parent/$base-' + slug + '-$i"; i=$((i+1)); done; printf "%s" "$target"',
+      );
+      const command = branchMode === 'create'
+        ? `${shellCd(repoPath)} && git worktree add -b ${shellQuote(branchName)} ${shellQuote(target)} HEAD`
+        : `${shellCd(repoPath)} && git worktree add ${shellQuote(target)} ${shellQuote(branchName)}`;
+      await this.execCommand(serverId, command);
+      return { workingDir: target, gitInfo: await this.fetchGitInfo(serverId, target) };
+    }
+
+    if (branchMode === 'existing') {
+      if (!branchName) throw new Error('Branch name required');
+      return { workingDir: repoPath, gitInfo: await this.switchBranch(serverId, repoPath, branchName) };
+    }
+
+    if (branchMode === 'create') {
+      if (!branchName) throw new Error('Branch name required');
+      await this.execCommand(serverId, `${shellCd(repoPath)} && git check-ref-format --branch ${shellQuote(branchName)} && git checkout -b ${shellQuote(branchName)}`);
+      return { workingDir: repoPath, gitInfo: await this.fetchGitInfo(serverId, repoPath) };
+    }
+
+    return { workingDir: repoPath, gitInfo: await this.fetchGitInfo(serverId, repoPath) };
   }
 
   /** Upload a file to the remote server via SFTP. Returns the remote path. */

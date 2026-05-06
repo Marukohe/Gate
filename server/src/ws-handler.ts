@@ -15,7 +15,7 @@ import type { Database, Workspace, WorkspacePrState, WorkspaceStatus } from './d
 const WORKSPACE_MSG_TYPES = [
   'list-workspaces', 'create-workspace', 'delete-workspace', 'update-workspace',
   'set-workspace-status', 'pin-workspace', 'archive-workspace', 'restore-workspace',
-  'start-workspace-task',
+  'start-workspace-task', 'list-workspace-branches',
 ] as const;
 type WorkspaceMsgType = typeof WORKSPACE_MSG_TYPES[number];
 
@@ -60,6 +60,7 @@ interface ClientMessage {
   branchMode?: string;
   branchName?: string;
   worktreeMode?: string;
+  worktreePath?: string;
 }
 
 interface ServerMessage {
@@ -69,7 +70,8 @@ interface ServerMessage {
     | 'claude-sessions' | 'cli-sessions'
     | 'git-status' | 'git-diff' | 'pr-info' | 'git-commit-result' | 'git-create-pr-result'
     | 'checkpoints' | 'checkpoint-reverted'
-    | 'workspace-list' | 'workspace-update' | 'workspace-deleted' | 'session-update' | 'workspace-task-started' | 'workspace-error';
+    | 'workspace-list' | 'workspace-update' | 'workspace-deleted' | 'session-update'
+    | 'workspace-branches' | 'workspace-task-started' | 'workspace-error';
   serverId?: string;
   sessionId?: string | null;
   [key: string]: any;
@@ -118,6 +120,14 @@ function getProvider(db: Database, registry: ProviderRegistry, sessionId: string
 function titleFromGoal(goal: string): string {
   const firstLine = goal.trim().split('\n').find((line) => line.trim().length > 0)?.trim() ?? 'Workspace task';
   return firstLine.length > 60 ? `${firstLine.slice(0, 57)}...` : firstLine;
+}
+
+function workspaceBranchMode(value?: string): 'current' | 'existing' | 'create' {
+  return value === 'existing' || value === 'create' ? value : 'current';
+}
+
+function workspaceWorktreeMode(value?: string): 'main' | 'isolated' | 'existing' {
+  return value === 'isolated' || value === 'existing' ? value : 'main';
 }
 
 export function setupWebSocket(httpServer: HttpServer, db: Database, registry: ProviderRegistry): SSHManager {
@@ -601,6 +611,49 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             break;
           }
 
+          case 'list-workspace-branches': {
+            if (!msg.workspaceId) break;
+            const workspace = db.getWorkspace(msg.workspaceId);
+            if (!workspace) {
+              ws.send(JSON.stringify({ type: 'workspace-error', error: 'Workspace not found' }));
+              break;
+            }
+            const configServer = db.getServer(workspace.serverId);
+            if (!configServer) {
+              ws.send(JSON.stringify({ type: 'workspace-error', error: 'Server not found' }));
+              break;
+            }
+            try {
+              if (!sshManager.isConnected(workspace.serverId)) {
+                await sshManager.connect({
+                  id: configServer.id,
+                  host: configServer.host,
+                  port: configServer.port,
+                  username: configServer.username,
+                  authType: configServer.authType as 'password' | 'privateKey',
+                  password: configServer.password ?? undefined,
+                  privateKeyPath: configServer.privateKeyPath ?? undefined,
+                });
+              } else {
+                await sshManager.ensureConnected(workspace.serverId);
+              }
+              const branches = await sshManager.listBranches(workspace.serverId, workspace.repoPath);
+              ws.send(JSON.stringify({
+                type: 'workspace-branches',
+                serverId: workspace.serverId,
+                workspaceId: workspace.id,
+                ...branches,
+              }));
+            } catch (err: any) {
+              ws.send(JSON.stringify({
+                type: 'workspace-error',
+                serverId: workspace.serverId,
+                error: `Branch list failed: ${err.message}`,
+              }));
+            }
+            break;
+          }
+
           case 'start-workspace-task': {
             if (!msg.workspaceId || !msg.goal?.trim()) break;
             const workspace = db.getWorkspace(msg.workspaceId);
@@ -616,10 +669,49 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               break;
             }
 
+            const configServer = db.getServer(workspace.serverId);
+            if (!configServer) {
+              ws.send(JSON.stringify({ type: 'workspace-error', error: 'Server not found' }));
+              break;
+            }
+
+            let workingDir = workspace.repoPath;
+            let startGitInfo: Awaited<ReturnType<SSHManager['fetchGitInfo']>> = null;
+            try {
+              if (!sshManager.isConnected(workspace.serverId)) {
+                await sshManager.connect({
+                  id: configServer.id,
+                  host: configServer.host,
+                  port: configServer.port,
+                  username: configServer.username,
+                  authType: configServer.authType as 'password' | 'privateKey',
+                  password: configServer.password ?? undefined,
+                  privateKeyPath: configServer.privateKeyPath ?? undefined,
+                });
+              } else {
+                await sshManager.ensureConnected(workspace.serverId);
+              }
+              const prepared = await sshManager.prepareWorkspaceStart(workspace.serverId, workspace.repoPath, {
+                branchMode: workspaceBranchMode(msg.branchMode),
+                branchName: msg.branchName,
+                worktreeMode: workspaceWorktreeMode(msg.worktreeMode),
+                worktreePath: msg.worktreePath,
+              });
+              workingDir = prepared.workingDir;
+              startGitInfo = prepared.gitInfo;
+            } catch (err: any) {
+              ws.send(JSON.stringify({
+                type: 'workspace-error',
+                serverId: workspace.serverId,
+                error: `Workspace checkout failed: ${err.message}`,
+              }));
+              break;
+            }
+
             const session = db.createSession(
               workspace.serverId,
               titleFromGoal(goal),
-              workspace.repoPath,
+              workingDir,
               providerName,
               { workspaceId: workspace.id },
             );
@@ -642,31 +734,14 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               enriched = await buildWorkspaceWithAggregates(updated, db, sshManager);
               broadcast(wss, { type: 'workspace-update', workspace: enriched });
             }
-
-            const configServer = db.getServer(workspace.serverId);
-            if (!configServer) {
-              ws.send(JSON.stringify({ type: 'workspace-error', error: 'Server not found' }));
-              break;
+            if (startGitInfo) {
+              broadcast(wss, { type: 'git-info', serverId: workspace.serverId, sessionId: session.id, ...startGitInfo });
             }
 
             try {
-              if (!sshManager.isConnected(workspace.serverId)) {
-                await sshManager.connect({
-                  id: configServer.id,
-                  host: configServer.host,
-                  port: configServer.port,
-                  username: configServer.username,
-                  authType: configServer.authType as 'password' | 'privateKey',
-                  password: configServer.password ?? undefined,
-                  privateKeyPath: configServer.privateKeyPath ?? undefined,
-                });
-              } else {
-                await sshManager.ensureConnected(workspace.serverId);
-              }
-
               const caps = provider.getCapabilities();
               const cmd = provider.buildCommand({
-                workingDir: workspace.repoPath,
+                workingDir,
                 initialContext: caps.supportsStdin ? undefined : goal,
               });
               if (!caps.supportsStdin) perMessageSessions.add(session.id);
