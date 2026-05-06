@@ -338,6 +338,34 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                 }
               }).catch(() => {});
             }
+
+            // Lazy workspace migration: probe git once per session and link
+            // it to a workspace. Skip if already linked or already probed.
+            if (session.workingDir && session.workspaceId === null && session.workspaceProbedAt === null) {
+              try {
+                const probe = await sshManager.probeGitRepo(server.id, session.workingDir);
+                if (probe) {
+                  const linkedWs = db.upsertWorkspaceByPath({
+                    serverId: server.id,
+                    repoPath: probe.canonicalPath,
+                    remoteUrl: probe.remoteUrl,
+                    defaultBranch: probe.defaultBranch,
+                    name: probe.canonicalPath.split('/').filter(Boolean).pop() || 'workspace',
+                  });
+                  db.setSessionWorkspace(session.id, linkedWs.id);
+                  const enriched = await buildWorkspaceWithAggregates(linkedWs, db, sshManager);
+                  broadcast(wss, { type: 'workspace-update', workspace: enriched });
+                  const refreshed = db.getSession(session.id);
+                  if (refreshed) broadcast(wss, { type: 'session-update', session: refreshed });
+                }
+              } catch {
+                /* probe failure is non-fatal */
+              }
+              // Mark probed regardless of outcome so we don't retry on every connect.
+              // Once workspaceId is set, this is harmless; once it's null, this prevents
+              // re-probing non-git working dirs.
+              db.markSessionProbed(session.id);
+            }
             break;
           }
 
