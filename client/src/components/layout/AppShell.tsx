@@ -8,14 +8,19 @@ import { useUIStore } from '@/stores/ui-store';
 import type { Server } from '@/stores/server-store';
 
 interface AppShellProps {
-  chatView: ReactNode;
+  mainView: ReactNode;
   onAddServer: () => void;
   onEditServer: (server: Server) => void;
   onSendToChat: (text: string) => void;
   onSelectSession?: (serverId: string, sessionId: string) => void;
+  onSelectWorkspace?: (id: string) => void;
+  onAddWorkspace?: () => void;
 }
 
-export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat, onSelectSession }: AppShellProps) {
+export function AppShell({
+  mainView, onAddServer, onEditServer, onSendToChat, onSelectSession,
+  onSelectWorkspace, onAddWorkspace,
+}: AppShellProps) {
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
   const planPanelOpen = useUIStore((s) => s.planPanelOpen);
@@ -38,7 +43,13 @@ export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat, on
     <div className="flex h-full">
       {/* Desktop sidebar */}
       <div className="hidden lg:block">
-        <Sidebar onAddServer={onAddServer} onEditServer={onEditServer} onSelectSession={onSelectSession} />
+        <Sidebar
+          onAddServer={onAddServer}
+          onEditServer={onEditServer}
+          onSelectSession={onSelectSession}
+          onSelectWorkspace={onSelectWorkspace}
+          onAddWorkspace={onAddWorkspace}
+        />
       </div>
 
       {/* Mobile sidebar — bottom sheet */}
@@ -53,10 +64,17 @@ export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat, on
             <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
           </div>
           <SheetHeader className="px-4 pb-2">
-            <SheetTitle className="text-base">Servers</SheetTitle>
+            <SheetTitle className="text-base">Workspaces</SheetTitle>
           </SheetHeader>
           <div className="max-h-[50dvh] overflow-y-auto">
-            <Sidebar onAddServer={onAddServer} onEditServer={onEditServer} onSelectSession={onSelectSession} onClose={closeSidebar} />
+            <Sidebar
+              onAddServer={onAddServer}
+              onEditServer={onEditServer}
+              onSelectSession={onSelectSession}
+              onSelectWorkspace={onSelectWorkspace}
+              onAddWorkspace={onAddWorkspace}
+              onClose={closeSidebar}
+            />
           </div>
         </SheetContent>
       </Sheet>
@@ -66,7 +84,7 @@ export function AppShell({ chatView, onAddServer, onEditServer, onSendToChat, on
         <TopBar />
         <div className="flex flex-1 overflow-hidden">
           <div className="min-w-0 flex-1 overflow-hidden">
-            {chatView}
+            {mainView}
           </div>
           {/* Desktop right panel — Changes (top) + Plan (bottom) */}
           {rightPanelOpen && (

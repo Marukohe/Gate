@@ -19,6 +19,7 @@ interface CreateSessionDialogProps {
   defaultName: string;
   defaultWorkingDir?: string;
   serverId: string;
+  workspaceContext?: { workspaceId: string; repoPath: string } | null;
   onListClaudeSessions?: (serverId: string, workingDir: string) => Promise<string[]>;
   onListCliSessions?: (serverId: string, workingDir: string, provider: string) => Promise<string[]>;
 }
@@ -28,9 +29,9 @@ const providerOptions = [
   { name: 'codex', label: 'Codex' },
 ];
 
-export function CreateSessionDialog({ open, onOpenChange, onSubmit, defaultName, defaultWorkingDir, serverId, onListClaudeSessions, onListCliSessions }: CreateSessionDialogProps) {
+export function CreateSessionDialog({ open, onOpenChange, onSubmit, defaultName, defaultWorkingDir, serverId, workspaceContext, onListClaudeSessions, onListCliSessions }: CreateSessionDialogProps) {
   const [name, setName] = useState(defaultName);
-  const [workingDir, setWorkingDir] = useState(defaultWorkingDir ?? '');
+  const [workingDir, setWorkingDir] = useState(workspaceContext?.repoPath ?? defaultWorkingDir ?? '');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [provider, setProvider] = useState('claude');
   const [claudeSessions, setClaudeSessions] = useState<string[]>([]);
@@ -40,12 +41,12 @@ export function CreateSessionDialog({ open, onOpenChange, onSubmit, defaultName,
   useEffect(() => {
     if (open) {
       setName(defaultName);
-      setWorkingDir(defaultWorkingDir ?? '');
+      setWorkingDir(workspaceContext?.repoPath ?? defaultWorkingDir ?? '');
       setProvider('claude');
       setClaudeSessions([]);
       setSelectedClaudeSession(null);
     }
-  }, [open, defaultName, defaultWorkingDir]);
+  }, [open, defaultName, defaultWorkingDir, workspaceContext]);
 
   // Fetch CLI sessions when workingDir or provider changes
   useEffect(() => {
@@ -141,27 +142,29 @@ export function CreateSessionDialog({ open, onOpenChange, onSubmit, defaultName,
                 ))}
               </div>
             </div>
-            <div className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium">Working directory</span>
-              <div className="flex gap-2">
-                <Input
-                  value={workingDir}
-                  onChange={(e) => setWorkingDir(e.target.value)}
-                  placeholder="Optional — defaults to home directory"
-                  className="flex-1"
-                  readOnly
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setPickerOpen(true)}
-                  title="Browse remote directories"
-                >
-                  <Folder className="h-4 w-4" />
-                </Button>
+            {!workspaceContext && (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium">Working directory</span>
+                <div className="flex gap-2">
+                  <Input
+                    value={workingDir}
+                    onChange={(e) => setWorkingDir(e.target.value)}
+                    placeholder="Optional — defaults to home directory"
+                    className="flex-1"
+                    readOnly
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setPickerOpen(true)}
+                    title="Browse remote directories"
+                  >
+                    <Folder className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
             {(loadingSessions || claudeSessions.length > 0) && (
               <div className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium">{providerOptions.find((p) => p.name === provider)?.label ?? 'CLI'} session</span>

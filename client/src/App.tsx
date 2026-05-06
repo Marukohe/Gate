@@ -3,11 +3,16 @@ import { Toaster } from 'sonner';
 import { AppShell } from '@/components/layout/AppShell';
 import { ChatView } from '@/components/chat/ChatView';
 import { ServerDialog } from '@/components/server/ServerDialog';
+import { CreateSessionDialog } from '@/components/chat/CreateSessionDialog';
+import { CommandCenter } from '@/components/home/CommandCenter';
+import { WorkspaceHome } from '@/components/workspace/WorkspaceHome';
+import { AddWorkspaceDialog } from '@/components/workspace/AddWorkspaceDialog';
 import { useServerStore, type Server } from '@/stores/server-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useChatStore } from '@/stores/chat-store';
 import { usePlanStore } from '@/stores/plan-store';
 import { useUIStore } from '@/stores/ui-store';
+import { useWorkspaceStore } from '@/stores/workspace-store';
 import { useWebSocket } from '@/hooks/use-websocket';
 
 function App() {
@@ -29,7 +34,22 @@ function App() {
   const setSessions = useSessionStore((s) => s.setSessions);
   const setActiveSession = useSessionStore((s) => s.setActiveSession);
 
-  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, loadMoreMessages, listCheckpoints } = useWebSocket();
+  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, loadMoreMessages, listCheckpoints, listWorkspaces } = useWebSocket();
+
+  const setActiveWorkspace = useWorkspaceStore((s) => s.setActiveWorkspace);
+  const workspaces = useWorkspaceStore((s) => s.workspaces);
+
+  type Route = { kind: 'home' } | { kind: 'workspace'; id: string } | { kind: 'session'; serverId: string; sessionId: string };
+  const [route, setRoute] = useState<Route>({ kind: 'home' });
+  const enterWorkspace = useCallback((id: string) => setRoute({ kind: 'workspace', id }), []);
+  const enterSession = useCallback(
+    (serverId: string, sessionId: string) => setRoute({ kind: 'session', serverId, sessionId }),
+    [],
+  );
+
+  const [addWorkspaceOpen, setAddWorkspaceOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createCtx, setCreateCtx] = useState<{ workspaceId: string; repoPath: string } | null>(null);
 
   useEffect(() => {
     fetch('/api/servers')
@@ -44,6 +64,13 @@ function App() {
       })
       .catch(() => {});
   }, [setServers, setActiveServer]);
+
+  // Fetch workspaces over WS on mount and refresh periodically
+  useEffect(() => {
+    listWorkspaces();
+    const interval = setInterval(() => listWorkspaces(), 30_000);
+    return () => clearInterval(interval);
+  }, [listWorkspaces]);
 
   // Fetch sessions when server changes, auto-select first session.
   // AbortController cancels stale fetches on rapid server switching.
@@ -68,9 +95,8 @@ function App() {
           if (!persisted || !sessionList.find((s: any) => s.id === persisted)) {
             setActiveSession(serverId, sessionList[0].id);
           }
-        } else {
-          createSession(serverId, 'Default');
         }
+        // No auto-create: empty workspaces show "New session" affordance instead.
       })
       .catch(() => {});
 
@@ -79,7 +105,7 @@ function App() {
       // Reset so aborted fetches can retry (e.g. React StrictMode double-mount)
       prevServerRef.current = null;
     };
-  }, [activeServerId, setSessions, setActiveSession, createSession]);
+  }, [activeServerId, setSessions, setActiveSession]);
 
   // Evict messages for other servers' sessions to save memory.
   // Messages will be reloaded from DB when switching back.
@@ -166,12 +192,50 @@ function App() {
     setActiveSession(activeServerId, sessionId);
   }, [activeServerId, activeSessionId, setActiveSession, connectToSession]);
 
-  // Sidebar session tree: select a session from any server (not just the active one)
+  // Picking a workspace: if auto-open is on AND it has sessions, jump straight
+  // to the most-recent session's chat. Otherwise land on Workspace Home.
+  const handleSelectWorkspace = useCallback((id: string) => {
+    const workspace = workspaces[id];
+    if (!workspace) return;
+    setActiveWorkspace(id);
+    setActiveServer(workspace.serverId);
+    if (workspace.autoOpenLastSession) {
+      const wsSessions = useSessionStore.getState().sessionsByWorkspace(id);
+      if (wsSessions.length > 0) {
+        const mostRecent = [...wsSessions].sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0];
+        setActiveSession(workspace.serverId, mostRecent.id);
+        connectToSession(workspace.serverId, mostRecent.id);
+        enterSession(workspace.serverId, mostRecent.id);
+        return;
+      }
+    }
+    enterWorkspace(id);
+  }, [workspaces, setActiveWorkspace, setActiveServer, setActiveSession, connectToSession, enterSession, enterWorkspace]);
+
+  // Sidebar / Workspace Home / Command Center can all open a session: route to chat
+  // and connect, also setting active workspace if the session is linked to one.
   const handleSidebarSelectSession = useCallback((serverId: string, sessionId: string) => {
+    const session = useSessionStore.getState().sessions[serverId]?.find((s) => s.id === sessionId);
     setActiveServer(serverId);
     setActiveSession(serverId, sessionId);
+    if (session?.workspaceId) setActiveWorkspace(session.workspaceId);
     connectToSession(serverId, sessionId);
-  }, [setActiveServer, setActiveSession, connectToSession]);
+    enterSession(serverId, sessionId);
+  }, [setActiveServer, setActiveSession, setActiveWorkspace, connectToSession, enterSession]);
+
+  const handleNewSessionInWorkspace = useCallback((workspaceId: string) => {
+    const ws = useWorkspaceStore.getState().workspaces[workspaceId];
+    if (!ws) return;
+    setActiveServer(ws.serverId);
+    setCreateCtx({ workspaceId, repoPath: ws.repoPath });
+    setCreateOpen(true);
+  }, [setActiveServer]);
+
+  const handleCreateSessionFromDialog = useCallback((name: string, workingDir: string | null, claudeSessionId?: string | null, provider?: string) => {
+    if (!activeServerId) return;
+    createSession(activeServerId, name, workingDir, claudeSessionId, provider);
+    setCreateOpen(false);
+  }, [activeServerId, createSession]);
 
   const handleSyncTranscript = useCallback((sessionId: string) => {
     if (!activeServerId) return;
@@ -183,34 +247,72 @@ function App() {
     loadMoreMessages(activeServerId, activeSessionId, beforeTimestamp);
   }, [activeServerId, activeSessionId, loadMoreMessages]);
 
+  const mainView = (() => {
+    if (route.kind === 'session') {
+      return (
+        <ChatView
+          onSend={handleSend}
+          onCreateSession={handleCreateSession}
+          onDeleteSession={handleDeleteSession}
+          onSelectSession={handleSelectSession}
+          onListBranches={listBranches}
+          onSwitchBranch={switchBranch}
+          onSyncTranscript={handleSyncTranscript}
+          onListClaudeSessions={listClaudeSessions}
+          onListCliSessions={listCliSessions}
+          onSendToSession={handleSendToSession}
+          onLoadMore={handleLoadMore}
+        />
+      );
+    }
+    if (route.kind === 'workspace') {
+      return (
+        <WorkspaceHome
+          workspaceId={route.id}
+          onNewSession={() => handleNewSessionInWorkspace(route.id)}
+          onSelectSession={handleSidebarSelectSession}
+        />
+      );
+    }
+    return (
+      <CommandCenter
+        onAddWorkspace={() => setAddWorkspaceOpen(true)}
+        onSelectWorkspace={handleSelectWorkspace}
+        onSelectSession={handleSidebarSelectSession}
+      />
+    );
+  })();
+
   return (
     <>
       <AppShell
-        chatView={
-          <ChatView
-            onSend={handleSend}
-            onCreateSession={handleCreateSession}
-            onDeleteSession={handleDeleteSession}
-            onSelectSession={handleSelectSession}
-            onListBranches={listBranches}
-            onSwitchBranch={switchBranch}
-            onSyncTranscript={handleSyncTranscript}
-            onListClaudeSessions={listClaudeSessions}
-            onListCliSessions={listCliSessions}
-            onSendToSession={handleSendToSession}
-            onLoadMore={handleLoadMore}
-          />
-        }
+        mainView={mainView}
         onAddServer={() => { setEditingServer(null); setServerDialogOpen(true); }}
         onEditServer={(server) => { setEditingServer(server); setServerDialogOpen(true); }}
         onSendToChat={handleSend}
         onSelectSession={handleSidebarSelectSession}
+        onSelectWorkspace={enterWorkspace}
+        onAddWorkspace={() => setAddWorkspaceOpen(true)}
       />
       <ServerDialog
         open={serverDialogOpen}
         onOpenChange={(open) => { setServerDialogOpen(open); if (!open) setEditingServer(null); }}
         editServer={editingServer}
       />
+      <AddWorkspaceDialog open={addWorkspaceOpen} onOpenChange={setAddWorkspaceOpen} />
+      {activeServerId && (
+        <CreateSessionDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          onSubmit={handleCreateSessionFromDialog}
+          defaultName="Default"
+          defaultWorkingDir={createCtx?.repoPath}
+          serverId={activeServerId}
+          workspaceContext={createCtx}
+          onListClaudeSessions={listClaudeSessions}
+          onListCliSessions={listCliSessions}
+        />
+      )}
       <Toaster position="top-right" theme={darkMode ? 'dark' : 'light'} richColors />
     </>
   );
