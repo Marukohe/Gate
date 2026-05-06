@@ -176,4 +176,51 @@ describe('Database', () => {
       expect(session.workspaceProbedAt ?? null).toBeNull();
     });
   });
+
+  describe('workspaces CRUD', () => {
+    it('lists workspaces and looks up by (serverId, repoPath)', () => {
+      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
+      const a = db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
+      const b = db.createWorkspace({ serverId: s.id, repoPath: '/b', remoteUrl: null, defaultBranch: 'main', name: 'b' });
+      const list = db.listWorkspaces();
+      expect(list.map((w) => w.id).sort()).toEqual([a.id, b.id].sort());
+      expect(db.getWorkspaceByPath(s.id, '/a')?.id).toBe(a.id);
+      expect(db.getWorkspaceByPath(s.id, '/missing')).toBeUndefined();
+    });
+
+    it('upsert returns existing row when (serverId, repoPath) matches', () => {
+      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
+      const a = db.upsertWorkspaceByPath({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
+      const b = db.upsertWorkspaceByPath({ serverId: s.id, repoPath: '/a', remoteUrl: 'git@x', defaultBranch: 'dev', name: 'renamed' });
+      expect(b.id).toBe(a.id);
+      // Existing row preserved, no fields overwritten on upsert
+      expect(b.name).toBe('a');
+      expect(b.defaultBranch).toBe('main');
+    });
+
+    it('updateWorkspace patches name and autoOpenLastSession', () => {
+      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
+      const a = db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
+      db.updateWorkspace(a.id, { name: 'renamed', autoOpenLastSession: true });
+      const got = db.getWorkspace(a.id)!;
+      expect(got.name).toBe('renamed');
+      expect(got.autoOpenLastSession).toBe(true);
+    });
+
+    it('deleteWorkspace cascades to sessions', () => {
+      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
+      const w = db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
+      const sess = db.createSession(s.id, 'sess');
+      db.setSessionWorkspace(sess.id, w.id);
+      db.deleteWorkspace(w.id);
+      expect(db.getWorkspace(w.id)).toBeUndefined();
+      expect(db.getSession(sess.id)).toBeUndefined();
+    });
+
+    it('rejects duplicate (serverId, repoPath)', () => {
+      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
+      db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
+      expect(() => db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a2' })).toThrow();
+    });
+  });
 });

@@ -123,44 +123,8 @@ export function createDb(dbPath: string): Database {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
-  // Migrations
-  try { db.exec('ALTER TABLE sessions ADD COLUMN claudeSessionId TEXT'); } catch { /* already exists */ }
-  try { db.exec("ALTER TABLE sessions ADD COLUMN name TEXT DEFAULT 'Default'"); } catch { /* already exists */ }
-  try { db.exec('ALTER TABLE sessions ADD COLUMN workingDir TEXT'); } catch { /* already exists */ }
-  try { db.exec('ALTER TABLE servers ADD COLUMN defaultWorkingDir TEXT'); } catch { /* already exists */ }
-  try { db.exec("ALTER TABLE sessions ADD COLUMN provider TEXT DEFAULT 'claude'"); } catch { /* already exists */ }
-  try { db.exec('ALTER TABLE sessions ADD COLUMN cliSessionId TEXT'); } catch { /* already exists */ }
-  try { db.exec('ALTER TABLE messages ADD COLUMN provider TEXT'); } catch { /* already exists */ }
-  try { db.exec('ALTER TABLE sessions ADD COLUMN providerSessionMap TEXT'); } catch { /* already exists */ }
-  try { db.exec('ALTER TABLE sessions ADD COLUMN chatStartedAt INTEGER'); } catch { /* already exists */ }
-  try { db.exec('UPDATE sessions SET cliSessionId = claudeSessionId WHERE cliSessionId IS NULL AND claudeSessionId IS NOT NULL'); } catch { /* ignore */ }
-  try { db.exec(`CREATE TABLE IF NOT EXISTS checkpoints (
-  id TEXT PRIMARY KEY,
-  sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-  messageTimestamp INTEGER NOT NULL,
-  gitRef TEXT NOT NULL,
-  gitBranch TEXT NOT NULL,
-  gitCommitSha TEXT NOT NULL,
-  createdAt INTEGER NOT NULL
-)`); } catch { /* already exists */ }
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_checkpoints_sessionId ON checkpoints(sessionId)'); } catch { /* already exists */ }
-  try { db.exec('ALTER TABLE sessions ADD COLUMN workspaceId TEXT'); } catch { /* already exists */ }
-  try { db.exec('ALTER TABLE sessions ADD COLUMN workspaceProbedAt INTEGER'); } catch { /* already exists */ }
-  try { db.exec(`CREATE TABLE IF NOT EXISTS workspaces (
-  id TEXT PRIMARY KEY,
-  serverId TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
-  repoPath TEXT NOT NULL,
-  remoteUrl TEXT,
-  defaultBranch TEXT,
-  name TEXT NOT NULL,
-  autoOpenLastSession INTEGER NOT NULL DEFAULT 0,
-  createdAt INTEGER NOT NULL,
-  updatedAt INTEGER NOT NULL,
-  UNIQUE(serverId, repoPath)
-)`); } catch { /* already exists */ }
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_workspaces_serverId ON workspaces(serverId)'); } catch { /* already exists */ }
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_workspaceId ON sessions(workspaceId)'); } catch { /* already exists */ }
-
+  // Base schema (CREATE TABLE IF NOT EXISTS) runs first so subsequent
+  // ALTER TABLE migrations have something to alter on a fresh DB.
   db.exec(`
     CREATE TABLE IF NOT EXISTS servers (
       id TEXT PRIMARY KEY,
@@ -205,6 +169,44 @@ export function createDb(dbPath: string): Database {
     CREATE INDEX IF NOT EXISTS idx_messages_sessionId ON messages(sessionId);
     CREATE INDEX IF NOT EXISTS idx_messages_sessionId_timestamp ON messages(sessionId, timestamp);
   `);
+
+  // Migrations (idempotent — failures mean the column/table already exists).
+  try { db.exec('ALTER TABLE sessions ADD COLUMN claudeSessionId TEXT'); } catch { /* already exists */ }
+  try { db.exec("ALTER TABLE sessions ADD COLUMN name TEXT DEFAULT 'Default'"); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE sessions ADD COLUMN workingDir TEXT'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE servers ADD COLUMN defaultWorkingDir TEXT'); } catch { /* already exists */ }
+  try { db.exec("ALTER TABLE sessions ADD COLUMN provider TEXT DEFAULT 'claude'"); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE sessions ADD COLUMN cliSessionId TEXT'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE messages ADD COLUMN provider TEXT'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE sessions ADD COLUMN providerSessionMap TEXT'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE sessions ADD COLUMN chatStartedAt INTEGER'); } catch { /* already exists */ }
+  try { db.exec('UPDATE sessions SET cliSessionId = claudeSessionId WHERE cliSessionId IS NULL AND claudeSessionId IS NOT NULL'); } catch { /* ignore */ }
+  try { db.exec(`CREATE TABLE IF NOT EXISTS checkpoints (
+  id TEXT PRIMARY KEY,
+  sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  messageTimestamp INTEGER NOT NULL,
+  gitRef TEXT NOT NULL,
+  gitBranch TEXT NOT NULL,
+  gitCommitSha TEXT NOT NULL,
+  createdAt INTEGER NOT NULL
+)`); } catch { /* already exists */ }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_checkpoints_sessionId ON checkpoints(sessionId)'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE sessions ADD COLUMN workspaceId TEXT'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE sessions ADD COLUMN workspaceProbedAt INTEGER'); } catch { /* already exists */ }
+  try { db.exec(`CREATE TABLE IF NOT EXISTS workspaces (
+  id TEXT PRIMARY KEY,
+  serverId TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+  repoPath TEXT NOT NULL,
+  remoteUrl TEXT,
+  defaultBranch TEXT,
+  name TEXT NOT NULL,
+  autoOpenLastSession INTEGER NOT NULL DEFAULT 0,
+  createdAt INTEGER NOT NULL,
+  updatedAt INTEGER NOT NULL,
+  UNIQUE(serverId, repoPath)
+)`); } catch { /* already exists */ }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_workspaces_serverId ON workspaces(serverId)'); } catch { /* already exists */ }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_workspaceId ON sessions(workspaceId)'); } catch { /* already exists */ }
 
   return {
     createServer(input) {
@@ -402,13 +404,66 @@ export function createDb(dbPath: string): Database {
       db.prepare('DELETE FROM checkpoints WHERE sessionId = ? AND messageTimestamp > ?').run(sessionId, afterTimestamp);
     },
 
-    createWorkspace() { throw new Error('not implemented'); },
-    listWorkspaces() { return []; },
-    getWorkspace() { return undefined; },
-    getWorkspaceByPath() { return undefined; },
-    upsertWorkspaceByPath() { throw new Error('not implemented'); },
-    updateWorkspace() { /* not implemented */ },
-    deleteWorkspace() { /* not implemented */ },
+    createWorkspace(input) {
+      const id = randomUUID();
+      const now = Date.now();
+      db.prepare(`
+        INSERT INTO workspaces (id, serverId, repoPath, remoteUrl, defaultBranch, name, autoOpenLastSession, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, input.serverId, input.repoPath,
+        input.remoteUrl ?? null, input.defaultBranch ?? null, input.name,
+        input.autoOpenLastSession ? 1 : 0, now, now,
+      );
+      return {
+        id, serverId: input.serverId, repoPath: input.repoPath,
+        remoteUrl: input.remoteUrl ?? null, defaultBranch: input.defaultBranch ?? null,
+        name: input.name, autoOpenLastSession: !!input.autoOpenLastSession,
+        createdAt: now, updatedAt: now,
+      };
+    },
+
+    listWorkspaces() {
+      const rows = db.prepare('SELECT * FROM workspaces ORDER BY updatedAt DESC').all() as any[];
+      return rows.map((r) => ({ ...r, autoOpenLastSession: !!r.autoOpenLastSession })) as Workspace[];
+    },
+
+    getWorkspace(id) {
+      const r = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id) as any | undefined;
+      if (!r) return undefined;
+      return { ...r, autoOpenLastSession: !!r.autoOpenLastSession } as Workspace;
+    },
+
+    getWorkspaceByPath(serverId, repoPath) {
+      const r = db.prepare('SELECT * FROM workspaces WHERE serverId = ? AND repoPath = ?').get(serverId, repoPath) as any | undefined;
+      if (!r) return undefined;
+      return { ...r, autoOpenLastSession: !!r.autoOpenLastSession } as Workspace;
+    },
+
+    upsertWorkspaceByPath(input) {
+      const existing = this.getWorkspaceByPath(input.serverId, input.repoPath);
+      if (existing) return existing;
+      return this.createWorkspace(input);
+    },
+
+    updateWorkspace(id, updates) {
+      const fields = Object.entries(updates).filter(([, v]) => v !== undefined);
+      if (fields.length === 0) return;
+      const setClauses = fields.map(([k]) => `${k} = ?`).join(', ');
+      const values = fields.map(([k, v]) => k === 'autoOpenLastSession' ? (v ? 1 : 0) : v);
+      values.push(Date.now() as any);
+      db.prepare(`UPDATE workspaces SET ${setClauses}, updatedAt = ? WHERE id = ?`).run(...values, id);
+    },
+
+    deleteWorkspace(id) {
+      // The sessions FK doesn't carry an ON DELETE CASCADE clause (it was added
+      // via ALTER TABLE), so cascade by hand inside one transaction.
+      const tx = db.transaction(() => {
+        db.prepare('DELETE FROM sessions WHERE workspaceId = ?').run(id);
+        db.prepare('DELETE FROM workspaces WHERE id = ?').run(id);
+      });
+      tx();
+    },
     setSessionWorkspace() { /* not implemented */ },
     markSessionProbed() { /* not implemented */ },
     aggregateWorkspace() { return { totalSessionCount: 0, lastActivityAt: null }; },
