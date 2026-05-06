@@ -37,6 +37,50 @@ function shellCd(dir: string): string {
   return `cd '${dir}'`;
 }
 
+export interface GitProbeResult {
+  canonicalPath: string;
+  remoteUrl: string | null;
+  defaultBranch: string | null;
+}
+
+/**
+ * Parse the output of the four-line git probe command.
+ * Stdin (stdout-like) lines are, in order:
+ *  1. `git rev-parse --show-toplevel`
+ *  2. `git rev-parse --path-format=absolute --git-common-dir`
+ *  3. `git config --get remote.origin.url`  (may be empty)
+ *  4. either `git symbolic-ref refs/remotes/origin/HEAD` (e.g. refs/remotes/origin/main)
+ *     or `git rev-parse --abbrev-ref HEAD` (e.g. main) as fallback
+ *
+ * Returns null when toplevel is empty (non-git working dir).
+ */
+export function parseGitProbeOutput(stdout: string): GitProbeResult | null {
+  const lines = stdout.split('\n').map((l) => l.trim());
+  const toplevel = lines[0] || '';
+  if (!toplevel) return null;
+
+  const commonDirRaw = lines[1] || '';
+  // For a main worktree, `--git-common-dir` is `<repo>/.git`; for a secondary
+  // worktree it points at the same `<main-repo>/.git`. Stripping `/.git` (or
+  // a trailing `.git`) yields the canonical main worktree path.
+  let canonicalPath = toplevel;
+  if (commonDirRaw && commonDirRaw.startsWith('/')) {
+    canonicalPath = commonDirRaw.replace(/\/?\.git\/?$/, '') || toplevel;
+  }
+
+  const remoteUrl = (lines[2] || '').trim() || null;
+
+  let defaultBranch: string | null = null;
+  const branchLine = lines[3] || '';
+  if (branchLine.startsWith('refs/remotes/origin/')) {
+    defaultBranch = branchLine.replace(/^refs\/remotes\/origin\//, '');
+  } else if (branchLine) {
+    defaultBranch = branchLine;
+  }
+
+  return { canonicalPath, remoteUrl, defaultBranch };
+}
+
 export class SSHManager extends EventEmitter {
   private connections = new Map<string, SSHConnection>();
   private configs = new Map<string, ServerConfig>();
@@ -275,6 +319,25 @@ export class SSHManager extends EventEmitter {
         channel.stderr.on('data', () => {});
       });
     });
+  }
+
+  /**
+   * Probe a remote working dir to identify its git repository.
+   * Returns null for non-git dirs. Batches four git commands in one round-trip.
+   */
+  async probeGitRepo(serverId: string, workingDir: string): Promise<GitProbeResult | null> {
+    const cd = shellCd(workingDir);
+    // `|| echo ''` ensures missing remote / detached HEAD don't make the script exit early
+    const cmd = `${cd} && (git rev-parse --show-toplevel 2>/dev/null; ` +
+      `git rev-parse --path-format=absolute --git-common-dir 2>/dev/null; ` +
+      `git config --get remote.origin.url 2>/dev/null || echo ''; ` +
+      `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || git rev-parse --abbrev-ref HEAD 2>/dev/null)`;
+    try {
+      const out = await this.execCommand(serverId, cmd);
+      return parseGitProbeOutput(out);
+    } catch {
+      return null;
+    }
   }
 
   /** Fetch git branch and worktree root for a directory. */
