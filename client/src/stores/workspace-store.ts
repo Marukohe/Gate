@@ -120,11 +120,16 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
         },
       })),
       removeWorkspace: (id) => set((s) => {
-        const { [id]: _drop, ...rest } = s.workspaces;
-        const { [id]: _dropBranches, ...branches } = s.branches;
-        const { [id]: _dropInspector, ...inspectors } = s.inspectors;
-        const { [id]: _dropRun, ...runResults } = s.runResults;
-        const { [id]: _dropAction, ...actionResults } = s.actionResults;
+        const rest = { ...s.workspaces };
+        const branches = { ...s.branches };
+        const inspectors = { ...s.inspectors };
+        const runResults = { ...s.runResults };
+        const actionResults = { ...s.actionResults };
+        delete rest[id];
+        delete branches[id];
+        delete inspectors[id];
+        delete runResults[id];
+        delete actionResults[id];
         return {
           workspaces: rest,
           branches,

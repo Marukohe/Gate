@@ -26,7 +26,6 @@ export function AppShell({
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
   const planPanelOpen = useUIStore((s) => s.planPanelOpen);
-  const setPlanPanelOpen = useUIStore((s) => s.setPlanPanelOpen);
   const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
   const setRightPanelOpen = useUIStore((s) => s.setRightPanelOpen);
 
