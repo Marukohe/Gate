@@ -7,6 +7,7 @@ import type { Database, Workspace, WorkspacePrState, WorkspaceStatus } from './d
 import { buildWorkspaceInspector } from './workspace-inspector.js';
 import { extractUrls, type RepoScriptName } from './repo-scripts.js';
 import { normalizeWorkspaceAction, workspaceActionUpdate } from './workspace-actions.js';
+import { shouldAutoStartInteractiveSession } from './session-start-policy.js';
 
 /**
  * Single source of truth for workspace-scoped message types — these may omit
@@ -360,12 +361,15 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               const caps = provider.getCapabilities();
 
               if (caps.supportsStdin) {
-                // Interactive providers (e.g. Claude): launch once, keep running
-                const cmd = provider.buildCommand({
-                  resumeSessionId: session.cliSessionId ?? session.claudeSessionId ?? undefined,
-                  workingDir: session.workingDir ?? undefined,
-                });
-                await sshManager.startCLI(server.id, sessionId, cmd);
+                // Opening an existing historical chat should not create a new empty
+                // CLI turn. The input handler starts a fresh process on demand.
+                if (shouldAutoStartInteractiveSession(db, session)) {
+                  const cmd = provider.buildCommand({
+                    resumeSessionId: session.cliSessionId ?? session.claudeSessionId ?? undefined,
+                    workingDir: session.workingDir ?? undefined,
+                  });
+                  await sshManager.startCLI(server.id, sessionId, cmd);
+                }
               } else {
                 // Per-message providers (e.g. Codex): don't launch yet,
                 // CLI will be started on each 'input' message
