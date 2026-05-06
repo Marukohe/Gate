@@ -53,6 +53,17 @@ function agentLabel(status?: AgentStatus): string {
   return '';
 }
 
+function basename(path: string | null): string | null {
+  if (!path) return null;
+  const parts = path.split('/').filter(Boolean);
+  return parts[parts.length - 1] ?? path;
+}
+
+function looseSessionName(name: string, workingDir: string | null): string {
+  if ((!name || name === 'Default') && workingDir) return basename(workingDir) ?? name;
+  return name || basename(workingDir) || 'Session';
+}
+
 export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSession, onSelectWorkspace, onAddWorkspace, onClose }: SidebarProps) {
   const servers = useServerStore((s) => s.servers);
   const activeServerId = useServerStore((s) => s.activeServerId);
@@ -243,6 +254,10 @@ export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSess
                   <div className="ml-5 mt-1 border-l border-border/50 pl-0 space-y-px">
                     {loose.map((session) => {
                       const isActiveSession = currentActiveSessionId === session.id;
+                      const git = gitInfo[session.id];
+                      const agent = agentStatus[session.id];
+                      const label = agentLabel(agent);
+                      const title = looseSessionName(session.name, session.workingDir);
                       return (
                         <button
                           key={session.id}
@@ -255,7 +270,42 @@ export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSess
                           onClick={() => { onSelectSession?.(server.id, session.id); onClose?.(); }}
                         >
                           <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
-                          <span className="truncate flex-1">{session.name}</span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate font-medium">{title}</span>
+                              {isAgentWorking(agent) ? (
+                                <span className={cn('agent-dots shrink-0', agentDotsColor(agent))}>
+                                  <span /><span /><span />
+                                </span>
+                              ) : (
+                                <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', agentDot(agent))} />
+                              )}
+                            </div>
+                            {(git || label || session.workingDir) && (
+                              <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                {git && (
+                                  <span className="flex items-center gap-0.5 truncate">
+                                    <GitBranchIcon className="h-2.5 w-2.5 shrink-0" />
+                                    {git.branch}
+                                  </span>
+                                )}
+                                {label && (
+                                  <span className={cn(
+                                    'truncate',
+                                    agent?.state === 'thinking' && 'text-blue-500',
+                                    agent?.state === 'tool_call' && 'text-purple-500',
+                                  )}>
+                                    {label}
+                                  </span>
+                                )}
+                                {session.workingDir && (
+                                  <span className="truncate font-mono" title={session.workingDir}>
+                                    {session.workingDir}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </button>
                       );
                     })}
