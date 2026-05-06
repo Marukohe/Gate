@@ -20,6 +20,7 @@ Browser (React) <--WebSocket--> Node.js Backend <--SSH--> Remote Server (CLI too
 - Backend parses CLI terminal output into structured messages via provider-specific parsers and streams them to the frontend via WebSocket
 - Frontend renders parsed messages as chat bubbles with markdown, syntax highlighting, and collapsible tool call cards
 - Plan management: extract markdown checklists from chat into a dedicated panel for tracking/editing
+- Workspace management: repositories are first-class work units with status, goal, primary session, branch/worktree start options, a workspace-aware inspector, repo scripts, and delivery actions.
 
 ## Tech Stack
 
@@ -75,6 +76,9 @@ npm publish --access public # build + publish to npm
 - `server/src/db.ts` — SQLite layer: servers, sessions, messages tables (with chatStartedAt, providerSessionMap)
 - `server/src/ssh-manager.ts` — SSH connection pool + CLI channel management via ssh2
 - `server/src/ssh-browse.ts` — Remote directory browsing via SSH
+- `server/src/repo-scripts.ts` — optional `gate.json` parser for setup/run/test commands
+- `server/src/workspace-actions.ts` — deterministic workspace delivery action state updates
+- `server/src/workspace-inspector.ts` — workspace inspector snapshot builder
 - `server/src/ws-handler.ts` — WebSocket server: bridges browser clients to SSH sessions, handles provider switching, conversation reset/resume
 - `server/src/routes/servers.ts` — REST CRUD for server configurations
 - `server/src/providers/types.ts` — CLIProvider interface, OutputParser abstract class, ParsedMessage type
@@ -90,6 +94,7 @@ npm publish --access public # build + publish to npm
 - `client/src/components/plan/` — PlanPanel (view/edit modes), PlanStepItem
 - `client/src/components/plan-mode/` — PlanModeOverlay, PlanModeQuestion, PlanModeThinking, PlanModeDone
 - `client/src/components/server/` — ServerDialog
+- `client/src/components/workspace/` — WorkspaceHome, WorkspaceStart, WorkspaceInspector, WorkspaceActionBar
 - `client/src/lib/plan-parser.ts` — Markdown checklist ↔ PlanStep[] conversion
 
 ## WebSocket Protocol
@@ -99,14 +104,17 @@ Client sends: `{ type: 'switch-provider', serverId, sessionId, provider }`
 Client sends: `{ type: 'reset-conversation', serverId, sessionId }`
 Client sends: `{ type: 'resume-cli-session', serverId, sessionId, claudeSessionId }`
 Client sends: `{ type: 'list-cli-sessions', serverId, workingDir, provider }`
+Client sends: `{ type: 'start-workspace-task', workspaceId, goal, provider?, branchMode?, branchName?, worktreeMode?, worktreePath? }`
+Client sends: `{ type: 'fetch-workspace-inspector'|'run-workspace-script'|'run-workspace-action', workspaceId, ... }`
 Server sends: `{ type: 'message'|'status'|'history', serverId, ... }`
 Server sends: `{ type: 'cli-sessions', serverId, sessions }`
+Server sends: `{ type: 'workspace-update'|'workspace-inspector'|'workspace-run-result'|'workspace-action-result', workspaceId, ... }`
 
 ## Responsive Breakpoints
 
-- Desktop (>=1024px): 3-column — sidebar (64px) + chat (flex) + plan panel (320px)
-- Tablet (768-1023px): Chat fullwidth, sidebar and plan as drawers
-- Mobile (<768px): Fullscreen chat, sidebar/plan as full-screen sheet overlays
+- Desktop (>=1024px): 3-column — sidebar (64px) + workspace/chat (flex) + workspace inspector (288px)
+- Tablet (768-1023px): Workspace/chat fullwidth, sidebar and inspector as drawers
+- Mobile (<768px): Fullscreen workspace/chat, sidebar/inspector as sheet overlays
 
 ## Best Practices
 

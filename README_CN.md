@@ -29,6 +29,10 @@
 - **接入已有会话** — 已经在终端跑 CLI 了？Gate 能找到它的日志并从断点处恢复。
 - **清爽的聊天界面** — 终端输出解析为 Markdown 消息，可折叠的工具调用卡片，语法高亮代码块，可滚动表格。
 - **多服务器、多会话** — 管理多台远程服务器，每台多个会话。滑动或点击切换。
+- **Workspace Command Center** — 按 backlog、in-progress、review、done、canceled 分组管理仓库工作区，可置顶、归档、继续工作。
+- **Workspace Start 流程** — 从一个目标 prompt 开始，选择 Claude 或 Codex，并在启动 CLI 前选择当前分支、已有分支、新分支或隔离 worktree。
+- **Workspace Inspector** — 右侧面板以 workspace 为上下文，查看变更、计划、仓库脚本、终端占位和交付动作。
+- **仓库脚本与交付动作** — 可通过可选 `gate.json` 配置 `setup`、`run`、`test` 脚本并经 SSH 运行；Inspector 中可 push、创建 PR、标记 review/done/canceled。
 - **实时计划追踪** — 从 Claude 输出中自动提取 checklist 到侧边面板。勾选步骤、编辑计划、发送执行。
 - **日志同步** — 通过同步远程 CLI 会话的日志，追上在 Gate 之外完成的工作。
 - **全平台响应式** — 桌面三栏布局，平板抽屉模式，手机底部弹出和滑动手势。支持刘海屏。
@@ -104,9 +108,10 @@ gate/
 │       │   ├── plan/            # PlanPanel, PlanStepItem
 │       │   ├── plan-mode/       # PlanModeOverlay, PlanModeQuestion, PlanModeThinking
 │       │   ├── server/          # ServerDialog
+│       │   ├── workspace/       # WorkspaceHome, WorkspaceStart, WorkspaceInspector
 │       │   └── ui/              # shadcn/ui 组件
 │       ├── hooks/               # use-websocket, use-swipe
-│       ├── stores/              # Zustand stores (server, session, chat, plan, plan-mode, ui)
+│       ├── stores/              # Zustand stores (server, session, chat, plan, workspace, ui)
 │       └── lib/                 # 工具函数 (plan-parser, server-utils, notification)
 ├── server/                      # Node.js 后端
 │   └── src/
@@ -114,6 +119,9 @@ gate/
 │       ├── db.ts                # SQLite (servers, sessions, messages)
 │       ├── ssh-manager.ts       # SSH 连接池 + CLI 通道管理
 │       ├── ssh-browse.ts        # 远程目录浏览
+│       ├── repo-scripts.ts      # 可选 gate.json 脚本解析
+│       ├── workspace-actions.ts # Workspace 交付动作状态
+│       ├── workspace-inspector.ts # Workspace Inspector 快照
 │       ├── ws-handler.ts        # WebSocket 服务端
 │       ├── routes/              # REST API
 │       ├── providers/

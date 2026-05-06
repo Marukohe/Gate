@@ -29,6 +29,10 @@ Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──�
 - **Attach to existing sessions** — Already running a CLI in a terminal? Gate finds its transcript and resumes right where you left off.
 - **Clean chat UI** — Terminal output parsed into markdown messages, collapsible tool cards, syntax-highlighted code blocks, and scrollable tables.
 - **Multi-server, multi-session** — Manage several remote servers with multiple sessions each. Swipe or tap to switch.
+- **Workspace command center** — Group repository workspaces by backlog, in-progress, review, done, or canceled status. Pin, archive, and continue work without opening every chat.
+- **Workspace start flow** — Start from a prompt, choose Claude or Codex, and pick the current branch, an existing branch, a new branch, or an isolated worktree before the CLI starts.
+- **Workspace inspector** — Inspect changes, plans, repo scripts, terminal placeholders, and delivery actions from a workspace-aware right panel.
+- **Repo scripts and delivery actions** — Optional `gate.json` scripts (`setup`, `run`, `test`) can run over SSH; push, create PR, and mark review/done/canceled are available from the workspace inspector.
 - **Live plan tracking** — Checklists auto-extracted from Claude's output into a side panel. Check off steps, edit plans, send them back for execution.
 - **Transcript sync** — Catch up on work done outside Gate by syncing the transcript from the remote CLI session.
 - **Responsive everywhere** — Three-column desktop, drawers on tablet, bottom sheets and swipe gestures on mobile. Notch-safe.
@@ -104,9 +108,10 @@ gate/
 │       │   ├── plan/            # PlanPanel, PlanStepItem
 │       │   ├── plan-mode/       # PlanModeOverlay, PlanModeQuestion, PlanModeThinking
 │       │   ├── server/          # ServerDialog
+│       │   ├── workspace/       # WorkspaceHome, WorkspaceStart, WorkspaceInspector
 │       │   └── ui/              # shadcn/ui components
 │       ├── hooks/               # use-websocket, use-swipe
-│       ├── stores/              # Zustand stores (server, session, chat, plan, plan-mode, ui)
+│       ├── stores/              # Zustand stores (server, session, chat, plan, workspace, ui)
 │       └── lib/                 # Utilities (plan-parser, server-utils, notification)
 ├── server/                      # Node.js backend
 │   └── src/
@@ -114,6 +119,9 @@ gate/
 │       ├── db.ts                # SQLite (servers, sessions, messages)
 │       ├── ssh-manager.ts       # SSH connection pool + CLI channel management
 │       ├── ssh-browse.ts        # Remote directory browsing
+│       ├── repo-scripts.ts      # Optional gate.json script parsing
+│       ├── workspace-actions.ts # Workspace delivery action state
+│       ├── workspace-inspector.ts # Workspace inspector snapshots
 │       ├── ws-handler.ts        # WebSocket server
 │       ├── routes/              # REST API
 │       ├── providers/
@@ -141,21 +149,24 @@ Client → Server:
 { "type": "switch-provider", "serverId": "...", "sessionId": "...", "provider": "codex" }
 { "type": "reset-conversation" | "resume-cli-session", "serverId": "...", "sessionId": "...", "claudeSessionId": "..." }
 { "type": "list-cli-sessions", "serverId": "...", "workingDir": "...", "provider": "claude" }
+{ "type": "start-workspace-task", "workspaceId": "...", "goal": "...", "provider": "claude", "branchMode": "create", "worktreeMode": "isolated" }
+{ "type": "fetch-workspace-inspector" | "run-workspace-script" | "run-workspace-action", "workspaceId": "...", ... }
 ```
 
 Server → Client:
 ```jsonc
 { "type": "message" | "status" | "history" | "sessions" | "git-info", "serverId": "...", ... }
 { "type": "cli-sessions", "serverId": "...", "sessions": ["..."] }
+{ "type": "workspace-update" | "workspace-inspector" | "workspace-run-result" | "workspace-action-result", "workspaceId": "...", ... }
 ```
 
 ## Responsive Layout
 
 | Breakpoint | Layout |
 |------------|--------|
-| Desktop (≥1024px) | Sidebar + Chat + Plan panel (3-column) |
-| Tablet (768–1023px) | Chat fullwidth, sidebar/plan as drawers |
-| Mobile (<768px) | Fullscreen chat, bottom sheet for servers, swipe to switch sessions |
+| Desktop (≥1024px) | Sidebar + workspace/chat + workspace inspector |
+| Tablet (768–1023px) | Workspace/chat fullwidth, sidebar/inspector as drawers |
+| Mobile (<768px) | Fullscreen workspace/chat, bottom sheets for servers and inspector |
 
 ## Why "Gate"?
 

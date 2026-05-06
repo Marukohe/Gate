@@ -186,12 +186,12 @@ git commit -m "feat(workspace): add delivery actions"
 
 **Goal:** Make the new flow coherent and document the product model.
 
-- [ ] Update `README.md` and `README_CN.md` with workspace/status/inspector concepts.
-- [ ] Update `CLAUDE.md` key modules if new modules were added.
+- [x] Update `README.md` and `README_CN.md` with workspace/status/inspector concepts.
+- [x] Update `CLAUDE.md` key modules if new modules were added.
 - [ ] Smoke desktop/tablet/mobile layouts.
-- [ ] Run server tests and type checks.
-- [ ] Start `npm run dev` and verify the app boots.
-- [ ] Check `git status` and commit final doc/polish changes.
+- [x] Run server tests and type checks.
+- [x] Verify dev server/client respond on localhost.
+- [x] Check `git status` and commit final doc/polish changes.
 
 Verification:
 
