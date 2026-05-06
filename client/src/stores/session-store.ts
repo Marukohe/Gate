@@ -19,6 +19,8 @@ export interface Session {
   cliSessionId: string | null;
   provider: string;
   workingDir: string | null;
+  workspaceId: string | null;
+  workspaceProbedAt: number | null;
   createdAt: number;
   lastActiveAt: number;
 }
@@ -63,6 +65,9 @@ interface SessionStore {
   setAgentStatus: (sessionId: string, status: AgentStatus) => void;
   setCheckpoints: (sessionId: string, checkpoints: Checkpoint[]) => void;
   getActiveSessionId: (serverId: string | null) => string | undefined;
+  sessionsByWorkspace: (workspaceId: string) => Session[];
+  looseSessionsByServer: (serverId: string) => Session[];
+  updateSession: (serverId: string, session: Session) => void;
 }
 
 export const useSessionStore = create<SessionStore>()(
@@ -146,6 +151,22 @@ export const useSessionStore = create<SessionStore>()(
         if (!serverId) return undefined;
         return get().activeSessionId[serverId];
       },
+
+      sessionsByWorkspace: (workspaceId) => {
+        const all: Session[] = [];
+        for (const list of Object.values(get().sessions)) {
+          for (const s of list) if (s.workspaceId === workspaceId) all.push(s);
+        }
+        return all;
+      },
+      looseSessionsByServer: (serverId) => {
+        return (get().sessions[serverId] ?? []).filter((s) => s.workspaceId === null);
+      },
+      updateSession: (serverId, session) => set((s) => {
+        const list = s.sessions[serverId] ?? [];
+        const next = list.map((x) => x.id === session.id ? session : x);
+        return { sessions: { ...s.sessions, [serverId]: next } };
+      }),
     }),
     {
       name: 'session-store',
