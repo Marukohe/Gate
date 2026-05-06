@@ -337,9 +337,9 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'disconnect', serverId, sessionId }));
   }, []);
 
-  const createSession = useCallback((serverId: string, name: string, workingDir?: string | null, claudeSessionId?: string | null, provider?: string) => {
+  const createSession = useCallback((serverId: string, name: string, workingDir?: string | null, claudeSessionId?: string | null, provider?: string, workspaceId?: string) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'create-session', serverId, sessionName: name, workingDir: workingDir || undefined, claudeSessionId: claudeSessionId || undefined, provider: provider || undefined }));
+    ws.send(JSON.stringify({ type: 'create-session', serverId, sessionName: name, workingDir: workingDir || undefined, claudeSessionId: claudeSessionId || undefined, provider: provider || undefined, workspaceId }));
   }, []);
 
   const fetchGitInfo = useCallback((serverId: string, sessionId: string) => {

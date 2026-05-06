@@ -47,6 +47,24 @@ function App() {
     [],
   );
 
+  // Reset route to home when the routed-to session or workspace is removed from its store.
+  // Without this, a workspace deletion that cascades the active session leaves ChatView
+  // rendering an empty inert pane.
+  const allSessions = useSessionStore((s) => s.sessions);
+  const allWorkspaces = useWorkspaceStore((s) => s.workspaces);
+  useEffect(() => {
+    if (route.kind === 'session') {
+      const list = allSessions[route.serverId] ?? [];
+      if (!list.find((s) => s.id === route.sessionId)) {
+        setRoute({ kind: 'home' });
+      }
+    } else if (route.kind === 'workspace') {
+      if (!allWorkspaces[route.id]) {
+        setRoute({ kind: 'home' });
+      }
+    }
+  }, [route, allSessions, allWorkspaces]);
+
   const [addWorkspaceOpen, setAddWorkspaceOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [createCtx, setCreateCtx] = useState<{ workspaceId: string; repoPath: string } | null>(null);
@@ -233,9 +251,12 @@ function App() {
 
   const handleCreateSessionFromDialog = useCallback((name: string, workingDir: string | null, claudeSessionId?: string | null, provider?: string) => {
     if (!activeServerId) return;
-    createSession(activeServerId, name, workingDir, claudeSessionId, provider);
+    // Pass workspaceId so the server links the new session immediately rather than
+    // waiting for the lazy probe-on-connect path (which would show the session under
+    // the Loose footer until the user clicked it for the first time).
+    createSession(activeServerId, name, workingDir, claudeSessionId, provider, createCtx?.workspaceId);
     setCreateOpen(false);
-  }, [activeServerId, createSession]);
+  }, [activeServerId, createSession, createCtx]);
 
   const handleSyncTranscript = useCallback((sessionId: string) => {
     if (!activeServerId) return;

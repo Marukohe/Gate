@@ -76,7 +76,11 @@ export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSess
   const setNotifyToast = useUIStore((s) => s.setNotifyToast);
   const setNotifySound = useUIStore((s) => s.setNotifySound);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // Workspace entries: absent key → expanded (default), true → collapsed.
   const toggleCollapse = (key: string) => setCollapsed((s) => ({ ...s, [key]: !s[key] }));
+  // Loose footer entries: absent/true key → collapsed (default), explicit false → expanded.
+  // Using a separate toggle keeps the workspace default-expanded behavior intact.
+  const toggleLoose = (key: string) => setCollapsed((s) => ({ ...s, [key]: !(s[key] === false) }));
 
   // When onClose is set we're inside the mobile bottom sheet — skip fixed sizing
   const isMobile = !!onClose;
@@ -211,12 +215,13 @@ export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSess
           {servers.map((server) => {
             const loose = (allSessions[server.id] ?? []).filter((s) => s.workspaceId === null);
             if (loose.length === 0) return null;
-            const expanded = !collapsed[`loose:${server.id}`];
+            // Loose footer defaults to collapsed; explicit `false` means expanded.
+            const expanded = collapsed[`loose:${server.id}`] === false;
             return (
               <div key={`loose-${server.id}`} className="mt-3">
                 <button
                   className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
-                  onClick={() => toggleCollapse(`loose:${server.id}`)}
+                  onClick={() => toggleLoose(`loose:${server.id}`)}
                 >
                   {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                   <Server className="h-3.5 w-3.5" />

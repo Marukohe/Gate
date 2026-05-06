@@ -568,6 +568,13 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               session.claudeSessionId = msg.claudeSessionId;
               session.cliSessionId = msg.claudeSessionId;
             }
+            // Link to workspace immediately so the session appears under the correct
+            // workspace in the sidebar rather than under the Loose footer until the
+            // first connect triggers the lazy probe-and-link path.
+            if (msg.workspaceId) {
+              db.setSessionWorkspace(session.id, msg.workspaceId);
+              session.workspaceId = msg.workspaceId;
+            }
             const sessions = db.listSessions(serverId);
             broadcast(wss, { type: 'sessions', serverId: serverId, sessions });
             // Also tell the sender which session was created
