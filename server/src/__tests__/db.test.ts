@@ -223,4 +223,50 @@ describe('Database', () => {
       expect(() => db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a2' })).toThrow();
     });
   });
+
+  describe('session-workspace linkage', () => {
+    it('setSessionWorkspace links and unlinks', () => {
+      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
+      const w = db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
+      const sess = db.createSession(s.id, 't');
+      db.setSessionWorkspace(sess.id, w.id);
+      expect(db.getSession(sess.id)?.workspaceId).toBe(w.id);
+      db.setSessionWorkspace(sess.id, null);
+      expect(db.getSession(sess.id)?.workspaceId).toBeNull();
+    });
+
+    it('markSessionProbed sets workspaceProbedAt', () => {
+      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
+      const sess = db.createSession(s.id, 't');
+      const before = Date.now();
+      db.markSessionProbed(sess.id);
+      const after = Date.now();
+      const got = db.getSession(sess.id)!;
+      expect(got.workspaceProbedAt).not.toBeNull();
+      expect(got.workspaceProbedAt!).toBeGreaterThanOrEqual(before);
+      expect(got.workspaceProbedAt!).toBeLessThanOrEqual(after);
+    });
+
+    it('aggregateWorkspace returns counts and lastActivityAt', () => {
+      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
+      const w = db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
+      const a = db.createSession(s.id, 'a');
+      const b = db.createSession(s.id, 'b');
+      db.setSessionWorkspace(a.id, w.id);
+      db.setSessionWorkspace(b.id, w.id);
+      db.saveMessage({ sessionId: a.id, type: 'assistant', content: 'x', timestamp: 100 });
+      db.saveMessage({ sessionId: b.id, type: 'assistant', content: 'y', timestamp: 200 });
+      const agg = db.aggregateWorkspace(w.id);
+      expect(agg.totalSessionCount).toBe(2);
+      expect(agg.lastActivityAt).toBe(200);
+    });
+
+    it('aggregateWorkspace returns null lastActivityAt when no messages', () => {
+      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
+      const w = db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
+      const agg = db.aggregateWorkspace(w.id);
+      expect(agg.totalSessionCount).toBe(0);
+      expect(agg.lastActivityAt).toBeNull();
+    });
+  });
 });

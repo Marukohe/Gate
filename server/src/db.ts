@@ -464,9 +464,28 @@ export function createDb(dbPath: string): Database {
       });
       tx();
     },
-    setSessionWorkspace() { /* not implemented */ },
-    markSessionProbed() { /* not implemented */ },
-    aggregateWorkspace() { return { totalSessionCount: 0, lastActivityAt: null }; },
+    setSessionWorkspace(sessionId, workspaceId) {
+      db.prepare('UPDATE sessions SET workspaceId = ? WHERE id = ?').run(workspaceId, sessionId);
+    },
+
+    markSessionProbed(sessionId) {
+      db.prepare('UPDATE sessions SET workspaceProbedAt = ? WHERE id = ?').run(Date.now(), sessionId);
+    },
+
+    aggregateWorkspace(workspaceId) {
+      const row = db.prepare(`
+        SELECT
+          (SELECT COUNT(*) FROM sessions WHERE workspaceId = ?) AS totalSessionCount,
+          (SELECT MAX(m.timestamp)
+             FROM messages m
+             JOIN sessions s ON s.id = m.sessionId
+             WHERE s.workspaceId = ?) AS lastActivityAt
+      `).get(workspaceId, workspaceId) as { totalSessionCount: number; lastActivityAt: number | null };
+      return {
+        totalSessionCount: row.totalSessionCount,
+        lastActivityAt: row.lastActivityAt,
+      };
+    },
 
     close() {
       db.close();
