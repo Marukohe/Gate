@@ -80,7 +80,7 @@ export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSess
   const toggleCollapse = (key: string) => setCollapsed((s) => ({ ...s, [key]: !s[key] }));
   // Loose footer entries: absent/true key → collapsed (default), explicit false → expanded.
   // Using a separate toggle keeps the workspace default-expanded behavior intact.
-  const toggleLoose = (key: string) => setCollapsed((s) => ({ ...s, [key]: !(s[key] === false) }));
+  const toggleLoose = (key: string) => setCollapsed((s) => ({ ...s, [key]: s[key] === false }));
 
   // When onClose is set we're inside the mobile bottom sheet — skip fixed sizing
   const isMobile = !!onClose;
@@ -117,6 +117,11 @@ export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSess
             const expanded = !collapsed[`ws:${ws.id}`];
             const anyActive = workspaceSessions.some((s) => isAgentWorking(agentStatus[s.id]));
             const server = servers.find((sv) => sv.id === ws.serverId);
+            const primarySession = workspaceSessions.find((session) => session.id === ws.primarySessionId)
+              ?? workspaceSessions[0]
+              ?? null;
+            const currentBranch = primarySession ? gitInfo[primarySession.id]?.branch : null;
+            const branchLabel = currentBranch ?? (workspaceSessions.length === 0 ? ws.defaultBranch : null);
             return (
               <div key={ws.id}>
                 <button
@@ -143,7 +148,13 @@ export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSess
                     </div>
                     <div className="text-[10px] text-muted-foreground truncate">
                       {server?.name ?? '?'}
-                      {ws.defaultBranch && (<><span className="mx-1">·</span><GitBranchIcon className="inline h-2.5 w-2.5 mr-0.5" />{ws.defaultBranch}</>)}
+                      {branchLabel && (
+                        <>
+                          <span className="mx-1">·</span>
+                          <GitBranchIcon className="inline h-2.5 w-2.5 mr-0.5" />
+                          {branchLabel}
+                        </>
+                      )}
                     </div>
                   </div>
                 </button>
