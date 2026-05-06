@@ -5,6 +5,18 @@ import type { ParsedMessage, CLIProvider, OutputParser } from './providers/types
 import type { ProviderRegistry } from './providers/registry.js';
 import type { Database, Workspace } from './db.js';
 
+/**
+ * Single source of truth for workspace-scoped message types — these may omit
+ * `serverId` (workspace CRUD operates above the server level). When adding a
+ * new workspace message type, add it here AND to the `ClientMessage.type`
+ * union below; the runtime guard derives from this list, so forgetting one
+ * place no longer silently rejects the new message with "serverId required".
+ */
+const WORKSPACE_MSG_TYPES = [
+  'list-workspaces', 'create-workspace', 'delete-workspace', 'update-workspace',
+] as const;
+type WorkspaceMsgType = typeof WORKSPACE_MSG_TYPES[number];
+
 interface ClientMessage {
   type:
     | 'connect' | 'input' | 'interrupt' | 'disconnect'
@@ -15,7 +27,7 @@ interface ClientMessage {
     | 'load-more' | 'switch-provider' | 'reset-conversation' | 'resume-cli-session'
     | 'fetch-git-status' | 'fetch-git-diff' | 'fetch-pr-info' | 'git-commit' | 'git-create-pr'
     | 'revert-to-checkpoint' | 'list-checkpoints'
-    | 'list-workspaces' | 'create-workspace' | 'delete-workspace' | 'update-workspace';
+    | WorkspaceMsgType;
   serverId?: string;       // workspace messages may not have a serverId
   sessionId?: string;
   sessionName?: string;
@@ -233,10 +245,8 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
 
       try {
         // Workspace CRUD messages may omit serverId; everything else requires it.
-        const workspaceMsgTypes = new Set([
-          'list-workspaces', 'create-workspace', 'delete-workspace', 'update-workspace',
-        ]);
-        if (!workspaceMsgTypes.has(msg.type) && !msg.serverId) {
+        // Derive the check from WORKSPACE_MSG_TYPES so the list lives in one place.
+        if (!(WORKSPACE_MSG_TYPES as readonly string[]).includes(msg.type) && !msg.serverId) {
           ws.send(JSON.stringify({ type: 'status', status: 'error', error: 'serverId required' }));
           return;
         }
@@ -495,11 +505,19 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             if (!msg.workspaceId) break;
             const workspace = db.getWorkspace(msg.workspaceId);
             if (!workspace) break;
-            // Stop any active channels for sessions in this workspace
+            // Stop any active channels for sessions in this workspace.
+            // Mirror the delete-session cleanup: flush parser before deleting
+            // so any final buffered message isn't lost, and clear the
+            // perMessageSessions entry to prevent leaks for Codex-style sessions.
             const wsSessions = db.listSessions(workspace.serverId).filter((s) => s.workspaceId === workspace.id);
             for (const s of wsSessions) {
               if (sshManager.hasActiveChannel(workspace.serverId, s.id)) sshManager.stopSession(workspace.serverId, s.id);
-              parsers.delete(s.id);
+              const parser = parsers.get(s.id);
+              if (parser) {
+                parser.flush();
+                parsers.delete(s.id);
+              }
+              perMessageSessions.delete(s.id);
             }
             db.deleteWorkspace(msg.workspaceId);
             broadcast(wss, { type: 'workspace-deleted', workspaceId: msg.workspaceId, removedSessionIds: wsSessions.map((s) => s.id) });
