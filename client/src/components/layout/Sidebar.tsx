@@ -151,19 +151,18 @@ export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSess
                       ? <ChevronRight className="h-3.5 w-3.5" />
                       : <ChevronDown className="h-3.5 w-3.5" />}
                   </span>
-                  <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+                  <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground/70" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <span className="truncate font-medium text-xs">{ws.name}</span>
                       {anyActive && <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />}
                     </div>
                     <div className="text-[10px] text-muted-foreground truncate">
-                      {server?.name ?? '?'}
+                      <span>{server?.name ?? '?'}</span>
                       {branchLabel && (
                         <>
                           <span className="mx-1">·</span>
-                          <GitBranchIcon className="inline h-2.5 w-2.5 mr-0.5" />
-                          {branchLabel}
+                          <span className="font-mono">{branchLabel}</span>
                         </>
                       )}
                     </div>
@@ -191,8 +190,8 @@ export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSess
                           onClick={() => { onSelectSession?.(session.serverId, session.id); onClose?.(); }}
                         >
                           {isWorktree
-                            ? <GitBranchIcon className={cn('h-3.5 w-3.5 shrink-0', isActiveSession ? 'text-primary' : 'text-muted-foreground/60')} />
-                            : <FolderOpen className={cn('h-3.5 w-3.5 shrink-0', isActiveSession ? 'text-primary' : 'text-muted-foreground/60')} />}
+                            ? <GitBranchIcon className={cn('h-4 w-4 shrink-0', isActiveSession ? 'text-primary' : 'text-muted-foreground/60')} />
+                            : <FolderOpen className={cn('h-4 w-4 shrink-0', isActiveSession ? 'text-primary' : 'text-muted-foreground/60')} />}
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
                               <span className="truncate font-medium">{dirName}</span>
