@@ -89,6 +89,10 @@ function setupSocket() {
   socket.onopen = () => {
     resetBackoff();
     resetHeartbeat();
+    // Fetch workspaces on every open (initial connect + reconnects) so the
+    // Command Center populates immediately rather than waiting for the next
+    // 30s polling tick from App.tsx.
+    socket.send(JSON.stringify({ type: 'list-workspaces' }));
     // Re-bind the current active session after reconnects, even if no new UI
     // interaction occurred while the socket was down.
     const target = pendingConnect ?? getActiveTarget();

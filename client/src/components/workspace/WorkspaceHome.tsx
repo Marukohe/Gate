@@ -2,14 +2,14 @@ import { GitBranch, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useWorkspaceStore } from '@/stores/workspace-store';
-import { useSessionStore } from '@/stores/session-store';
+import { useSessionStore, Session } from '@/stores/session-store';
 import { useServerStore } from '@/stores/server-store';
 import { useWebSocket } from '@/hooks/use-websocket';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 
 interface WorkspaceHomeProps {
   workspaceId: string;
@@ -19,7 +19,17 @@ interface WorkspaceHomeProps {
 
 export function WorkspaceHome({ workspaceId, onNewSession, onSelectSession }: WorkspaceHomeProps) {
   const ws = useWorkspaceStore((s) => s.workspaces[workspaceId]);
-  const sessions = useSessionStore((s) => s.sessionsByWorkspace(workspaceId));
+  // Subscribe to the sessions Record itself (stable shape) and filter in-render
+  // with useMemo. A selector that calls sessionsByWorkspace() would construct a
+  // new array every time, causing re-renders on every unrelated store mutation.
+  const sessionsByServer = useSessionStore((s) => s.sessions);
+  const sessions = useMemo(() => {
+    const out: Session[] = [];
+    for (const list of Object.values(sessionsByServer)) {
+      for (const s of list) if (s.workspaceId === workspaceId) out.push(s);
+    }
+    return out;
+  }, [sessionsByServer, workspaceId]);
   const gitInfo = useSessionStore((s) => s.gitInfo);
   const agentStatus = useSessionStore((s) => s.agentStatus);
   const serverName = useServerStore((s) => s.servers.find((sv) => sv.id === ws?.serverId)?.name ?? '');
