@@ -303,7 +303,7 @@ function App() {
       {activeServerId && (
         <CreateSessionDialog
           open={createOpen}
-          onOpenChange={setCreateOpen}
+          onOpenChange={(open) => { setCreateOpen(open); if (!open) setCreateCtx(null); }}
           onSubmit={handleCreateSessionFromDialog}
           defaultName="Default"
           defaultWorkingDir={createCtx?.repoPath}
