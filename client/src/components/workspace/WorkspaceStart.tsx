@@ -132,7 +132,7 @@ export function WorkspaceStart({
 
           {optionsOpen && (
             <div className="mt-3 border-t pt-3">
-              <div className="flex flex-wrap gap-2">
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,10rem)_minmax(0,1.5fr)_minmax(0,1.5fr)]">
                 <FieldControl label="Agent">
                   <SegmentedControl
                     value={provider}
@@ -166,14 +166,14 @@ export function WorkspaceStart({
                 </FieldControl>
               </div>
               {(branchMode !== 'current' || worktreeMode === 'existing') && (
-                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   {branchMode !== 'current' && (
                     <Input
                       value={branchName}
                       onChange={(event) => setBranchName(event.target.value)}
                       placeholder={branchMode === 'create' ? 'feature/new-work' : 'branch name'}
                       list="workspace-start-branches"
-                      className="h-8 font-mono text-xs"
+                      className="h-8 bg-muted/20 text-sm font-normal shadow-none focus-visible:ring-1"
                     />
                   )}
                   {worktreeMode === 'existing' && (
@@ -182,7 +182,7 @@ export function WorkspaceStart({
                       onChange={(event) => setWorktreePath(event.target.value)}
                       placeholder="worktree path"
                       list="workspace-start-worktrees"
-                      className="h-8 font-mono text-xs"
+                      className="h-8 bg-muted/20 text-sm font-normal shadow-none focus-visible:ring-1"
                     />
                   )}
                   <datalist id="workspace-start-branches">
@@ -193,7 +193,7 @@ export function WorkspaceStart({
                   </datalist>
                 </div>
               )}
-              <p className="mt-2 px-1 text-[11px] text-muted-foreground">
+              <p className="mt-3 px-1 text-[11px] text-muted-foreground/80">
                 Branch changes apply inside the selected worktree. A new worktree needs a branch name.
               </p>
             </div>
@@ -212,7 +212,7 @@ function compactPath(path: string): string {
 function FieldControl({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="px-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className="px-1 text-[10px] font-medium text-muted-foreground">{label}</span>
       {children}
     </label>
   );
@@ -230,14 +230,14 @@ function SegmentedControl<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <div className="flex items-center gap-1 rounded border bg-muted/20 p-0.5">
+    <div className="flex min-w-0 items-center gap-1 rounded border bg-muted/10 p-0.5">
       {icon && <span className="px-1 text-muted-foreground">{icon}</span>}
       {options.map((option) => (
         <button
           key={option.name}
           type="button"
           className={cn(
-            'rounded px-2 py-1 text-xs font-medium transition-colors',
+            'min-w-0 rounded px-2 py-1 text-xs font-medium transition-colors',
             value === option.name
               ? 'bg-primary text-primary-foreground'
               : 'text-muted-foreground hover:bg-accent hover:text-foreground',
