@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { workspaceActionUpdate } from '../workspace-actions.js';
+import { normalizeWorkspaceAction, workspaceActionUpdate } from '../workspace-actions.js';
 
 describe('workspace actions', () => {
   it('moves a workspace to review when a PR is created', () => {
@@ -14,5 +14,9 @@ describe('workspace actions', () => {
     expect(workspaceActionUpdate('mark-review')).toEqual({ status: 'review' });
     expect(workspaceActionUpdate('mark-done')).toEqual({ status: 'done' });
     expect(workspaceActionUpdate('mark-canceled')).toEqual({ status: 'canceled' });
+  });
+
+  it('accepts commit and push as a workspace action', () => {
+    expect(normalizeWorkspaceAction('commit-push')).toBe('commit-push');
   });
 });

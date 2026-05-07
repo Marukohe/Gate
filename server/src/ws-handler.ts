@@ -68,6 +68,7 @@ interface ClientMessage {
   worktreePath?: string;
   scriptName?: string;
   action?: string;
+  commitMessage?: string;
 }
 
 interface ServerMessage {
@@ -817,7 +818,16 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               }
 
               broadcast(wss, { type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'running' });
-              if (action === 'push') {
+              if (action === 'commit-push') {
+                const message = msg.commitMessage?.trim() || workspace.goal || workspace.name;
+                const output = await sshManager.gitCommitAllAndPush(workspace.serverId, workingDir, message);
+                const updated = db.getWorkspace(workspace.id);
+                if (updated) {
+                  const enriched = await buildWorkspaceWithAggregates(updated, db, sshManager);
+                  broadcast(wss, { type: 'workspace-update', workspace: enriched });
+                }
+                broadcast(wss, { type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'done', output });
+              } else if (action === 'push') {
                 const output = await sshManager.gitPush(workspace.serverId, workingDir);
                 broadcast(wss, { type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'done', output });
               } else if (action === 'create-pr') {

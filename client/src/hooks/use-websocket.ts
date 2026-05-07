@@ -45,6 +45,26 @@ function stores() {
   };
 }
 
+function actionLabel(action: string): string {
+  if (action === 'commit-push') return 'commit and push';
+  if (action === 'push') return 'push';
+  if (action === 'create-pr') return 'create pull request';
+  if (action === 'mark-review') return 'mark review';
+  if (action === 'mark-done') return 'mark done';
+  if (action === 'mark-canceled') return 'mark canceled';
+  return 'workspace action';
+}
+
+function actionDoneLabel(action: string): string {
+  if (action === 'commit-push') return 'Committed and pushed';
+  if (action === 'push') return 'Pushed';
+  if (action === 'create-pr') return 'Pull request created';
+  if (action === 'mark-review') return 'Workspace marked for review';
+  if (action === 'mark-done') return 'Workspace marked done';
+  if (action === 'mark-canceled') return 'Workspace canceled';
+  return 'Workspace action finished';
+}
+
 // Track the last session/server we sent a connect for so we don't spam the server.
 // Reset on server switch to avoid skipping the first connect on a new server.
 let lastConnectedSession: string | null = null;
@@ -265,6 +285,11 @@ function setupSocket() {
             url: data.url,
             error: data.error,
           });
+          if (data.status === 'error') {
+            toast.error(`${actionLabel(data.action)} failed`, { description: data.error ?? 'Workspace action failed' });
+          } else if (data.status === 'done') {
+            toast.success(actionDoneLabel(data.action));
+          }
         }
         break;
       case 'workspace-task-started':
@@ -442,7 +467,7 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'run-workspace-script', workspaceId, scriptName }));
   }, []);
 
-  const runWorkspaceAction = useCallback((workspaceId: string, action: string, options?: { title?: string; body?: string }) => {
+  const runWorkspaceAction = useCallback((workspaceId: string, action: string, options?: { title?: string; body?: string; commitMessage?: string }) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: 'run-workspace-action', workspaceId, action, ...options }));
   }, []);

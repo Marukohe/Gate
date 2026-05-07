@@ -514,6 +514,22 @@ export class SSHManager extends EventEmitter {
     return stdout.trim();
   }
 
+  async gitCommitAllAndPush(serverId: string, workingDir: string, message: string): Promise<string> {
+    const staged = await this.runCommand(serverId, workingDir, 'git add -A');
+    if (staged.exitCode !== 0) throw new Error(staged.stderr || staged.stdout || 'git add failed');
+
+    const committed = await this.runCommand(serverId, workingDir, `git commit -m ${shellQuote(message)}`);
+    if (committed.exitCode !== 0) throw new Error(committed.stderr || committed.stdout || 'git commit failed');
+
+    const pushed = await this.runCommand(serverId, workingDir, 'git push -u origin HEAD');
+    if (pushed.exitCode !== 0) throw new Error(pushed.stderr || pushed.stdout || 'git push failed');
+
+    return [committed.stdout || committed.stderr, pushed.stdout || pushed.stderr]
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join('\n\n');
+  }
+
   /** Get PR info for current branch. */
   async fetchPRInfo(serverId: string, workingDir: string): Promise<string> {
     const { stdout } = await this.runCommand(serverId, workingDir,

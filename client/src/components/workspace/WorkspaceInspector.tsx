@@ -63,7 +63,7 @@ export function WorkspaceInspector({ workspaceId, onSendToChat }: WorkspaceInspe
         </div>
       </div>
 
-      <WorkspaceActionBar workspaceId={workspaceId} branch={branch} />
+      <WorkspaceActionBar workspaceId={workspaceId} branch={branch} status={workspace?.status} />
 
       <Tabs defaultValue="changes" className="flex min-h-0 flex-1 flex-col">
         <TabsList className="mx-2 mt-2 grid grid-cols-4">
