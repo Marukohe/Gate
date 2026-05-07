@@ -97,7 +97,11 @@ export function AppShell({
           {rightPanelOpen && (
             <div className="hidden w-72 shrink-0 overflow-hidden border-l lg:flex lg:flex-col">
               {inspectorWorkspaceId ? (
-                <WorkspaceInspector workspaceId={inspectorWorkspaceId} onSendToChat={onSendToChat} />
+                <WorkspaceInspector
+                  workspaceId={inspectorWorkspaceId}
+                  onSendToChat={onSendToChat}
+                  onSelectSession={onSelectSession}
+                />
               ) : (
                 <>
                   <div className="flex-1 overflow-hidden">
@@ -131,7 +135,11 @@ export function AppShell({
           <div className="max-h-[60dvh] overflow-y-auto">
             {inspectorWorkspaceId ? (
               <div className="h-[60dvh]">
-                <WorkspaceInspector workspaceId={inspectorWorkspaceId} onSendToChat={onSendToChat} />
+                <WorkspaceInspector
+                  workspaceId={inspectorWorkspaceId}
+                  onSendToChat={onSendToChat}
+                  onSelectSession={onSelectSession}
+                />
               </div>
             ) : (
               <>

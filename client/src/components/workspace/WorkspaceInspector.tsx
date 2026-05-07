@@ -12,6 +12,7 @@ import { useWebSocket } from '@/hooks/use-websocket';
 interface WorkspaceInspectorProps {
   workspaceId: string;
   onSendToChat: (text: string) => void;
+  onSelectSession?: (serverId: string, sessionId: string) => void;
 }
 
 function pickPrimarySession(workspaceId: string, primarySessionId: string | null, sessions: Session[]): Session | null {
@@ -21,7 +22,7 @@ function pickPrimarySession(workspaceId: string, primarySessionId: string | null
     ?? null;
 }
 
-export function WorkspaceInspector({ workspaceId, onSendToChat }: WorkspaceInspectorProps) {
+export function WorkspaceInspector({ workspaceId, onSendToChat, onSelectSession }: WorkspaceInspectorProps) {
   const workspace = useWorkspaceStore((s) => s.workspaces[workspaceId]);
   const snapshot = useWorkspaceStore((s) => s.inspectors[workspaceId]);
   const runResult = useWorkspaceStore((s) => s.runResults[workspaceId]);
@@ -74,7 +75,7 @@ export function WorkspaceInspector({ workspaceId, onSendToChat }: WorkspaceInspe
         </TabsList>
 
         <TabsContent value="changes" className="min-h-0 flex-1 overflow-hidden">
-          <ChangesPanel serverId={targetServerId} sessionId={targetSessionId} />
+          <ChangesPanel serverId={targetServerId} sessionId={targetSessionId} onOpenDiffSession={onSelectSession} />
         </TabsContent>
         <TabsContent value="plan" className="min-h-0 flex-1 overflow-hidden">
           <PlanPanel onSendToChat={onSendToChat} sessionId={targetSessionId} />

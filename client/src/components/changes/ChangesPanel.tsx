@@ -15,9 +15,10 @@ const EMPTY_PLANS: import('@/stores/plan-store').Plan[] = [];
 interface ChangesPanelProps {
   serverId?: string | null;
   sessionId?: string | null;
+  onOpenDiffSession?: (serverId: string, sessionId: string) => void;
 }
 
-export function ChangesPanel({ serverId, sessionId }: ChangesPanelProps = {}) {
+export function ChangesPanel({ serverId, sessionId, onOpenDiffSession }: ChangesPanelProps = {}) {
   const activeServerId = useServerStore((s) => s.activeServerId);
   const fallbackSessionId = useSessionStore((s) => activeServerId ? s.activeSessionId[activeServerId] : undefined);
   const targetServerId = serverId ?? activeServerId;
@@ -57,6 +58,7 @@ export function ChangesPanel({ serverId, sessionId }: ChangesPanelProps = {}) {
     if (!targetSessionId || !targetServerId) return;
     setSelectedFile(targetSessionId, path);
     setActiveTab('diff');
+    onOpenDiffSession?.(targetServerId, targetSessionId);
     // Untracked files aren't in git index, so use --no-index to show full content
     const diffArgs = isUntracked
       ? `--no-index /dev/null '${path}'`
