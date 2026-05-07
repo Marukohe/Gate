@@ -188,6 +188,7 @@ export function WorkspaceHome({ workspaceId, onNewSession, onStartTask, onSelect
       <WorkspaceStart
         workspaceName={ws.name}
         defaultBranch={ws.defaultBranch}
+        currentWorktree={displayPath}
         branches={workspaceBranches}
         existingWorktrees={worktreeBindings.map((binding) => binding.path)}
         onStart={(goal, options) => onStartTask(ws.id, goal, options)}

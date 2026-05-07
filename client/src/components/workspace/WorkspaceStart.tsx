@@ -17,6 +17,7 @@ export interface WorkspaceStartOptions {
 interface WorkspaceStartProps {
   workspaceName: string;
   defaultBranch: string | null;
+  currentWorktree: string;
   branches?: WorkspaceBranchList;
   existingWorktrees: string[];
   disabled?: boolean;
@@ -29,13 +30,13 @@ const providerOptions = [
 ];
 
 const branchModeOptions = [
-  { name: 'current', label: 'Keep current' },
+  { name: 'current', label: 'Current branch' },
   { name: 'existing', label: 'Switch branch' },
-  { name: 'create', label: 'Create branch' },
+  { name: 'create', label: 'New branch' },
 ] as const;
 
 const worktreeModeOptions = [
-  { name: 'main', label: 'Current checkout' },
+  { name: 'main', label: 'Current worktree' },
   { name: 'isolated', label: 'New worktree' },
   { name: 'existing', label: 'Existing worktree' },
 ] as const;
@@ -43,6 +44,7 @@ const worktreeModeOptions = [
 export function WorkspaceStart({
   workspaceName,
   defaultBranch,
+  currentWorktree,
   branches,
   existingWorktrees,
   disabled,
@@ -80,8 +82,14 @@ export function WorkspaceStart({
 
   const currentLabel = branches?.current || defaultBranch || 'current';
   const providerLabel = providerOptions.find((option) => option.name === provider)?.label ?? provider;
-  const branchLabel = branchModeOptions.find((option) => option.name === branchMode)?.label ?? branchMode;
-  const worktreeLabel = worktreeModeOptions.find((option) => option.name === worktreeMode)?.label ?? worktreeMode;
+  const branchLabel = branchMode === 'current'
+    ? currentLabel
+    : trimmedBranch || branchModeOptions.find((option) => option.name === branchMode)?.label || branchMode;
+  const worktreeLabel = worktreeMode === 'main'
+    ? compactPath(currentWorktree)
+    : worktreeMode === 'existing'
+      ? compactPath(worktreePath || existingWorktrees[0] || 'existing worktree')
+      : 'new worktree';
 
   return (
     <section className="border-b px-6 py-6">
@@ -102,9 +110,7 @@ export function WorkspaceStart({
               <span>·</span>
               <span>{branchLabel}</span>
               <span>·</span>
-              <span>{worktreeLabel}</span>
-              <span>·</span>
-              <span className="truncate">{currentLabel}</span>
+              <span className="truncate">{worktreeLabel}</span>
             </div>
             <div className="flex items-center justify-end gap-2">
               <Button
@@ -145,7 +151,7 @@ export function WorkspaceStart({
                     }}
                   />
                 </FieldControl>
-                <FieldControl label="Checkout">
+                <FieldControl label="Worktree">
                   <SegmentedControl
                     icon={<GitFork className="h-3.5 w-3.5" />}
                     value={worktreeMode}
@@ -188,7 +194,7 @@ export function WorkspaceStart({
                 </div>
               )}
               <p className="mt-2 px-1 text-[11px] text-muted-foreground">
-                Branch action applies inside the selected checkout. A new worktree needs a branch name.
+                Branch changes apply inside the selected worktree. A new worktree needs a branch name.
               </p>
             </div>
           )}
@@ -196,6 +202,11 @@ export function WorkspaceStart({
       </div>
     </section>
   );
+}
+
+function compactPath(path: string): string {
+  const parts = path.split('/').filter(Boolean);
+  return parts.length > 2 ? parts.slice(-2).join('/') : path;
 }
 
 function FieldControl({ label, children }: { label: string; children: React.ReactNode }) {
