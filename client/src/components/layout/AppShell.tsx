@@ -67,9 +67,9 @@ export function AppShell({
             <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
           </div>
           <SheetHeader className="px-4 pb-2">
-            <SheetTitle className="text-base">Workspaces</SheetTitle>
+            <SheetTitle className="text-base">Navigation</SheetTitle>
           </SheetHeader>
-          <div className="max-h-[50dvh] overflow-y-auto">
+          <div className="max-h-[70dvh] overflow-y-auto">
             <Sidebar
               onAddServer={onAddServer}
               onEditServer={onEditServer}

@@ -6,7 +6,7 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useWorkspaceStore, type WorkspaceStatus, type WorkspaceWithAggregates } from '@/stores/workspace-store';
-import { useSessionStore, type AgentStatus, type Session } from '@/stores/session-store';
+import { useSessionStore, type AgentStatus, type GitInfo, type Session } from '@/stores/session-store';
 import { useServerStore } from '@/stores/server-store';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { cn } from '@/lib/utils';
@@ -48,6 +48,7 @@ export function CommandCenter({ onAddWorkspace, onSelectWorkspace, onSelectSessi
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const sessionsByServer = useSessionStore((s) => s.sessions);
   const agentStatus = useSessionStore((s) => s.agentStatus);
+  const gitInfo = useSessionStore((s) => s.gitInfo);
   const servers = useServerStore((s) => s.servers);
   const { setWorkspaceStatus, pinWorkspace, archiveWorkspace, restoreWorkspace } = useWebSocket();
 
@@ -158,6 +159,7 @@ export function CommandCenter({ onAddWorkspace, onSelectWorkspace, onSelectSessi
                       serverName={serverName(w.serverId)}
                       sessions={visibleSessionsForWorkspace(w)}
                       agentStatus={agentStatus}
+                      gitInfo={gitInfo}
                       onClick={() => onSelectWorkspace(w.id)}
                       onSelectSession={onSelectSession}
                       onSetStatus={(status) => setWorkspaceStatus(w.id, status)}
@@ -177,13 +179,14 @@ export function CommandCenter({ onAddWorkspace, onSelectWorkspace, onSelectSessi
 }
 
 function WorkspaceRow({
-  workspace, serverName, sessions, agentStatus, onClick, onSelectSession,
+  workspace, serverName, sessions, agentStatus, gitInfo, onClick, onSelectSession,
   onSetStatus, onPin, onArchive, onRestore,
 }: {
   workspace: WorkspaceWithAggregates;
   serverName: string;
   sessions: Session[];
   agentStatus: Record<string, AgentStatus>;
+  gitInfo: Record<string, GitInfo>;
   onClick: () => void;
   onSelectSession: (serverId: string, sessionId: string) => void;
   onSetStatus: (status: WorkspaceStatus) => void;
@@ -196,6 +199,8 @@ function WorkspaceRow({
   const primarySession = sessions.find((s) => s.id === workspace.primarySessionId) ?? sessions[0];
   const runningSessions = sessions.filter((session) => isWorking(agentStatus[session.id]));
   const isArchived = !!workspace.archivedAt;
+  const currentBranch = primarySession ? gitInfo[primarySession.id]?.branch : undefined;
+  const branchLabel = currentBranch ?? (workspace.defaultBranch ? `default ${workspace.defaultBranch}` : null);
 
   return (
     <div className="flex items-stretch border-b last:border-b-0 hover:bg-accent/25">
@@ -211,8 +216,8 @@ function WorkspaceRow({
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
             <span className="truncate">{serverName}</span>
-            {workspace.defaultBranch && (
-              <span className="flex items-center gap-1"><GitBranch className="h-3 w-3" />{workspace.defaultBranch}</span>
+            {branchLabel && (
+              <span className="flex items-center gap-1"><GitBranch className="h-3 w-3" />{branchLabel}</span>
             )}
             <span>{relativeTime(workspace.lastActivityAt)}</span>
           </div>

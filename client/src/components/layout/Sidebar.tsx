@@ -76,9 +76,10 @@ function looseSessionName(name: string, workingDir: string | null): string {
   return name || basename(workingDir) || 'Session';
 }
 
-export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSession, onSelectWorkspace, onDeleteSession, onAddWorkspace, onClose }: SidebarProps) {
+export function Sidebar({ onAddServer, onEditServer, onSelectSession, onSelectWorkspace, onDeleteSession, onAddWorkspace, onClose }: SidebarProps) {
   const servers = useServerStore((s) => s.servers);
   const activeServerId = useServerStore((s) => s.activeServerId);
+  const setActiveServer = useServerStore((s) => s.setActiveServer);
   const allSessions = useSessionStore((s) => s.sessions);
   const agentStatus = useSessionStore((s) => s.agentStatus);
   const gitInfo = useSessionStore((s) => s.gitInfo);
@@ -120,7 +121,64 @@ export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSess
         'flex flex-col bg-muted/40',
         isMobile ? 'w-full' : 'h-full w-64 border-r',
       )}>
-        <div className={cn('flex items-center justify-between px-3 pb-2', !isMobile && 'pt-[max(0.75rem,env(safe-area-inset-top))]')}>
+        <div className={cn('px-3 pb-3', !isMobile && 'pt-[max(0.75rem,env(safe-area-inset-top))]')}>
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Servers</span>
+            <button
+              className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              onClick={() => { onAddServer(); onClose?.(); }}
+              title="Add server"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <div className="space-y-1">
+            {servers.map((server) => (
+              <div
+                key={server.id}
+                className={cn(
+                  'group flex items-center gap-1 rounded-md text-xs transition-colors',
+                  activeServerId === server.id
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground',
+                )}
+              >
+                <button
+                  className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left"
+                  onClick={() => { setActiveServer(server.id); onClose?.(); }}
+                >
+                  <Server className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate font-medium">{server.name}</span>
+                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className="mr-1 rounded p-1 text-muted-foreground/60 opacity-100 hover:bg-accent hover:text-accent-foreground sm:opacity-0 sm:group-hover:opacity-100"
+                      title="Server actions"
+                    >
+                      <MoreHorizontal className="h-3.5 w-3.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => { onEditServer(server); onClose?.(); }}>
+                      Edit server
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ))}
+            {servers.length === 0 && (
+              <button
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
+                onClick={() => { onAddServer(); onClose?.(); }}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add server
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center justify-between px-3 pb-2">
           <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Workspaces</span>
           {onAddWorkspace && (
             <button
@@ -341,11 +399,6 @@ export function Sidebar({ onAddServer, onEditServer: _onEditServer, onSelectSess
           })}
         </div>
         <div className={cn('flex items-center justify-end gap-1 px-2 py-3 sm:px-3 sm:py-4', !isMobile && 'border-t')}>
-          <Button variant="outline" className="h-10 gap-1 px-3" onClick={() => { onAddServer(); onClose?.(); }}>
-            <Plus className="h-4 w-4" />
-            Server
-          </Button>
-          <div className="flex-1" />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className={cn('h-10 w-10', (notifyBrowser || notifyToast || notifySound) && 'text-primary')}>

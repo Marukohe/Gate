@@ -83,7 +83,7 @@ export function WorkspaceHome({ workspaceId, onNewSession, onStartTask, onSelect
             <h1 className="truncate text-xl font-semibold">{ws.name}</h1>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>{serverName || 'server'}</span>
-              {ws.defaultBranch && (<><span>·</span><span className="flex items-center gap-1"><GitBranch className="h-3 w-3" />{ws.defaultBranch}</span></>)}
+              {ws.defaultBranch && (<><span>·</span><span className="flex items-center gap-1"><GitBranch className="h-3 w-3" />default {ws.defaultBranch}</span></>)}
               {ws.remoteUrl && (<><span>·</span><a href={ws.remoteUrl} target="_blank" rel="noreferrer" className="underline">{ws.remoteUrl}</a></>)}
             </div>
             <div className="mt-1 font-mono text-[11px] text-muted-foreground">{ws.repoPath}</div>
