@@ -7,7 +7,10 @@
 Waiting in line, on the couch, on the train — pull out your phone and pick up right where you left off. Gate bridges your browser to CLI sessions over SSH, so your coding environment is always one tap away.
 
 ```
-Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──► Remote Server (Claude / Codex CLI)
+Browser (React) <--WebSocket--> Node.js Backend <--SSH--> Remote Server
+                                     |
+                              Provider Layer
+                              Claude / Codex / ...
 ```
 
 ## Example
@@ -29,10 +32,11 @@ Browser (React) ◄──WebSocket──► Node.js Backend ◄──SSH──�
 - **Attach to existing sessions** — Already running a CLI in a terminal? Gate finds its transcript and resumes right where you left off.
 - **Clean chat UI** — Terminal output parsed into markdown messages, collapsible tool cards, syntax-highlighted code blocks, and scrollable tables.
 - **Multi-server, multi-session** — Manage several remote servers with multiple sessions each. Swipe or tap to switch.
-- **Workspace command center** — Group repository workspaces by backlog, in-progress, review, done, or canceled status. Pin, archive, and continue work without opening every chat.
-- **Workspace start flow** — Start from a prompt, choose Claude or Codex, and pick the current branch, an existing branch, a new branch, or an isolated worktree before the CLI starts.
-- **Workspace inspector** — Inspect changes, plans, repo scripts, terminal placeholders, and delivery actions from a workspace-aware right panel.
-- **Repo scripts and delivery actions** — Optional `gate.json` scripts (`setup`, `run`, `test`) can run over SSH; push, create PR, and mark review/done/canceled are available from the workspace inspector.
+- **Workspace command center** — Repositories are first-class workspaces grouped by backlog, in-progress, review, done, or canceled status. Pin, archive, and continue work without opening every chat.
+- **Simple workspace overview** — Each workspace shows a focused start composer, visible session list, server/branch/worktree summary, changed-file count, and on-demand tools.
+- **Workspace start flow** — Start from a prompt, choose Claude or Codex, and use the current branch, switch branches, create a new branch, or choose a current/new/existing worktree before the CLI starts.
+- **Workspace inspector** — A fixed, on-demand right sidebar for changes, plans, repo scripts, one-shot terminal commands, and delivery actions.
+- **Repo scripts and delivery actions** — Optional `gate.json` scripts (`setup`, `run`, `test`) can run over SSH; generate commit messages, commit and push, push, create PR, and mark review/done/canceled from the workspace inspector.
 - **Live plan tracking** — Checklists auto-extracted from Claude's output into a side panel. Check off steps, edit plans, send them back for execution.
 - **Transcript sync** — Catch up on work done outside Gate by syncing the transcript from the remote CLI session.
 - **Responsive everywhere** — Three-column desktop, drawers on tablet, bottom sheets and swipe gestures on mobile. Notch-safe.
@@ -108,11 +112,11 @@ gate/
 │       │   ├── plan/            # PlanPanel, PlanStepItem
 │       │   ├── plan-mode/       # PlanModeOverlay, PlanModeQuestion, PlanModeThinking
 │       │   ├── server/          # ServerDialog
-│       │   ├── workspace/       # WorkspaceHome, WorkspaceStart, WorkspaceInspector
+│       │   ├── workspace/       # WorkspaceHome, WorkspaceStart, WorkspaceInspector, WorkspaceActionBar
 │       │   └── ui/              # shadcn/ui components
 │       ├── hooks/               # use-websocket, use-swipe
-│       ├── stores/              # Zustand stores (server, session, chat, plan, workspace, ui)
-│       └── lib/                 # Utilities (plan-parser, server-utils, notification)
+│       ├── stores/              # Zustand stores (server, session, chat, git, plan, workspace, ui)
+│       └── lib/                 # Utilities (plan-parser, provider-colors, server-utils, notification)
 ├── server/                      # Node.js backend
 │   └── src/
 │       ├── index.ts             # Express entry point
@@ -120,6 +124,7 @@ gate/
 │       ├── ssh-manager.ts       # SSH connection pool + CLI channel management
 │       ├── ssh-browse.ts        # Remote directory browsing
 │       ├── repo-scripts.ts      # Optional gate.json script parsing
+│       ├── git-utils.ts         # Git command helpers
 │       ├── workspace-actions.ts # Workspace delivery action state
 │       ├── workspace-inspector.ts # Workspace inspector snapshots
 │       ├── ws-handler.ts        # WebSocket server
@@ -149,6 +154,8 @@ Client → Server:
 { "type": "switch-provider", "serverId": "...", "sessionId": "...", "provider": "codex" }
 { "type": "reset-conversation" | "resume-cli-session", "serverId": "...", "sessionId": "...", "claudeSessionId": "..." }
 { "type": "list-cli-sessions", "serverId": "...", "workingDir": "...", "provider": "claude" }
+{ "type": "exec", "serverId": "...", "sessionId": "...", "workspaceId": "...", "command": "git status", "terminal": true, "requestId": "..." }
+{ "type": "list-workspaces" | "create-workspace" | "update-workspace" | "delete-workspace", "workspaceId": "...", ... }
 { "type": "start-workspace-task", "workspaceId": "...", "goal": "...", "provider": "claude", "branchMode": "create", "worktreeMode": "isolated" }
 { "type": "fetch-workspace-inspector" | "run-workspace-script" | "run-workspace-action", "workspaceId": "...", ... }
 ```
@@ -157,14 +164,16 @@ Server → Client:
 ```jsonc
 { "type": "message" | "status" | "history" | "sessions" | "git-info", "serverId": "...", ... }
 { "type": "cli-sessions", "serverId": "...", "sessions": ["..."] }
-{ "type": "workspace-update" | "workspace-inspector" | "workspace-run-result" | "workspace-action-result", "workspaceId": "...", ... }
+{ "type": "exec-result", "workspaceId": "...", "requestId": "...", "stdout": "...", "stderr": "...", "exitCode": 0 }
+{ "type": "workspace-list" | "workspace-update" | "workspace-deleted" | "workspace-task-started", "workspaceId": "...", ... }
+{ "type": "workspace-inspector" | "workspace-run-result" | "workspace-action-result", "workspaceId": "...", ... }
 ```
 
 ## Responsive Layout
 
 | Breakpoint | Layout |
 |------------|--------|
-| Desktop (≥1024px) | Sidebar + workspace/chat + workspace inspector |
+| Desktop (≥1024px) | Sidebar + workspace/chat + on-demand fixed inspector |
 | Tablet (768–1023px) | Workspace/chat fullwidth, sidebar/inspector as drawers |
 | Mobile (<768px) | Fullscreen workspace/chat, bottom sheets for servers and inspector |
 

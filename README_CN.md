@@ -7,7 +7,10 @@
 排队、沙发上、地铁里 — 掏出手机，接上之前的工作。Gate 通过 SSH 将浏览器连接到远程 CLI 会话，你的编程环境触手可及。
 
 ```
-浏览器 (React) ◄──WebSocket──► Node.js 后端 ◄──SSH──► 远程服务器 (Claude / Codex CLI)
+浏览器 (React) <--WebSocket--> Node.js 后端 <--SSH--> 远程服务器
+                                     |
+                               Provider Layer
+                              Claude / Codex / ...
 ```
 
 ## 示例
@@ -29,10 +32,11 @@
 - **接入已有会话** — 已经在终端跑 CLI 了？Gate 能找到它的日志并从断点处恢复。
 - **清爽的聊天界面** — 终端输出解析为 Markdown 消息，可折叠的工具调用卡片，语法高亮代码块，可滚动表格。
 - **多服务器、多会话** — 管理多台远程服务器，每台多个会话。滑动或点击切换。
-- **Workspace Command Center** — 按 backlog、in-progress、review、done、canceled 分组管理仓库工作区，可置顶、归档、继续工作。
-- **Workspace Start 流程** — 从一个目标 prompt 开始，选择 Claude 或 Codex，并在启动 CLI 前选择当前分支、已有分支、新分支或隔离 worktree。
-- **Workspace Inspector** — 右侧面板以 workspace 为上下文，查看变更、计划、仓库脚本、终端占位和交付动作。
-- **仓库脚本与交付动作** — 可通过可选 `gate.json` 配置 `setup`、`run`、`test` 脚本并经 SSH 运行；Inspector 中可 push、创建 PR、标记 review/done/canceled。
+- **Workspace Command Center** — 仓库是一级工作区，按 backlog、in-progress、review、done、canceled 分组管理，可置顶、归档、继续工作。
+- **简洁的 Workspace 总览** — 每个工作区展示聚焦的 Start composer、展开的 session 列表、server/branch/worktree 摘要、变更文件数量和按需工具入口。
+- **Workspace Start 流程** — 从一个目标 prompt 开始，选择 Claude 或 Codex，并在启动 CLI 前使用当前分支、切换分支、新建分支，或选择当前/新建/已有 worktree。
+- **Workspace Inspector** — 按需打开的右侧固定工具栏，以 workspace 为上下文查看变更、计划、仓库脚本、一次性终端命令和交付动作。
+- **仓库脚本与交付动作** — 可通过可选 `gate.json` 配置 `setup`、`run`、`test` 脚本并经 SSH 运行；Inspector 中可生成 commit message、commit and push、push、创建 PR、标记 review/done/canceled。
 - **实时计划追踪** — 从 Claude 输出中自动提取 checklist 到侧边面板。勾选步骤、编辑计划、发送执行。
 - **日志同步** — 通过同步远程 CLI 会话的日志，追上在 Gate 之外完成的工作。
 - **全平台响应式** — 桌面三栏布局，平板抽屉模式，手机底部弹出和滑动手势。支持刘海屏。
@@ -108,11 +112,11 @@ gate/
 │       │   ├── plan/            # PlanPanel, PlanStepItem
 │       │   ├── plan-mode/       # PlanModeOverlay, PlanModeQuestion, PlanModeThinking
 │       │   ├── server/          # ServerDialog
-│       │   ├── workspace/       # WorkspaceHome, WorkspaceStart, WorkspaceInspector
+│       │   ├── workspace/       # WorkspaceHome, WorkspaceStart, WorkspaceInspector, WorkspaceActionBar
 │       │   └── ui/              # shadcn/ui 组件
 │       ├── hooks/               # use-websocket, use-swipe
-│       ├── stores/              # Zustand stores (server, session, chat, plan, workspace, ui)
-│       └── lib/                 # 工具函数 (plan-parser, server-utils, notification)
+│       ├── stores/              # Zustand stores (server, session, chat, git, plan, workspace, ui)
+│       └── lib/                 # 工具函数 (plan-parser, provider-colors, server-utils, notification)
 ├── server/                      # Node.js 后端
 │   └── src/
 │       ├── index.ts             # Express 入口
@@ -120,6 +124,7 @@ gate/
 │       ├── ssh-manager.ts       # SSH 连接池 + CLI 通道管理
 │       ├── ssh-browse.ts        # 远程目录浏览
 │       ├── repo-scripts.ts      # 可选 gate.json 脚本解析
+│       ├── git-utils.ts         # Git 命令辅助函数
 │       ├── workspace-actions.ts # Workspace 交付动作状态
 │       ├── workspace-inspector.ts # Workspace Inspector 快照
 │       ├── ws-handler.ts        # WebSocket 服务端
@@ -140,6 +145,37 @@ gate/
 **服务端：** Express 5 · ws · ssh2 · better-sqlite3 · TypeScript
 
 **测试：** Vitest
+
+## WebSocket 协议
+
+客户端 → 服务端：
+```jsonc
+{ "type": "connect" | "input" | "disconnect", "serverId": "...", "sessionId": "...", "text": "..." }
+{ "type": "switch-provider", "serverId": "...", "sessionId": "...", "provider": "codex" }
+{ "type": "reset-conversation" | "resume-cli-session", "serverId": "...", "sessionId": "...", "claudeSessionId": "..." }
+{ "type": "list-cli-sessions", "serverId": "...", "workingDir": "...", "provider": "claude" }
+{ "type": "exec", "serverId": "...", "sessionId": "...", "workspaceId": "...", "command": "git status", "terminal": true, "requestId": "..." }
+{ "type": "list-workspaces" | "create-workspace" | "update-workspace" | "delete-workspace", "workspaceId": "...", ... }
+{ "type": "start-workspace-task", "workspaceId": "...", "goal": "...", "provider": "claude", "branchMode": "create", "worktreeMode": "isolated" }
+{ "type": "fetch-workspace-inspector" | "run-workspace-script" | "run-workspace-action", "workspaceId": "...", ... }
+```
+
+服务端 → 客户端：
+```jsonc
+{ "type": "message" | "status" | "history" | "sessions" | "git-info", "serverId": "...", ... }
+{ "type": "cli-sessions", "serverId": "...", "sessions": ["..."] }
+{ "type": "exec-result", "workspaceId": "...", "requestId": "...", "stdout": "...", "stderr": "...", "exitCode": 0 }
+{ "type": "workspace-list" | "workspace-update" | "workspace-deleted" | "workspace-task-started", "workspaceId": "...", ... }
+{ "type": "workspace-inspector" | "workspace-run-result" | "workspace-action-result", "workspaceId": "...", ... }
+```
+
+## 响应式布局
+
+| 断点 | 布局 |
+|------|------|
+| 桌面（≥1024px） | Sidebar + workspace/chat + 按需打开的固定 Inspector |
+| 平板（768–1023px） | Workspace/chat 全宽，sidebar/inspector 使用抽屉 |
+| 手机（<768px） | Workspace/chat 全屏，server 和 inspector 使用底部弹出 |
 
 ## 为什么叫 "Gate"？
 
