@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Ban, Check, ChevronDown, Circle, Eye, GitCommitHorizontal, GitPullRequest, Loader2, Rocket,
+  Ban, Check, Eye, GitCommitHorizontal, GitPullRequest, Loader2, MoreHorizontal, Rocket,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,15 +14,13 @@ import { Input } from '@/components/ui/input';
 import { CreatePRDialog } from '@/components/changes/CreatePRDialog';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 import { useWebSocket } from '@/hooks/use-websocket';
-import type { WorkspaceStatus } from '@/stores/workspace-store';
 
 interface WorkspaceActionBarProps {
   workspaceId: string;
   branch?: string | null;
-  status?: WorkspaceStatus;
 }
 
-export function WorkspaceActionBar({ workspaceId, branch, status }: WorkspaceActionBarProps) {
+export function WorkspaceActionBar({ workspaceId, branch }: WorkspaceActionBarProps) {
   const result = useWorkspaceStore((s) => s.actionResults[workspaceId]);
   const { runWorkspaceAction } = useWebSocket();
   const [prOpen, setPrOpen] = useState(false);
@@ -52,16 +50,15 @@ export function WorkspaceActionBar({ workspaceId, branch, status }: WorkspaceAct
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" disabled={running} title={`Status: ${statusLabel(status)}`} className="px-0">
-              {statusIcon(status)}
-              <ChevronDown className="h-3 w-3 text-muted-foreground" />
+            <Button variant="outline" size="sm" disabled={running} title="More actions" className="px-0">
+              <MoreHorizontal className="h-3.5 w-3.5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuContent align="end" className="w-40">
             <DropdownMenuLabel>Git</DropdownMenuLabel>
             <DropdownMenuItem onClick={() => runWorkspaceAction(workspaceId, 'push')}>
               <Rocket className="h-4 w-4" />
-              Push committed changes
+              Push
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuLabel>Status</DropdownMenuLabel>
@@ -110,21 +107,6 @@ export function WorkspaceActionBar({ workspaceId, branch, status }: WorkspaceAct
       />
     </div>
   );
-}
-
-function statusLabel(status?: WorkspaceStatus): string {
-  if (status === 'review') return 'Review';
-  if (status === 'done') return 'Done';
-  if (status === 'canceled') return 'Canceled';
-  if (status === 'in-progress') return 'In progress';
-  return 'Backlog';
-}
-
-function statusIcon(status?: WorkspaceStatus) {
-  if (status === 'review') return <Eye className="h-3.5 w-3.5" />;
-  if (status === 'done') return <Check className="h-3.5 w-3.5" />;
-  if (status === 'canceled') return <Ban className="h-3.5 w-3.5" />;
-  return <Circle className="h-3.5 w-3.5 text-muted-foreground" />;
 }
 
 function actionDoneLabel(action: string): string {
