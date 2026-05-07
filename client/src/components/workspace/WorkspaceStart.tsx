@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { GitBranch, GitFork, SendHorizontal, Sparkles } from 'lucide-react';
+import { ChevronDown, GitBranch, GitFork, SendHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -54,6 +54,7 @@ export function WorkspaceStart({
   const [branchName, setBranchName] = useState('');
   const [worktreeMode, setWorktreeMode] = useState<WorkspaceStartOptions['worktreeMode']>('main');
   const [worktreePath, setWorktreePath] = useState('');
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const trimmedGoal = goal.trim();
   const trimmedBranch = branchName.trim();
   const needsBranchName = branchMode === 'existing' || branchMode === 'create' || worktreeMode === 'isolated';
@@ -78,92 +79,119 @@ export function WorkspaceStart({
   ].filter((branch, index, all) => branch && all.indexOf(branch) === index);
 
   const currentLabel = branches?.current || defaultBranch || 'current';
+  const providerLabel = providerOptions.find((option) => option.name === provider)?.label ?? provider;
+  const branchLabel = branchModeOptions.find((option) => option.name === branchMode)?.label ?? branchMode;
+  const worktreeLabel = worktreeModeOptions.find((option) => option.name === worktreeMode)?.label ?? worktreeMode;
 
   return (
-    <section className="border-b bg-muted/20 px-6 py-6">
-      <div className="mx-auto flex max-w-3xl flex-col gap-3">
-        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          <Sparkles className="h-4 w-4" />
-          <span>Start work in {workspaceName}</span>
-          <span className="text-xs">· {currentLabel}</span>
-        </div>
-        <form onSubmit={handleSubmit} className="rounded-md border bg-background p-2 shadow-sm">
+    <section className="border-b px-6 py-6">
+      <div className="mx-auto max-w-3xl">
+        <form onSubmit={handleSubmit} className="rounded-md border bg-background p-3 shadow-sm">
+          <div className="mb-2 text-sm font-medium text-muted-foreground">
+            Start work in {workspaceName}
+          </div>
           <Textarea
             value={goal}
             onChange={(event) => setGoal(event.target.value)}
             placeholder="What should we build or change?"
-            className="min-h-28 resize-none border-0 px-2 py-2 shadow-none focus-visible:ring-0"
+            className="min-h-28 resize-none border-0 px-0 py-1 shadow-none focus-visible:ring-0"
           />
           <div className="mt-2 flex flex-col gap-2 border-t pt-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap gap-2">
-              <FieldControl label="Agent">
-                <SegmentedControl
-                  value={provider}
-                  options={providerOptions}
-                  onChange={setProvider}
-                />
-              </FieldControl>
-              <FieldControl label="Branch">
-                <SegmentedControl
-                  icon={<GitBranch className="h-3.5 w-3.5" />}
-                  value={branchMode}
-                  options={branchModeOptions}
-                  onChange={(value) => {
-                    setBranchMode(value);
-                    if (worktreeMode === 'isolated' && value === 'current') setBranchMode('create');
-                  }}
-                />
-              </FieldControl>
-              <FieldControl label="Checkout">
-                <SegmentedControl
-                  icon={<GitFork className="h-3.5 w-3.5" />}
-                  value={worktreeMode}
-                  options={worktreeModeOptions}
-                  onChange={(value) => {
-                    if (value === 'existing' && existingWorktrees.length === 0) return;
-                    setWorktreeMode(value);
-                    if (value === 'isolated' && branchMode === 'current') setBranchMode('create');
-                    if (value === 'existing' && !worktreePath) setWorktreePath(existingWorktrees[0] ?? '');
-                  }}
-                />
-              </FieldControl>
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+              <span>{providerLabel}</span>
+              <span>·</span>
+              <span>{branchLabel}</span>
+              <span>·</span>
+              <span>{worktreeLabel}</span>
+              <span>·</span>
+              <span className="truncate">{currentLabel}</span>
             </div>
-            <Button type="submit" size="sm" disabled={!canSubmit || disabled}>
-              <SendHorizontal className="h-4 w-4" />
-              Start task
-            </Button>
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs"
+                onClick={() => setOptionsOpen((open) => !open)}
+              >
+                Options
+                <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', optionsOpen && 'rotate-180')} />
+              </Button>
+              <Button type="submit" size="sm" disabled={!canSubmit || disabled}>
+                <SendHorizontal className="h-4 w-4" />
+                Start
+              </Button>
+            </div>
           </div>
-          {(branchMode !== 'current' || worktreeMode === 'existing') && (
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              {branchMode !== 'current' && (
-                <Input
-                  value={branchName}
-                  onChange={(event) => setBranchName(event.target.value)}
-                  placeholder={branchMode === 'create' ? 'feature/new-work' : 'branch name'}
-                  list="workspace-start-branches"
-                  className="h-8 font-mono text-xs"
-                />
+
+          {optionsOpen && (
+            <div className="mt-3 border-t pt-3">
+              <div className="flex flex-wrap gap-2">
+                <FieldControl label="Agent">
+                  <SegmentedControl
+                    value={provider}
+                    options={providerOptions}
+                    onChange={setProvider}
+                  />
+                </FieldControl>
+                <FieldControl label="Branch">
+                  <SegmentedControl
+                    icon={<GitBranch className="h-3.5 w-3.5" />}
+                    value={branchMode}
+                    options={branchModeOptions}
+                    onChange={(value) => {
+                      setBranchMode(value);
+                      if (worktreeMode === 'isolated' && value === 'current') setBranchMode('create');
+                    }}
+                  />
+                </FieldControl>
+                <FieldControl label="Checkout">
+                  <SegmentedControl
+                    icon={<GitFork className="h-3.5 w-3.5" />}
+                    value={worktreeMode}
+                    options={worktreeModeOptions}
+                    onChange={(value) => {
+                      if (value === 'existing' && existingWorktrees.length === 0) return;
+                      setWorktreeMode(value);
+                      if (value === 'isolated' && branchMode === 'current') setBranchMode('create');
+                      if (value === 'existing' && !worktreePath) setWorktreePath(existingWorktrees[0] ?? '');
+                    }}
+                  />
+                </FieldControl>
+              </div>
+              {(branchMode !== 'current' || worktreeMode === 'existing') && (
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {branchMode !== 'current' && (
+                    <Input
+                      value={branchName}
+                      onChange={(event) => setBranchName(event.target.value)}
+                      placeholder={branchMode === 'create' ? 'feature/new-work' : 'branch name'}
+                      list="workspace-start-branches"
+                      className="h-8 font-mono text-xs"
+                    />
+                  )}
+                  {worktreeMode === 'existing' && (
+                    <Input
+                      value={worktreePath}
+                      onChange={(event) => setWorktreePath(event.target.value)}
+                      placeholder="worktree path"
+                      list="workspace-start-worktrees"
+                      className="h-8 font-mono text-xs"
+                    />
+                  )}
+                  <datalist id="workspace-start-branches">
+                    {branchChoices.map((branch) => <option key={branch} value={branch} />)}
+                  </datalist>
+                  <datalist id="workspace-start-worktrees">
+                    {existingWorktrees.map((path) => <option key={path} value={path} />)}
+                  </datalist>
+                </div>
               )}
-              {worktreeMode === 'existing' && (
-                <Input
-                  value={worktreePath}
-                  onChange={(event) => setWorktreePath(event.target.value)}
-                  placeholder="worktree path"
-                  list="workspace-start-worktrees"
-                  className="h-8 font-mono text-xs"
-                />
-              )}
-              <datalist id="workspace-start-branches">
-                {branchChoices.map((branch) => <option key={branch} value={branch} />)}
-              </datalist>
-              <datalist id="workspace-start-worktrees">
-                {existingWorktrees.map((path) => <option key={path} value={path} />)}
-              </datalist>
+              <p className="mt-2 px-1 text-[11px] text-muted-foreground">
+                Branch action applies inside the selected checkout. A new worktree needs a branch name.
+              </p>
             </div>
           )}
-          <p className="mt-2 px-1 text-[11px] text-muted-foreground">
-            Branch action applies inside the selected checkout. A new worktree needs a branch name.
-          </p>
         </form>
       </div>
     </section>

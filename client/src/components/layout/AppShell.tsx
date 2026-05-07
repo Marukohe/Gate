@@ -101,6 +101,7 @@ export function AppShell({
                   workspaceId={inspectorWorkspaceId}
                   onSendToChat={onSendToChat}
                   onSelectSession={onSelectSession}
+                  onClose={() => setRightPanelOpen(false)}
                 />
               ) : (
                 <>
@@ -139,6 +140,7 @@ export function AppShell({
                   workspaceId={inspectorWorkspaceId}
                   onSendToChat={onSendToChat}
                   onSelectSession={onSelectSession}
+                  onClose={() => setRightPanelOpen(false)}
                 />
               </div>
             ) : (

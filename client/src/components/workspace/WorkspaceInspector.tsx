@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { ExternalLink, GitBranch, Loader2, Play, Send, SquareTerminal, Trash2 } from 'lucide-react';
+import { ExternalLink, GitBranch, Loader2, Play, Send, SquareTerminal, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -14,6 +14,7 @@ interface WorkspaceInspectorProps {
   workspaceId: string;
   onSendToChat: (text: string) => void;
   onSelectSession?: (serverId: string, sessionId: string) => void;
+  onClose?: () => void;
 }
 
 const EMPTY_TERMINAL_ENTRIES: WorkspaceTerminalEntry[] = [];
@@ -25,7 +26,7 @@ function pickPrimarySession(workspaceId: string, primarySessionId: string | null
     ?? null;
 }
 
-export function WorkspaceInspector({ workspaceId, onSendToChat, onSelectSession }: WorkspaceInspectorProps) {
+export function WorkspaceInspector({ workspaceId, onSendToChat, onSelectSession, onClose }: WorkspaceInspectorProps) {
   const workspace = useWorkspaceStore((s) => s.workspaces[workspaceId]);
   const snapshot = useWorkspaceStore((s) => s.inspectors[workspaceId]);
   const runResult = useWorkspaceStore((s) => s.runResults[workspaceId]);
@@ -71,7 +72,14 @@ export function WorkspaceInspector({ workspaceId, onSendToChat, onSelectSession 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-background">
       <div className="border-b px-3 py-2">
-        <div className="truncate text-xs font-semibold">{workspace?.name ?? 'Workspace'}</div>
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1 truncate text-xs font-semibold">{workspace?.name ?? 'Workspace'}</div>
+          {onClose && (
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose} title="Close tools">
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
         <div className="mt-1 flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
           {branch && (
             <span className="flex min-w-0 items-center gap-1">

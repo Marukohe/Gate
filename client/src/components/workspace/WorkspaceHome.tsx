@@ -1,9 +1,13 @@
-import { Check, GitBranch, Pencil, Plus, Settings2, Trash2, X } from 'lucide-react';
+import { Check, GitBranch, MoreHorizontal, PanelRight, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 import { useSessionStore, type Session } from '@/stores/session-store';
 import { useServerStore } from '@/stores/server-store';
+import { useUIStore } from '@/stores/ui-store';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { WorkspaceStart } from './WorkspaceStart';
 import {
@@ -37,9 +41,9 @@ export function WorkspaceHome({ workspaceId, onNewSession, onStartTask, onSelect
   const agentStatus = useSessionStore((s) => s.agentStatus);
   const serverName = useServerStore((s) => s.servers.find((sv) => sv.id === ws?.serverId)?.name ?? '');
   const workspaceBranches = useWorkspaceStore((s) => s.branches[workspaceId]);
+  const setRightPanelOpen = useUIStore((s) => s.setRightPanelOpen);
   const { updateWorkspace, deleteWorkspace, listWorkspaceBranches } = useWebSocket();
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
 
@@ -60,6 +64,10 @@ export function WorkspaceHome({ workspaceId, onNewSession, onStartTask, onSelect
   function isWorking(s?: { state: string }): boolean {
     return !!s && (s.state === 'thinking' || s.state === 'tool_call');
   }
+  function compactPath(path: string): string {
+    const parts = path.split('/').filter(Boolean);
+    return parts.length > 2 ? parts.slice(-2).join('/') : path;
+  }
 
   if (!ws) {
     return <div className="p-8 text-sm text-muted-foreground">Workspace not found.</div>;
@@ -70,6 +78,7 @@ export function WorkspaceHome({ workspaceId, onNewSession, onStartTask, onSelect
   const displayBranch = primaryGit?.branch ?? workspaceBranches?.current ?? ws.defaultBranch;
   const baseCheckoutPath = primaryGit?.worktree ?? primarySession?.workingDir ?? ws.repoPath;
   const displayPath = baseCheckoutPath;
+  const changedFileLabel = ws.dirtyFileCount === 1 ? '1 changed file' : `${ws.dirtyFileCount ?? 0} changed files`;
 
   const startRename = () => {
     setNameDraft(ws.name);
@@ -122,24 +131,57 @@ export function WorkspaceHome({ workspaceId, onNewSession, onStartTask, onSelect
                   </Button>
                 </div>
               ) : (
-                <>
-                  <h1 className="truncate text-xl font-semibold">{ws.name}</h1>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={startRename} title="Rename workspace">
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                </>
+                <h1 className="truncate text-xl font-semibold">{ws.name}</h1>
               )}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>{serverName || 'server'}</span>
               {displayBranch && (<><span>·</span><span className="flex items-center gap-1"><GitBranch className="h-3 w-3" />{displayBranch}</span></>)}
-              {ws.remoteUrl && (<><span>·</span><a href={ws.remoteUrl} target="_blank" rel="noreferrer" className="underline">{ws.remoteUrl}</a></>)}
+              <span>·</span>
+              <span>{sessions.length} session{sessions.length === 1 ? '' : 's'}</span>
+              {ws.dirtyFileCount !== null && (
+                <>
+                  <span>·</span>
+                  <button
+                    type="button"
+                    className="text-foreground underline-offset-2 hover:underline"
+                    onClick={() => setRightPanelOpen(true)}
+                  >
+                    {changedFileLabel}
+                  </button>
+                </>
+              )}
             </div>
-            <div className="mt-1 font-mono text-[11px] text-muted-foreground">{displayPath}</div>
+            <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground" title={displayPath}>
+              {compactPath(displayPath)}
+            </div>
           </div>
-          <Button size="sm" onClick={onNewSession}>
-            <Plus className="h-4 w-4" /> New session
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setRightPanelOpen(true)}>
+              <PanelRight className="h-4 w-4" />
+              Tools
+            </Button>
+            <Button size="sm" onClick={onNewSession}>
+              <Plus className="h-4 w-4" /> New session
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8" title="Workspace actions">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={startRename}>
+                  <Pencil className="h-4 w-4" />
+                  Rename
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setConfirmDelete(true)} variant="destructive">
+                  <Trash2 className="h-4 w-4" />
+                  Delete workspace
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
 
@@ -200,23 +242,6 @@ export function WorkspaceHome({ workspaceId, onNewSession, onStartTask, onSelect
           </ul>
         </section>
       )}
-
-      <section className="px-6 py-4 border-t mt-auto">
-        <button
-          className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground"
-          onClick={() => setSettingsOpen((open) => !open)}
-        >
-          <Settings2 className="h-3.5 w-3.5" />
-          Workspace settings
-        </button>
-        {settingsOpen && (
-          <div className="mt-3">
-            <Button variant="ghost" size="sm" className="h-8 text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)}>
-              <Trash2 className="h-4 w-4" /> Delete workspace
-            </Button>
-          </div>
-        )}
-      </section>
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>

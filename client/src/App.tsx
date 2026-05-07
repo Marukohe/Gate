@@ -19,6 +19,7 @@ import { useWebSocket } from '@/hooks/use-websocket';
 function App() {
   // Sync dark mode class on <html>
   const darkMode = useUIStore((s) => s.darkMode);
+  const setRightPanelOpen = useUIStore((s) => s.setRightPanelOpen);
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
     // Sync theme-color meta to avoid iOS PWA status bar flash on input method switch
@@ -44,8 +45,9 @@ function App() {
   const [route, setRoute] = useState<Route>({ kind: 'home' });
   const enterHome = useCallback(() => {
     setActiveWorkspace(null);
+    setRightPanelOpen(false);
     setRoute({ kind: 'home' });
-  }, [setActiveWorkspace]);
+  }, [setActiveWorkspace, setRightPanelOpen]);
   const enterWorkspace = useCallback((id: string) => setRoute({ kind: 'workspace', id }), []);
   const enterSession = useCallback(
     (serverId: string, sessionId: string) => setRoute({ kind: 'session', serverId, sessionId }),
@@ -243,8 +245,9 @@ function App() {
     if (!workspace) return;
     setActiveWorkspace(id);
     setActiveServer(workspace.serverId);
+    setRightPanelOpen(false);
     enterWorkspace(id);
-  }, [workspaces, setActiveWorkspace, setActiveServer, enterWorkspace]);
+  }, [workspaces, setActiveWorkspace, setActiveServer, setRightPanelOpen, enterWorkspace]);
 
   // Sidebar / Workspace Home / Command Center can all open a session: route to chat
   // and connect, also setting active workspace if the session is linked to one.
