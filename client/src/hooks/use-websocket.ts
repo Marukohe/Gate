@@ -24,6 +24,7 @@ const HEARTBEAT_TIMEOUT = 45_000;
 
 // Queued connect request — sent when WS opens
 let pendingConnect: { serverId: string; sessionId: string } | null = null;
+let pendingMessages: string[] = [];
 
 // One-shot callback for cli-sessions / claude-sessions response
 let cliSessionsCallback: ((sessions: string[]) => void) | null = null;
@@ -95,6 +96,22 @@ function sendConnect(socket: WebSocket, serverId: string, sessionId: string) {
   socket.send(JSON.stringify({ type: 'fetch-git-info', serverId, sessionId }));
 }
 
+function sendOrQueue(message: object) {
+  const payload = JSON.stringify(message);
+  if (ws?.readyState === WebSocket.OPEN) {
+    ws.send(payload);
+    return;
+  }
+  pendingMessages.push(payload);
+  setupSocket();
+}
+
+function flushPendingMessages(socket: WebSocket) {
+  const queued = pendingMessages;
+  pendingMessages = [];
+  for (const payload of queued) socket.send(payload);
+}
+
 function setupSocket() {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
     return;
@@ -127,6 +144,7 @@ function setupSocket() {
       pendingConnect = null;
       sendConnect(socket, target.serverId, target.sessionId);
     }
+    flushPendingMessages(socket);
   };
 
   socket.onmessage = (event) => {
@@ -477,16 +495,7 @@ export function useWebSocket() {
 
   const runWorkspaceAction = useCallback((workspaceId: string, action: WorkspaceActionState['action'], options?: { title?: string; body?: string; commitMessage?: string; provider?: string }) => {
     useWorkspaceStore.getState().setActionResult(workspaceId, { action, status: 'running' });
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-      useWorkspaceStore.getState().setActionResult(workspaceId, {
-        action,
-        status: 'error',
-        error: 'WebSocket is not connected',
-      });
-      toast.error(`${actionLabel(action)} failed`, { description: 'WebSocket is not connected' });
-      return;
-    }
-    ws.send(JSON.stringify({ type: 'run-workspace-action', workspaceId, action, ...options }));
+    sendOrQueue({ type: 'run-workspace-action', workspaceId, action, ...options });
   }, []);
 
   const startWorkspaceTask = useCallback((workspaceId: string, goal: string, options?: {
