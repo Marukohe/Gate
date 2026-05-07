@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { ChevronDown, GitBranch, GitFork, SendHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -132,7 +135,7 @@ export function WorkspaceStart({
 
           {optionsOpen && (
             <div className="mt-3 border-t pt-3">
-              <div className="grid gap-3 lg:grid-cols-[minmax(0,10rem)_minmax(0,1.5fr)_minmax(0,1.5fr)]">
+              <div className="flex flex-wrap gap-2">
                 <FieldControl label="Agent">
                   <SegmentedControl
                     value={provider}
@@ -166,14 +169,34 @@ export function WorkspaceStart({
                 </FieldControl>
               </div>
               {(branchMode !== 'current' || worktreeMode === 'existing') && (
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {branchMode !== 'current' && (
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {branchMode === 'existing' && branchChoices.length > 0 ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 min-w-0 justify-between px-2 text-xs font-normal"
+                        >
+                          <span className="truncate">{branchName || 'Select branch'}</span>
+                          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="max-h-72 w-64 overflow-y-auto">
+                        {branchChoices.map((branch) => (
+                          <DropdownMenuItem key={branch} onClick={() => setBranchName(branch)}>
+                            <span className="truncate">{branch}</span>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : branchMode !== 'current' && (
                     <Input
                       value={branchName}
                       onChange={(event) => setBranchName(event.target.value)}
                       placeholder={branchMode === 'create' ? 'feature/new-work' : 'branch name'}
-                      list="workspace-start-branches"
-                      className="h-8 bg-muted/20 text-sm font-normal shadow-none focus-visible:ring-1"
+                      className="h-8 font-mono text-xs"
                     />
                   )}
                   {worktreeMode === 'existing' && (
@@ -182,18 +205,15 @@ export function WorkspaceStart({
                       onChange={(event) => setWorktreePath(event.target.value)}
                       placeholder="worktree path"
                       list="workspace-start-worktrees"
-                      className="h-8 bg-muted/20 text-sm font-normal shadow-none focus-visible:ring-1"
+                      className="h-8 font-mono text-xs"
                     />
                   )}
-                  <datalist id="workspace-start-branches">
-                    {branchChoices.map((branch) => <option key={branch} value={branch} />)}
-                  </datalist>
                   <datalist id="workspace-start-worktrees">
                     {existingWorktrees.map((path) => <option key={path} value={path} />)}
                   </datalist>
                 </div>
               )}
-              <p className="mt-3 px-1 text-[11px] text-muted-foreground/80">
+              <p className="mt-2 px-1 text-[11px] text-muted-foreground">
                 Branch changes apply inside the selected worktree. A new worktree needs a branch name.
               </p>
             </div>
@@ -212,7 +232,7 @@ function compactPath(path: string): string {
 function FieldControl({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="px-1 text-[10px] font-medium text-muted-foreground">{label}</span>
+      <span className="px-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
       {children}
     </label>
   );
@@ -230,14 +250,14 @@ function SegmentedControl<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-1 rounded border bg-muted/10 p-0.5">
+    <div className="flex items-center gap-1 rounded border bg-muted/20 p-0.5">
       {icon && <span className="px-1 text-muted-foreground">{icon}</span>}
       {options.map((option) => (
         <button
           key={option.name}
           type="button"
           className={cn(
-            'min-w-0 rounded px-2 py-1 text-xs font-medium transition-colors',
+            'rounded px-2 py-1 text-xs font-medium transition-colors',
             value === option.name
               ? 'bg-primary text-primary-foreground'
               : 'text-muted-foreground hover:bg-accent hover:text-foreground',
