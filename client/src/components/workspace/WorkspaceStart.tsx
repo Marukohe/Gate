@@ -29,15 +29,15 @@ const providerOptions = [
 ];
 
 const branchModeOptions = [
-  { name: 'current', label: 'Current' },
-  { name: 'existing', label: 'Existing' },
-  { name: 'create', label: 'New' },
+  { name: 'current', label: 'Keep current' },
+  { name: 'existing', label: 'Switch branch' },
+  { name: 'create', label: 'Create branch' },
 ] as const;
 
 const worktreeModeOptions = [
-  { name: 'main', label: 'Main' },
-  { name: 'isolated', label: 'Worktree' },
-  { name: 'existing', label: 'Existing' },
+  { name: 'main', label: 'Current checkout' },
+  { name: 'isolated', label: 'New worktree' },
+  { name: 'existing', label: 'Existing worktree' },
 ] as const;
 
 export function WorkspaceStart({
@@ -96,31 +96,37 @@ export function WorkspaceStart({
           />
           <div className="mt-2 flex flex-col gap-2 border-t pt-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-2">
-              <SegmentedControl
-                value={provider}
-                options={providerOptions}
-                onChange={setProvider}
-              />
-              <SegmentedControl
-                icon={<GitBranch className="h-3.5 w-3.5" />}
-                value={branchMode}
-                options={branchModeOptions}
-                onChange={(value) => {
-                  setBranchMode(value);
-                  if (worktreeMode === 'isolated' && value === 'current') setBranchMode('create');
-                }}
-              />
-              <SegmentedControl
-                icon={<GitFork className="h-3.5 w-3.5" />}
-                value={worktreeMode}
-                options={worktreeModeOptions}
-                onChange={(value) => {
-                  if (value === 'existing' && existingWorktrees.length === 0) return;
-                  setWorktreeMode(value);
-                  if (value === 'isolated' && branchMode === 'current') setBranchMode('create');
-                  if (value === 'existing' && !worktreePath) setWorktreePath(existingWorktrees[0] ?? '');
-                }}
-              />
+              <FieldControl label="Agent">
+                <SegmentedControl
+                  value={provider}
+                  options={providerOptions}
+                  onChange={setProvider}
+                />
+              </FieldControl>
+              <FieldControl label="Branch">
+                <SegmentedControl
+                  icon={<GitBranch className="h-3.5 w-3.5" />}
+                  value={branchMode}
+                  options={branchModeOptions}
+                  onChange={(value) => {
+                    setBranchMode(value);
+                    if (worktreeMode === 'isolated' && value === 'current') setBranchMode('create');
+                  }}
+                />
+              </FieldControl>
+              <FieldControl label="Checkout">
+                <SegmentedControl
+                  icon={<GitFork className="h-3.5 w-3.5" />}
+                  value={worktreeMode}
+                  options={worktreeModeOptions}
+                  onChange={(value) => {
+                    if (value === 'existing' && existingWorktrees.length === 0) return;
+                    setWorktreeMode(value);
+                    if (value === 'isolated' && branchMode === 'current') setBranchMode('create');
+                    if (value === 'existing' && !worktreePath) setWorktreePath(existingWorktrees[0] ?? '');
+                  }}
+                />
+              </FieldControl>
             </div>
             <Button type="submit" size="sm" disabled={!canSubmit || disabled}>
               <SendHorizontal className="h-4 w-4" />
@@ -155,9 +161,21 @@ export function WorkspaceStart({
               </datalist>
             </div>
           )}
+          <p className="mt-2 px-1 text-[11px] text-muted-foreground">
+            Branch action applies inside the selected checkout. A new worktree needs a branch name.
+          </p>
         </form>
       </div>
     </section>
+  );
+}
+
+function FieldControl({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="px-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
+      {children}
+    </label>
   );
 }
 

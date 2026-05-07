@@ -107,7 +107,7 @@ async function buildWorkspaceWithAggregates(
   let dirtyFileCount: number | null = null;
   if (sshManager.isConnected(ws.serverId)) {
     try {
-      const raw = await sshManager.fetchGitStatus(ws.serverId, ws.repoPath);
+      const raw = await sshManager.fetchGitStatus(ws.serverId, workspaceCheckoutPath(db, ws));
       dirtyFileCount = raw.split('\n').filter((l) => l.length > 0).length;
     } catch {
       dirtyFileCount = null;
@@ -123,6 +123,16 @@ function getProvider(db: Database, registry: ProviderRegistry, sessionId: string
   const provider = registry.get(providerName);
   if (!provider) throw new Error(`Unknown provider: ${providerName}`);
   return provider;
+}
+
+function workspaceCheckoutPath(db: Database, workspace: Workspace): string {
+  const primary = workspace.primarySessionId ? db.getSession(workspace.primarySessionId) : undefined;
+  if (primary?.workingDir) return primary.workingDir;
+
+  const latestSession = db
+    .listSessions(workspace.serverId)
+    .find((session) => session.workspaceId === workspace.id && session.workingDir);
+  return latestSession?.workingDir ?? workspace.repoPath;
 }
 
 function titleFromGoal(goal: string): string {
@@ -652,7 +662,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               } else {
                 await sshManager.ensureConnected(workspace.serverId);
               }
-              const branches = await sshManager.listBranches(workspace.serverId, workspace.repoPath);
+              const branches = await sshManager.listBranches(workspace.serverId, workspaceCheckoutPath(db, workspace));
               ws.send(JSON.stringify({
                 type: 'workspace-branches',
                 serverId: workspace.serverId,
@@ -678,7 +688,10 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             }
             if (sshManager.isConnected(inspector.serverId)) {
               try {
-                inspector.scripts = await sshManager.readRepoScripts(inspector.serverId, inspector.workspace.repoPath);
+                inspector.scripts = await sshManager.readRepoScripts(
+                  inspector.serverId,
+                  workspaceCheckoutPath(db, inspector.workspace),
+                );
               } catch {
                 inspector.scripts = {};
               }
@@ -719,7 +732,8 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               } else {
                 await sshManager.ensureConnected(workspace.serverId);
               }
-              const scripts = await sshManager.readRepoScripts(workspace.serverId, workspace.repoPath);
+              const checkoutPath = workspaceCheckoutPath(db, workspace);
+              const scripts = await sshManager.readRepoScripts(workspace.serverId, checkoutPath);
               const command = scripts[scriptName];
               if (!command) {
                 ws.send(JSON.stringify({ type: 'workspace-error', error: `Script not configured: ${scriptName}` }));
@@ -733,7 +747,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                 output: '',
                 urls: [],
               });
-              const output = await sshManager.runRepoScript(workspace.serverId, workspace.repoPath, command);
+              const output = await sshManager.runRepoScript(workspace.serverId, checkoutPath, command);
               broadcast(wss, {
                 type: 'workspace-run-result',
                 workspaceId: workspace.id,
@@ -785,8 +799,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               ws.send(JSON.stringify({ type: 'workspace-error', error: 'Server not found' }));
               break;
             }
-            const inspector = buildWorkspaceInspector(db, workspace.id);
-            const workingDir = inspector?.primarySession?.workingDir ?? workspace.repoPath;
+            const workingDir = workspaceCheckoutPath(db, workspace);
 
             try {
               if (!sshManager.isConnected(workspace.serverId)) {
@@ -851,7 +864,8 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               break;
             }
 
-            let workingDir = workspace.repoPath;
+            const baseRepoPath = workspaceCheckoutPath(db, workspace);
+            let workingDir = baseRepoPath;
             let startGitInfo: Awaited<ReturnType<SSHManager['fetchGitInfo']>> = null;
             try {
               if (!sshManager.isConnected(workspace.serverId)) {
@@ -867,7 +881,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               } else {
                 await sshManager.ensureConnected(workspace.serverId);
               }
-              const prepared = await sshManager.prepareWorkspaceStart(workspace.serverId, workspace.repoPath, {
+              const prepared = await sshManager.prepareWorkspaceStart(workspace.serverId, baseRepoPath, {
                 branchMode: workspaceBranchMode(msg.branchMode),
                 branchName: msg.branchName,
                 worktreeMode: workspaceWorktreeMode(msg.worktreeMode),

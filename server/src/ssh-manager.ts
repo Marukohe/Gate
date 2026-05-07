@@ -82,10 +82,10 @@ export function parseGitProbeOutput(stdout: string): GitProbeResult | null {
 
   const commonDirRaw = lines[1] || '';
   // For a main worktree, `--git-common-dir` is `<repo>/.git`; for a secondary
-  // worktree it points at the same `<main-repo>/.git`. Stripping `/.git` (or
-  // a trailing `.git`) yields the canonical main worktree path.
+  // worktree it points at the same `<main-repo>/.git`. Repo-style checkouts
+  // keep git metadata under `.repo/projects`, which is not the working tree.
   let canonicalPath = toplevel;
-  if (commonDirRaw && commonDirRaw.startsWith('/')) {
+  if (commonDirRaw && commonDirRaw.startsWith('/') && !commonDirRaw.includes('/.repo/')) {
     canonicalPath = commonDirRaw.replace(/\/?\.git\/?$/, '') || toplevel;
   }
 

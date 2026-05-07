@@ -58,4 +58,15 @@ describe('parseGitProbeOutput', () => {
     // Falls back to toplevel when common-dir is relative
     expect(result?.canonicalPath).toBe('/home/user/proj');
   });
+
+  it('keeps repo checkout toplevel when git common dir is under .repo', () => {
+    const stdout = [
+      '/home/hewei/standalone/arkcompiler/ets_runtime',
+      '/home/hewei/standalone/.repo/projects/arkcompiler/ets_runtime.git',
+      '',
+      'refs/remotes/origin/main',
+    ].join('\n');
+    const result = parseGitProbeOutput(stdout);
+    expect(result?.canonicalPath).toBe('/home/hewei/standalone/arkcompiler/ets_runtime');
+  });
 });
