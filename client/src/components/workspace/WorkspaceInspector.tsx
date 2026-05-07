@@ -7,7 +7,7 @@ import { ChangesPanel } from '@/components/changes/ChangesPanel';
 import { PlanPanel } from '@/components/plan/PlanPanel';
 import { WorkspaceActionBar } from './WorkspaceActionBar';
 import { useSessionStore, type Session } from '@/stores/session-store';
-import { useWorkspaceStore } from '@/stores/workspace-store';
+import { useWorkspaceStore, type WorkspaceTerminalEntry } from '@/stores/workspace-store';
 import { useWebSocket } from '@/hooks/use-websocket';
 
 interface WorkspaceInspectorProps {
@@ -15,6 +15,8 @@ interface WorkspaceInspectorProps {
   onSendToChat: (text: string) => void;
   onSelectSession?: (serverId: string, sessionId: string) => void;
 }
+
+const EMPTY_TERMINAL_ENTRIES: WorkspaceTerminalEntry[] = [];
 
 function pickPrimarySession(workspaceId: string, primarySessionId: string | null, sessions: Session[]): Session | null {
   const visible = sessions.filter((session) => session.workspaceId === workspaceId && !session.isHidden);
@@ -27,7 +29,7 @@ export function WorkspaceInspector({ workspaceId, onSendToChat, onSelectSession 
   const workspace = useWorkspaceStore((s) => s.workspaces[workspaceId]);
   const snapshot = useWorkspaceStore((s) => s.inspectors[workspaceId]);
   const runResult = useWorkspaceStore((s) => s.runResults[workspaceId]);
-  const terminalEntries = useWorkspaceStore((s) => s.terminalEntries[workspaceId] ?? []);
+  const terminalEntries = useWorkspaceStore((s) => s.terminalEntries[workspaceId] ?? EMPTY_TERMINAL_ENTRIES);
   const clearTerminal = useWorkspaceStore((s) => s.clearTerminal);
   const sessionsByServer = useSessionStore((s) => s.sessions);
   const gitInfo = useSessionStore((s) => s.gitInfo);
