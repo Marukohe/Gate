@@ -6,7 +6,12 @@ import { useChatStore } from '../stores/chat-store';
 import { usePlanModeStore } from '../stores/plan-mode-store';
 import { useUIStore } from '../stores/ui-store';
 import { useGitStore, parseGitStatusPorcelain } from '../stores/git-store';
-import { useWorkspaceStore, type WorkspacePrState, type WorkspaceStatus } from '../stores/workspace-store';
+import {
+  useWorkspaceStore,
+  type WorkspaceActionState,
+  type WorkspacePrState,
+  type WorkspaceStatus,
+} from '../stores/workspace-store';
 import { triggerTaskNotification } from '../lib/notification';
 
 let ws: WebSocket | null = null;
@@ -470,8 +475,17 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'run-workspace-script', workspaceId, scriptName }));
   }, []);
 
-  const runWorkspaceAction = useCallback((workspaceId: string, action: string, options?: { title?: string; body?: string; commitMessage?: string; provider?: string }) => {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const runWorkspaceAction = useCallback((workspaceId: string, action: WorkspaceActionState['action'], options?: { title?: string; body?: string; commitMessage?: string; provider?: string }) => {
+    useWorkspaceStore.getState().setActionResult(workspaceId, { action, status: 'running' });
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      useWorkspaceStore.getState().setActionResult(workspaceId, {
+        action,
+        status: 'error',
+        error: 'WebSocket is not connected',
+      });
+      toast.error(`${actionLabel(action)} failed`, { description: 'WebSocket is not connected' });
+      return;
+    }
     ws.send(JSON.stringify({ type: 'run-workspace-action', workspaceId, action, ...options }));
   }, []);
 

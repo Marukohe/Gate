@@ -802,6 +802,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             }
             const workingDir = workspaceCheckoutPath(db, workspace);
 
+            broadcast(wss, { type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'running' });
             try {
               if (!sshManager.isConnected(workspace.serverId)) {
                 await sshManager.connect({
@@ -817,7 +818,6 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                 await sshManager.ensureConnected(workspace.serverId);
               }
 
-              broadcast(wss, { type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'running' });
               if (action === 'generate-commit-message') {
                 const message = await sshManager.generateCommitMessage(workspace.serverId, workingDir, msg.provider);
                 broadcast(wss, { type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'done', message });
