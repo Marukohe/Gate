@@ -11,6 +11,7 @@ import {
   type WorkspaceActionState,
   type WorkspacePrState,
   type WorkspaceStatus,
+  type WorkspaceTerminalEntry,
 } from '../stores/workspace-store';
 import { triggerTaskNotification } from '../lib/notification';
 
@@ -71,6 +72,10 @@ function actionDoneLabel(action: string): string {
   if (action === 'mark-done') return 'Workspace marked done';
   if (action === 'mark-canceled') return 'Workspace canceled';
   return 'Workspace action finished';
+}
+
+function newRequestId(): string {
+  return window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 // Track the last session/server we sent a connect for so we don't spam the server.
@@ -318,6 +323,18 @@ function setupSocket() {
           }
         }
         break;
+      case 'exec-result':
+        if (data.workspaceId && data.requestId) {
+          useWorkspaceStore.getState().updateTerminalEntry(data.workspaceId, data.requestId, {
+            status: data.status ?? (data.exitCode === 0 ? 'done' : 'error'),
+            stdout: data.stdout ?? '',
+            stderr: data.stderr ?? '',
+            exitCode: typeof data.exitCode === 'number' ? data.exitCode : null,
+            error: data.error,
+            finishedAt: Date.now(),
+          });
+        }
+        break;
       case 'workspace-task-started':
         if (data.workspace) useWorkspaceStore.getState().upsertWorkspace(data.workspace);
         if (data.session) {
@@ -545,6 +562,31 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'exec', serverId, sessionId, command }));
   }, []);
 
+  const execTerminalCommand = useCallback((serverId: string, sessionId: string, workspaceId: string, command: string) => {
+    const trimmed = command.trim();
+    if (!trimmed) return;
+    const requestId = newRequestId();
+    const entry: WorkspaceTerminalEntry = {
+      id: requestId,
+      command: trimmed,
+      status: 'running',
+      stdout: '',
+      stderr: '',
+      exitCode: null,
+      startedAt: Date.now(),
+    };
+    useWorkspaceStore.getState().addTerminalEntry(workspaceId, entry);
+    sendOrQueue({
+      type: 'exec',
+      serverId,
+      sessionId,
+      workspaceId,
+      command: trimmed,
+      terminal: true,
+      requestId,
+    });
+  }, []);
+
   const syncTranscript = useCallback((serverId: string, sessionId: string) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     useUIStore.getState().setSyncStatus(sessionId, { state: 'syncing' });
@@ -621,5 +663,5 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'load-more', serverId, sessionId, beforeTimestamp }));
   }, []);
 
-  return { connectToSession, sendInput, interruptSession, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, resetConversation, resumeCliSession, loadMoreMessages, fetchGitStatus, fetchGitDiff, fetchPRInfo, gitCommit, gitCreatePR, revertToCheckpoint, listCheckpoints, listWorkspaces, createWorkspace, deleteWorkspace, updateWorkspace, setWorkspaceStatus, pinWorkspace, archiveWorkspace, restoreWorkspace, listWorkspaceBranches, fetchWorkspaceInspector, runWorkspaceScript, runWorkspaceAction, startWorkspaceTask };
+  return { connectToSession, sendInput, interruptSession, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, execTerminalCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, resetConversation, resumeCliSession, loadMoreMessages, fetchGitStatus, fetchGitDiff, fetchPRInfo, gitCommit, gitCreatePR, revertToCheckpoint, listCheckpoints, listWorkspaces, createWorkspace, deleteWorkspace, updateWorkspace, setWorkspaceStatus, pinWorkspace, archiveWorkspace, restoreWorkspace, listWorkspaceBranches, fetchWorkspaceInspector, runWorkspaceScript, runWorkspaceAction, startWorkspaceTask };
 }

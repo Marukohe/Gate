@@ -45,6 +45,18 @@ export interface WorkspaceActionState {
   updatedAt: number;
 }
 
+export interface WorkspaceTerminalEntry {
+  id: string;
+  command: string;
+  status: 'running' | 'done' | 'error';
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+  error?: string;
+  startedAt: number;
+  finishedAt?: number;
+}
+
 export interface WorkspaceWithAggregates {
   id: string;
   serverId: string;
@@ -74,6 +86,7 @@ interface WorkspaceStore {
   inspectors: Record<string, WorkspaceInspectorSnapshot>;
   runResults: Record<string, WorkspaceRunState>;
   actionResults: Record<string, WorkspaceActionState>;
+  terminalEntries: Record<string, WorkspaceTerminalEntry[]>;
   activeWorkspaceId: string | null;
   setWorkspaces: (list: WorkspaceWithAggregates[]) => void;
   upsertWorkspace: (ws: WorkspaceWithAggregates) => void;
@@ -81,6 +94,9 @@ interface WorkspaceStore {
   setInspector: (snapshot: WorkspaceInspectorSnapshot) => void;
   setRunResult: (workspaceId: string, result: Omit<WorkspaceRunState, 'updatedAt'>) => void;
   setActionResult: (workspaceId: string, result: Omit<WorkspaceActionState, 'updatedAt'>) => void;
+  addTerminalEntry: (workspaceId: string, entry: WorkspaceTerminalEntry) => void;
+  updateTerminalEntry: (workspaceId: string, entryId: string, updates: Partial<WorkspaceTerminalEntry>) => void;
+  clearTerminal: (workspaceId: string) => void;
   removeWorkspace: (id: string) => void;
   setActiveWorkspace: (id: string | null) => void;
   list: () => WorkspaceWithAggregates[];
@@ -95,6 +111,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       inspectors: {},
       runResults: {},
       actionResults: {},
+      terminalEntries: {},
       activeWorkspaceId: null,
       setWorkspaces: (list) => set({
         workspaces: Object.fromEntries(list.map((w) => [w.id, w])),
@@ -120,23 +137,43 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           [workspaceId]: { ...result, updatedAt: Date.now() },
         },
       })),
+      addTerminalEntry: (workspaceId, entry) => set((s) => ({
+        terminalEntries: {
+          ...s.terminalEntries,
+          [workspaceId]: [...(s.terminalEntries[workspaceId] ?? []), entry].slice(-50),
+        },
+      })),
+      updateTerminalEntry: (workspaceId, entryId, updates) => set((s) => ({
+        terminalEntries: {
+          ...s.terminalEntries,
+          [workspaceId]: (s.terminalEntries[workspaceId] ?? []).map((entry) => (
+            entry.id === entryId ? { ...entry, ...updates } : entry
+          )),
+        },
+      })),
+      clearTerminal: (workspaceId) => set((s) => ({
+        terminalEntries: { ...s.terminalEntries, [workspaceId]: [] },
+      })),
       removeWorkspace: (id) => set((s) => {
         const rest = { ...s.workspaces };
         const branches = { ...s.branches };
         const inspectors = { ...s.inspectors };
         const runResults = { ...s.runResults };
         const actionResults = { ...s.actionResults };
+        const terminalEntries = { ...s.terminalEntries };
         delete rest[id];
         delete branches[id];
         delete inspectors[id];
         delete runResults[id];
         delete actionResults[id];
+        delete terminalEntries[id];
         return {
           workspaces: rest,
           branches,
           inspectors,
           runResults,
           actionResults,
+          terminalEntries,
           activeWorkspaceId: s.activeWorkspaceId === id ? null : s.activeWorkspaceId,
         };
       }),

@@ -42,6 +42,8 @@ interface ClientMessage {
   text?: string;
   branch?: string;
   command?: string;
+  requestId?: string;
+  terminal?: boolean;
   claudeSessionId?: string;
   beforeTimestamp?: number;
   provider?: string;
@@ -77,6 +79,7 @@ interface ServerMessage {
     | 'git-info' | 'branches' | 'sync-result'
     | 'claude-sessions' | 'cli-sessions'
     | 'git-status' | 'git-diff' | 'pr-info' | 'git-commit-result' | 'git-create-pr-result'
+    | 'exec-result'
     | 'checkpoints' | 'checkpoint-reverted'
     | 'workspace-list' | 'workspace-update' | 'workspace-deleted' | 'session-update'
     | 'workspace-branches' | 'workspace-inspector' | 'workspace-run-result' | 'workspace-action-result'
@@ -1075,13 +1078,97 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
 
           case 'exec': {
             if (!msg.sessionId || !msg.command) return;
-            if (!sshManager.isConnected(serverId)) {
-              ws.send(JSON.stringify({ type: 'status', serverId: serverId, sessionId: msg.sessionId, status: 'error', error: 'Not connected to server' }));
+            const execServer = db.getServer(serverId);
+            if (!execServer) {
+              if (msg.terminal) {
+                ws.send(JSON.stringify({
+                  type: 'exec-result',
+                  serverId: serverId,
+                  sessionId: msg.sessionId,
+                  workspaceId: msg.workspaceId,
+                  requestId: msg.requestId,
+                  command: msg.command,
+                  status: 'error',
+                  stdout: '',
+                  stderr: '',
+                  exitCode: null,
+                  error: 'Server not found',
+                }));
+                return;
+              }
+              ws.send(JSON.stringify({ type: 'status', serverId: serverId, sessionId: msg.sessionId, status: 'error', error: 'Server not found' }));
+              return;
+            }
+            try {
+              const config: ServerConfig = {
+                id: execServer.id,
+                host: execServer.host,
+                port: execServer.port,
+                username: execServer.username,
+                authType: execServer.authType as 'password' | 'privateKey',
+                password: execServer.password ?? undefined,
+                privateKeyPath: execServer.privateKeyPath ?? undefined,
+              };
+              if (!sshManager.isConnected(serverId)) {
+                await sshManager.connect(config);
+              } else {
+                await sshManager.ensureConnected(serverId);
+              }
+            } catch (err: any) {
+              if (msg.terminal) {
+                ws.send(JSON.stringify({
+                  type: 'exec-result',
+                  serverId: serverId,
+                  sessionId: msg.sessionId,
+                  workspaceId: msg.workspaceId,
+                  requestId: msg.requestId,
+                  command: msg.command,
+                  status: 'error',
+                  stdout: '',
+                  stderr: '',
+                  exitCode: null,
+                  error: err.message,
+                }));
+                return;
+              }
+              ws.send(JSON.stringify({ type: 'status', serverId: serverId, sessionId: msg.sessionId, status: 'error', error: err.message }));
               return;
             }
 
             const execSession = db.getSession(msg.sessionId);
             const execDir = execSession?.workingDir ?? null;
+            if (msg.terminal) {
+              try {
+                const { stdout, stderr, exitCode } = await sshManager.runCommand(serverId, execDir, msg.command);
+                ws.send(JSON.stringify({
+                  type: 'exec-result',
+                  serverId: serverId,
+                  sessionId: msg.sessionId,
+                  workspaceId: msg.workspaceId,
+                  requestId: msg.requestId,
+                  command: msg.command,
+                  status: exitCode === 0 ? 'done' : 'error',
+                  stdout,
+                  stderr,
+                  exitCode,
+                }));
+              } catch (err: any) {
+                ws.send(JSON.stringify({
+                  type: 'exec-result',
+                  serverId: serverId,
+                  sessionId: msg.sessionId,
+                  workspaceId: msg.workspaceId,
+                  requestId: msg.requestId,
+                  command: msg.command,
+                  status: 'error',
+                  stdout: '',
+                  stderr: '',
+                  exitCode: null,
+                  error: err.message,
+                }));
+              }
+              break;
+            }
 
             // Save the user !command to DB for history persistence
             db.saveMessage({

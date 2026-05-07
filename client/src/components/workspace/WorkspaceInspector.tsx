@@ -1,6 +1,7 @@
-import { useEffect, useMemo } from 'react';
-import { ExternalLink, GitBranch, Loader2, Play, SquareTerminal } from 'lucide-react';
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ExternalLink, GitBranch, Loader2, Play, Send, SquareTerminal, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ChangesPanel } from '@/components/changes/ChangesPanel';
 import { PlanPanel } from '@/components/plan/PlanPanel';
@@ -26,9 +27,13 @@ export function WorkspaceInspector({ workspaceId, onSendToChat, onSelectSession 
   const workspace = useWorkspaceStore((s) => s.workspaces[workspaceId]);
   const snapshot = useWorkspaceStore((s) => s.inspectors[workspaceId]);
   const runResult = useWorkspaceStore((s) => s.runResults[workspaceId]);
+  const terminalEntries = useWorkspaceStore((s) => s.terminalEntries[workspaceId] ?? []);
+  const clearTerminal = useWorkspaceStore((s) => s.clearTerminal);
   const sessionsByServer = useSessionStore((s) => s.sessions);
   const gitInfo = useSessionStore((s) => s.gitInfo);
-  const { fetchWorkspaceInspector, runWorkspaceScript } = useWebSocket();
+  const { fetchWorkspaceInspector, runWorkspaceScript, execTerminalCommand } = useWebSocket();
+  const [terminalCommand, setTerminalCommand] = useState('');
+  const terminalEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     fetchWorkspaceInspector(workspaceId);
@@ -48,6 +53,18 @@ export function WorkspaceInspector({ workspaceId, onSendToChat, onSelectSession 
   const targetSessionId = primarySession?.id ?? null;
   const branch = targetSessionId ? gitInfo[targetSessionId]?.branch : null;
   const worktree = targetSessionId ? gitInfo[targetSessionId]?.worktree : null;
+  const terminalReady = Boolean(targetServerId && targetSessionId);
+
+  useEffect(() => {
+    terminalEndRef.current?.scrollIntoView({ block: 'end' });
+  }, [terminalEntries]);
+
+  function submitTerminalCommand(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!targetServerId || !targetSessionId || !terminalCommand.trim()) return;
+    execTerminalCommand(targetServerId, targetSessionId, workspaceId, terminalCommand);
+    setTerminalCommand('');
+  }
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-background">
@@ -139,13 +156,79 @@ export function WorkspaceInspector({ workspaceId, onSendToChat, onSelectSession 
             </div>
           )}
         </TabsContent>
-        <TabsContent value="terminal" className="min-h-0 flex-1 overflow-y-auto p-3">
-          <div className="flex items-center gap-2 text-xs font-medium">
-            <SquareTerminal className="h-3.5 w-3.5" />
-            Terminal
-          </div>
-          <div className="mt-4 rounded border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
-            Terminal not connected
+        <TabsContent value="terminal" className="min-h-0 flex-1 overflow-hidden">
+          <div className="flex h-full flex-col">
+            <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+              <div className="flex min-w-0 items-center gap-2 text-xs font-medium">
+                <SquareTerminal className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Terminal</span>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                disabled={terminalEntries.length === 0}
+                onClick={() => clearTerminal(workspaceId)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+              {terminalEntries.length === 0 ? (
+                <div className="rounded border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+                  {terminalReady ? 'Run a command in the workspace checkout.' : 'Open a workspace session to use Terminal.'}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {terminalEntries.map((entry) => {
+                    const hasOutput = entry.stdout || entry.stderr || entry.error;
+                    return (
+                      <div key={entry.id} className="rounded-md border bg-card">
+                        <div className="flex items-center justify-between gap-2 border-b px-2 py-1.5">
+                          <code className="min-w-0 truncate text-[11px] font-semibold">$ {entry.command}</code>
+                          <span className="shrink-0 text-[10px] text-muted-foreground">
+                            {entry.status === 'running' ? 'running' : `exit ${entry.exitCode ?? '?'}`}
+                          </span>
+                        </div>
+                        {hasOutput ? (
+                          <pre className="max-h-80 overflow-auto whitespace-pre-wrap px-2 py-2 text-[11px] leading-relaxed">
+                            {entry.stdout}
+                            {entry.stderr ? `${entry.stdout ? '\n' : ''}${entry.stderr}` : ''}
+                            {entry.error ? `${entry.stdout || entry.stderr ? '\n' : ''}${entry.error}` : ''}
+                          </pre>
+                        ) : (
+                          <div className="px-2 py-3 text-[11px] text-muted-foreground">
+                            {entry.status === 'running' ? 'Waiting for output...' : '(no output)'}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <div ref={terminalEndRef} />
+                </div>
+              )}
+            </div>
+
+            <form className="flex items-center gap-2 border-t p-2" onSubmit={submitTerminalCommand}>
+              <span className="pl-1 font-mono text-xs text-muted-foreground">$</span>
+              <Input
+                value={terminalCommand}
+                onChange={(event) => setTerminalCommand(event.target.value)}
+                disabled={!terminalReady}
+                placeholder={terminalReady ? 'git status' : 'No session connected'}
+                className="h-8 font-mono text-xs"
+              />
+              <Button
+                type="submit"
+                size="sm"
+                disabled={!terminalReady || !terminalCommand.trim()}
+                className="h-8 px-2"
+              >
+                <Send className="h-3.5 w-3.5" />
+              </Button>
+            </form>
           </div>
         </TabsContent>
       </Tabs>
