@@ -791,7 +791,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                 const enriched = await buildWorkspaceWithAggregates(updated, db, sshManager);
                 broadcast(wss, { type: 'workspace-update', workspace: enriched });
               }
-              broadcast(wss, { type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'done' });
+              ws.send(JSON.stringify({ type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'done' }));
               break;
             }
 
@@ -802,7 +802,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
             }
             const workingDir = workspaceCheckoutPath(db, workspace);
 
-            broadcast(wss, { type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'running' });
+            ws.send(JSON.stringify({ type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'running' }));
             try {
               if (!sshManager.isConnected(workspace.serverId)) {
                 await sshManager.connect({
@@ -820,7 +820,7 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
 
               if (action === 'generate-commit-message') {
                 const message = await sshManager.generateCommitMessage(workspace.serverId, workingDir, msg.provider);
-                broadcast(wss, { type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'done', message });
+                ws.send(JSON.stringify({ type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'done', message }));
               } else if (action === 'commit-push') {
                 const message = msg.commitMessage?.trim() || workspace.goal || workspace.name;
                 const output = await sshManager.gitCommitAllAndPush(workspace.serverId, workingDir, message);
@@ -829,10 +829,10 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                   const enriched = await buildWorkspaceWithAggregates(updated, db, sshManager);
                   broadcast(wss, { type: 'workspace-update', workspace: enriched });
                 }
-                broadcast(wss, { type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'done', output });
+                ws.send(JSON.stringify({ type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'done', output }));
               } else if (action === 'push') {
                 const output = await sshManager.gitPush(workspace.serverId, workingDir);
-                broadcast(wss, { type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'done', output });
+                ws.send(JSON.stringify({ type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'done', output }));
               } else if (action === 'create-pr') {
                 const title = msg.title?.trim() || workspace.goal || workspace.name;
                 const url = await sshManager.gitCreatePR(workspace.serverId, workingDir, title, msg.body ?? '');
@@ -842,16 +842,16 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
                   const enriched = await buildWorkspaceWithAggregates(updated, db, sshManager);
                   broadcast(wss, { type: 'workspace-update', workspace: enriched });
                 }
-                broadcast(wss, { type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'done', url });
+                ws.send(JSON.stringify({ type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'done', url }));
               }
             } catch (err: any) {
-              broadcast(wss, {
+              ws.send(JSON.stringify({
                 type: 'workspace-action-result',
                 workspaceId: workspace.id,
                 action,
                 status: 'error',
                 error: err.message,
-              });
+              }));
             }
             break;
           }
