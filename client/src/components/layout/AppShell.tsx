@@ -13,6 +13,7 @@ interface AppShellProps {
   onAddServer: () => void;
   onEditServer: (server: Server) => void;
   onSendToChat: (text: string) => void;
+  onOpenHome?: () => void;
   onSelectSession?: (serverId: string, sessionId: string) => void;
   onSelectWorkspace?: (id: string) => void;
   onDeleteSession?: (serverId: string, sessionId: string) => void;
@@ -21,7 +22,7 @@ interface AppShellProps {
 }
 
 export function AppShell({
-  mainView, onAddServer, onEditServer, onSendToChat, onSelectSession,
+  mainView, onAddServer, onEditServer, onSendToChat, onOpenHome, onSelectSession,
   onSelectWorkspace, onDeleteSession, onAddWorkspace, inspectorWorkspaceId,
 }: AppShellProps) {
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
@@ -48,6 +49,7 @@ export function AppShell({
         <Sidebar
           onAddServer={onAddServer}
           onEditServer={onEditServer}
+          onOpenHome={onOpenHome}
           onSelectSession={onSelectSession}
           onSelectWorkspace={onSelectWorkspace}
           onDeleteSession={onDeleteSession}
@@ -73,6 +75,7 @@ export function AppShell({
             <Sidebar
               onAddServer={onAddServer}
               onEditServer={onEditServer}
+              onOpenHome={onOpenHome}
               onSelectSession={onSelectSession}
               onSelectWorkspace={onSelectWorkspace}
               onDeleteSession={onDeleteSession}

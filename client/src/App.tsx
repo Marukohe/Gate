@@ -42,6 +42,10 @@ function App() {
 
   type Route = { kind: 'home' } | { kind: 'workspace'; id: string } | { kind: 'session'; serverId: string; sessionId: string };
   const [route, setRoute] = useState<Route>({ kind: 'home' });
+  const enterHome = useCallback(() => {
+    setActiveWorkspace(null);
+    setRoute({ kind: 'home' });
+  }, [setActiveWorkspace]);
   const enterWorkspace = useCallback((id: string) => setRoute({ kind: 'workspace', id }), []);
   const enterSession = useCallback(
     (serverId: string, sessionId: string) => setRoute({ kind: 'session', serverId, sessionId }),
@@ -334,6 +338,7 @@ function App() {
         onAddServer={() => { setEditingServer(null); setServerDialogOpen(true); }}
         onEditServer={(server) => { setEditingServer(server); setServerDialogOpen(true); }}
         onSendToChat={handleSend}
+        onOpenHome={enterHome}
         onSelectSession={handleSidebarSelectSession}
         onSelectWorkspace={handleSelectWorkspace}
         onDeleteSession={handleDeleteSessionFromSidebar}

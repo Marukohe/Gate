@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Moon, Sun, Bell, FolderOpen, GitBranch as GitBranchIcon, ChevronDown, ChevronRight, Server, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Plus, Moon, Sun, Bell, FolderOpen, GitBranch as GitBranchIcon, ChevronDown, ChevronRight, Server, MoreHorizontal, Trash2, LayoutDashboard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils';
 interface SidebarProps {
   onAddServer: () => void;
   onEditServer: (server: ServerType) => void;
+  onOpenHome?: () => void;
   onSelectSession?: (serverId: string, sessionId: string) => void;
   onSelectWorkspace?: (workspaceId: string) => void;
   onDeleteSession?: (serverId: string, sessionId: string) => void;
@@ -76,7 +77,7 @@ function looseSessionName(name: string, workingDir: string | null): string {
   return name || basename(workingDir) || 'Session';
 }
 
-export function Sidebar({ onAddServer, onEditServer, onSelectSession, onSelectWorkspace, onDeleteSession, onAddWorkspace, onClose }: SidebarProps) {
+export function Sidebar({ onAddServer, onEditServer, onOpenHome, onSelectSession, onSelectWorkspace, onDeleteSession, onAddWorkspace, onClose }: SidebarProps) {
   const servers = useServerStore((s) => s.servers);
   const activeServerId = useServerStore((s) => s.activeServerId);
   const setActiveServer = useServerStore((s) => s.setActiveServer);
@@ -122,6 +123,16 @@ export function Sidebar({ onAddServer, onEditServer, onSelectSession, onSelectWo
         isMobile ? 'w-full' : 'h-full w-64 border-r',
       )}>
         <div className={cn('px-3 pb-3', !isMobile && 'pt-[max(0.75rem,env(safe-area-inset-top))]')}>
+          <button
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-medium text-foreground/80 hover:bg-accent/50 hover:text-accent-foreground"
+            onClick={() => { onOpenHome?.(); onClose?.(); }}
+            title="Open work queue"
+          >
+            <LayoutDashboard className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="truncate">Work Queue</span>
+          </button>
+        </div>
+        <div className="px-3 pb-3">
           <div className="mb-1.5 flex items-center justify-between">
             <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Servers</span>
             <button
