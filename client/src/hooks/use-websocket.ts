@@ -46,6 +46,7 @@ function stores() {
 }
 
 function actionLabel(action: string): string {
+  if (action === 'generate-commit-message') return 'generate commit message';
   if (action === 'commit-push') return 'commit and push';
   if (action === 'push') return 'push';
   if (action === 'create-pr') return 'create pull request';
@@ -56,6 +57,7 @@ function actionLabel(action: string): string {
 }
 
 function actionDoneLabel(action: string): string {
+  if (action === 'generate-commit-message') return 'Commit message generated';
   if (action === 'commit-push') return 'Committed and pushed';
   if (action === 'push') return 'Pushed';
   if (action === 'create-pr') return 'Pull request created';
@@ -282,6 +284,7 @@ function setupSocket() {
             action: data.action,
             status: data.status ?? 'done',
             output: data.output,
+            message: data.message,
             url: data.url,
             error: data.error,
           });
@@ -467,7 +470,7 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'run-workspace-script', workspaceId, scriptName }));
   }, []);
 
-  const runWorkspaceAction = useCallback((workspaceId: string, action: string, options?: { title?: string; body?: string; commitMessage?: string }) => {
+  const runWorkspaceAction = useCallback((workspaceId: string, action: string, options?: { title?: string; body?: string; commitMessage?: string; provider?: string }) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: 'run-workspace-action', workspaceId, action, ...options }));
   }, []);

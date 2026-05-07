@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Ban, Check, Eye, GitCommitHorizontal, GitPullRequest, Loader2, MoreHorizontal, Rocket,
 } from 'lucide-react';
@@ -14,13 +14,15 @@ import { Input } from '@/components/ui/input';
 import { CreatePRDialog } from '@/components/changes/CreatePRDialog';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 import { useWebSocket } from '@/hooks/use-websocket';
+import type { WorkspaceActionState } from '@/stores/workspace-store';
 
 interface WorkspaceActionBarProps {
   workspaceId: string;
   branch?: string | null;
+  provider?: string | null;
 }
 
-export function WorkspaceActionBar({ workspaceId, branch }: WorkspaceActionBarProps) {
+export function WorkspaceActionBar({ workspaceId, branch, provider }: WorkspaceActionBarProps) {
   const result = useWorkspaceStore((s) => s.actionResults[workspaceId]);
   const { runWorkspaceAction } = useWebSocket();
   const [prOpen, setPrOpen] = useState(false);
@@ -103,6 +105,9 @@ export function WorkspaceActionBar({ workspaceId, branch }: WorkspaceActionBarPr
         open={commitOpen}
         onOpenChange={setCommitOpen}
         branch={branch}
+        provider={provider}
+        result={result}
+        onGenerate={() => runWorkspaceAction(workspaceId, 'generate-commit-message', { provider: provider ?? undefined })}
         onSubmit={(commitMessage) => runWorkspaceAction(workspaceId, 'commit-push', { commitMessage })}
       />
     </div>
@@ -110,6 +115,7 @@ export function WorkspaceActionBar({ workspaceId, branch }: WorkspaceActionBarPr
 }
 
 function actionDoneLabel(action: string): string {
+  if (action === 'generate-commit-message') return 'Commit message generated.';
   if (action === 'commit-push') return 'Committed and pushed.';
   if (action === 'push') return 'Pushed.';
   if (action === 'mark-review') return 'Marked for review.';
@@ -122,14 +128,26 @@ function CommitPushDialog({
   open,
   onOpenChange,
   branch,
+  provider,
+  result,
+  onGenerate,
   onSubmit,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   branch?: string | null;
+  provider?: string | null;
+  result?: WorkspaceActionState;
+  onGenerate: () => void;
   onSubmit: (commitMessage: string) => void;
 }) {
   const [message, setMessage] = useState('');
+  const generating = result?.action === 'generate-commit-message' && result.status === 'running';
+
+  useEffect(() => {
+    if (!open || result?.action !== 'generate-commit-message' || result.status !== 'done' || !result.message) return;
+    setMessage(result.message);
+  }, [open, result?.action, result?.message, result?.status, result?.updatedAt]);
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -153,12 +171,22 @@ function CommitPushDialog({
               Branch: <span className="font-mono">{branch}</span>
             </div>
           )}
-          <Input
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
-            placeholder="Commit message"
-            autoFocus
-          />
+          <div className="flex gap-2">
+            <Input
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+              placeholder="Commit message"
+              autoFocus
+            />
+            <Button type="button" variant="outline" onClick={onGenerate} disabled={generating} title={provider ? `Generate with ${provider}` : 'Generate with AI'}>
+              {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Generate'}
+            </Button>
+          </div>
+          {result?.action === 'generate-commit-message' && result.status === 'error' && (
+            <div className="text-xs text-destructive" title={result.error}>
+              {result.error}
+            </div>
+          )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={!message.trim()}>Commit & push</Button>

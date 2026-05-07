@@ -19,4 +19,8 @@ describe('workspace actions', () => {
   it('accepts commit and push as a workspace action', () => {
     expect(normalizeWorkspaceAction('commit-push')).toBe('commit-push');
   });
+
+  it('accepts commit message generation as a workspace action', () => {
+    expect(normalizeWorkspaceAction('generate-commit-message')).toBe('generate-commit-message');
+  });
 });

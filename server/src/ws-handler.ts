@@ -818,7 +818,10 @@ export function setupWebSocket(httpServer: HttpServer, db: Database, registry: P
               }
 
               broadcast(wss, { type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'running' });
-              if (action === 'commit-push') {
+              if (action === 'generate-commit-message') {
+                const message = await sshManager.generateCommitMessage(workspace.serverId, workingDir, msg.provider);
+                broadcast(wss, { type: 'workspace-action-result', workspaceId: workspace.id, action, status: 'done', message });
+              } else if (action === 'commit-push') {
                 const message = msg.commitMessage?.trim() || workspace.goal || workspace.name;
                 const output = await sshManager.gitCommitAllAndPush(workspace.serverId, workingDir, message);
                 const updated = db.getWorkspace(workspace.id);

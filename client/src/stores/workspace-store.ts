@@ -36,9 +36,10 @@ export interface WorkspaceRunState {
 }
 
 export interface WorkspaceActionState {
-  action: 'commit-push' | 'push' | 'create-pr' | 'mark-review' | 'mark-done' | 'mark-canceled';
+  action: 'generate-commit-message' | 'commit-push' | 'push' | 'create-pr' | 'mark-review' | 'mark-done' | 'mark-canceled';
   status: 'running' | 'done' | 'error';
   output?: string;
+  message?: string;
   url?: string;
   error?: string;
   updatedAt: number;

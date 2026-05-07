@@ -58,6 +58,23 @@ function worktreeSlug(branchName: string): string {
     .slice(0, 48) || `task-${Date.now()}`;
 }
 
+function cleanCommitMessage(output: string): string {
+  const trimmed = output
+    .trim()
+    .replace(/^```(?:\w+)?\s*/i, '')
+    .replace(/```$/i, '')
+    .trim();
+  const line = trimmed
+    .split('\n')
+    .map((part) => part.trim())
+    .find((part) => part.length > 0) ?? '';
+  return line
+    .replace(/^["'`]|["'`]$/g, '')
+    .replace(/^commit message:\s*/i, '')
+    .trim()
+    .slice(0, 120);
+}
+
 export interface GitProbeResult {
   canonicalPath: string;
   remoteUrl: string | null;
@@ -267,7 +284,12 @@ export class SSHManager extends EventEmitter {
   }
 
   /** Run a one-shot command over SSH and return stdout, stderr, and exit code. */
-  async runCommand(serverId: string, workingDir: string | null, command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  async runCommand(
+    serverId: string,
+    workingDir: string | null,
+    command: string,
+    timeoutMs = 30_000,
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const conn = this.connections.get(serverId);
     if (!conn) throw new Error(`No connection for server ${serverId}`);
 
@@ -292,8 +314,8 @@ export class SSHManager extends EventEmitter {
 
         const timeout = setTimeout(() => {
           channel.close();
-          finish(null, new Error('Command timed out after 30 seconds'));
-        }, 30_000);
+          finish(null, new Error(`Command timed out after ${Math.round(timeoutMs / 1000)} seconds`));
+        }, timeoutMs);
 
         channel.on('data', (data: Buffer) => { stdout += data.toString(); });
         channel.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
@@ -528,6 +550,85 @@ export class SSHManager extends EventEmitter {
       .map((part) => part.trim())
       .filter(Boolean)
       .join('\n\n');
+  }
+
+  async generateCommitMessage(serverId: string, workingDir: string, preferredProvider?: string | null): Promise<string> {
+    const context = await this.commitMessageContext(serverId, workingDir);
+    const prompt = [
+      'Generate exactly one concise git commit message for these changes.',
+      'Rules:',
+      '- Output only the commit message, no markdown, no quotes, no explanation.',
+      '- Use imperative mood.',
+      '- Keep it under 72 characters.',
+      '- Prefer Conventional Commit style when a clear type is obvious.',
+      '',
+      context,
+    ].join('\n');
+
+    const providers = [
+      preferredProvider === 'codex' ? 'codex' : preferredProvider === 'claude' ? 'claude' : null,
+      'codex',
+      'claude',
+    ].filter((provider, index, all): provider is string => !!provider && all.indexOf(provider) === index);
+
+    const errors: string[] = [];
+    for (const provider of providers) {
+      try {
+        const output = provider === 'claude'
+          ? await this.generateCommitMessageWithClaude(serverId, workingDir, prompt)
+          : await this.generateCommitMessageWithCodex(serverId, workingDir, prompt);
+        const message = cleanCommitMessage(output);
+        if (message) return message;
+      } catch (err: any) {
+        errors.push(`${provider}: ${err.message}`);
+      }
+    }
+    throw new Error(`Commit message generation failed: ${errors.join('; ') || 'no provider available'}`);
+  }
+
+  private async commitMessageContext(serverId: string, workingDir: string): Promise<string> {
+    const status = await this.runCommand(serverId, workingDir, 'git status --porcelain', 30_000);
+    if (!status.stdout.trim()) throw new Error('No changes to summarize');
+
+    const stat = await this.runCommand(serverId, workingDir, 'git diff --stat && git diff --cached --stat', 30_000);
+    const names = await this.runCommand(serverId, workingDir, 'git diff --name-status && git diff --cached --name-status', 30_000);
+    const sample = await this.runCommand(serverId, workingDir, 'git diff --unified=2 | head -220', 30_000);
+
+    return [
+      'Git status:',
+      status.stdout.trim(),
+      '',
+      'Changed files:',
+      names.stdout.trim() || '(none)',
+      '',
+      'Diff stat:',
+      stat.stdout.trim() || '(none)',
+      '',
+      'Diff sample:',
+      sample.stdout.trim() || '(no tracked diff sample)',
+    ].join('\n').slice(0, 18_000);
+  }
+
+  private async generateCommitMessageWithCodex(serverId: string, workingDir: string, prompt: string): Promise<string> {
+    const result = await this.runCommand(
+      serverId,
+      workingDir,
+      `codex exec --full-auto ${shellQuote(prompt)}`,
+      90_000,
+    );
+    if (result.exitCode !== 0) throw new Error(result.stderr || result.stdout || 'codex failed');
+    return result.stdout || result.stderr;
+  }
+
+  private async generateCommitMessageWithClaude(serverId: string, workingDir: string, prompt: string): Promise<string> {
+    const result = await this.runCommand(
+      serverId,
+      workingDir,
+      `claude -p ${shellQuote(prompt)} --dangerously-skip-permissions`,
+      90_000,
+    );
+    if (result.exitCode !== 0) throw new Error(result.stderr || result.stdout || 'claude failed');
+    return result.stdout || result.stderr;
   }
 
   /** Get PR info for current branch. */

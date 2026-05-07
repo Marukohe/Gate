@@ -1,6 +1,7 @@
 import type { WorkspacePrState, WorkspaceStatus } from './db.js';
 
 export type WorkspaceAction =
+  | 'generate-commit-message'
   | 'commit-push'
   | 'push'
   | 'create-pr'
@@ -15,7 +16,8 @@ export interface WorkspaceActionUpdate {
 }
 
 export function normalizeWorkspaceAction(value?: string): WorkspaceAction | null {
-  return value === 'commit-push'
+  return value === 'generate-commit-message'
+    || value === 'commit-push'
     || value === 'push'
     || value === 'create-pr'
     || value === 'mark-review'
