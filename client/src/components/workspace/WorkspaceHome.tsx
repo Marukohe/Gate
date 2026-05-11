@@ -199,7 +199,7 @@ export function WorkspaceHome({ workspaceId, onNewSession, onStartTask, onSelect
         {sessions.length === 0 ? (
           <div className="text-xs text-muted-foreground">No sessions yet.</div>
         ) : (
-          <ul className="divide-y rounded border">
+          <ul className="space-y-2">
             {sessions.map((s) => {
               const git = gitInfo[s.id];
               const status = agentStatus[s.id];
@@ -208,18 +208,24 @@ export function WorkspaceHome({ workspaceId, onNewSession, onStartTask, onSelect
               return (
                 <li key={s.id}>
                   <button
-                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-accent/50"
+                    className="flex w-full items-start gap-3 rounded-md border bg-background px-3 py-2.5 text-left text-sm transition-colors hover:border-muted-foreground/30 hover:bg-accent/30"
                     onClick={() => onSelectSession(s.serverId, s.id)}
                   >
-                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${working ? (status?.state === 'tool_call' ? 'bg-purple-500' : 'bg-blue-500') : 'bg-muted-foreground/40'}`} />
-                    <span className="truncate flex-1">{s.name}</span>
-                    {isWorktree && git && (
-                      <span className="text-[11px] text-muted-foreground font-mono truncate max-w-[180px]" title={git.worktree}>{git.worktree}</span>
-                    )}
-                    {git && (
-                      <span className="text-[11px] text-muted-foreground flex items-center gap-1"><GitBranch className="h-3 w-3" />{git.branch}</span>
-                    )}
-                    <span className="text-[11px] text-muted-foreground shrink-0">{relativeTime(s.lastActiveAt)}</span>
+                    <span className={`mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 ${working ? (status?.state === 'tool_call' ? 'bg-purple-500' : 'bg-blue-500') : 'bg-muted-foreground/40'}`} />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-center gap-3">
+                        <span className="truncate font-medium">{s.name}</span>
+                        <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{relativeTime(s.lastActiveAt)}</span>
+                      </span>
+                      <span className="mt-1 flex min-w-0 items-center gap-3 text-[11px] text-muted-foreground">
+                        {git && (
+                          <span className="flex shrink-0 items-center gap-1"><GitBranch className="h-3 w-3" />{git.branch}</span>
+                        )}
+                        {isWorktree && git && (
+                          <span className="truncate font-mono" title={git.worktree}>{git.worktree}</span>
+                        )}
+                      </span>
+                    </span>
                   </button>
                 </li>
               );
