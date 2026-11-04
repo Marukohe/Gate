@@ -208,6 +208,11 @@ deterministic GitHub CLI fixture; no real GitHub PR is published by the acceptan
 
 ## Remaining boundaries
 
+Native Codex terminals are launched with `--no-daemon`, after probing the installed CLI's help for support.
+Codex's default shared app-server daemon can outlive its TUI, so clients without the private lifecycle option
+must use managed structured execution or be updated before native terminal launch. The installed-CLI PTY check
+verifies all tagged native processes stay in one session and disappear after confirmed terminal cleanup.
+
 The main end-to-end lifecycle test uses a deterministic provider fixture. Opt-in live acceptance separately verifies
 Codex model output, a real file modification, command approvals, service restart while waiting, and native turn cancellation.
 The native `/hooks` UI and `live-hooks-smoke.mjs` verify persisted trust followed by real SessionStart/UserPromptSubmit/Stop

@@ -147,8 +147,12 @@ export class RemoteRuntime {
     const python = settings.pythonPath ?? '/usr/bin/python3';
     await this.shell(settings.serverId, `${quote(python)} -c ${quote("import os, sys, signal, pty; assert sys.platform.startswith('linux') and sys.version_info >= (3,9); fd=os.pidfd_open(os.getpid()); os.close(fd); assert hasattr(signal, 'pidfd_send_signal')")}`);
     const executable = provider === 'shell' ? settings.shellPath ?? '/bin/bash' : provider === 'codex' ? settings.codexPath : settings.claudePath;
+    if (provider === 'codex') {
+      const help = await this.shell(settings.serverId, `${quote(executable)} --help`);
+      if (!help.includes('--no-daemon')) throw new Error('Native Codex terminals require --no-daemon support; use managed execution or update Codex');
+    }
     return { command: python, args: [`${this.releaseDirectory(settings)}/terminal.py`], cwd, protocol: true,
-      initialInput: JSON.stringify({ executable, args: provider === 'shell' ? ['-i'] : [], cwd,
+      initialInput: JSON.stringify({ executable, args: provider === 'shell' ? ['-i'] : provider === 'codex' ? ['--no-daemon'] : [], cwd,
         nodeDirectory: path.posix.dirname(settings.nodePath), cols: 80, rows: 24 }) + '\n' };
   }
 

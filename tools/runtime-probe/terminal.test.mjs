@@ -7,6 +7,48 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { startRuntime, requestRuntime } from '../../server/runtime/runtime.mjs';
 
+test('installed Codex private terminal stays in the PTY session and leaves no tagged daemon after stop',
+  { skip: !process.env.GATE_CODEX_BIN, timeout: 20_000 }, async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-codex-pty-'));
+    fs.mkdirSync(path.join(root, 'config'));
+    const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
+    const wrapper = path.join(root, 'codex');
+    fs.writeFileSync(wrapper, `#!/bin/sh\nexport CODEX_HOME=${quote(path.join(root, 'config'))}\n` +
+      `export GATE_PTY_TEST_ROOT=${quote(root)}\nunset OPENAI_API_KEY CODEX_API_KEY\nexec ${quote(process.env.GATE_CODEX_BIN)} "$@"\n`, { mode: 0o700 });
+    const runtime = await startRuntime(path.join(root, 'rt'));
+    const rpc = (request) => requestRuntime(path.join(root, 'rt'), request);
+    const tagged = () => fs.readdirSync('/proc').filter((name) => /^\d+$/.test(name)).flatMap((pid) => {
+      try {
+        if (!fs.readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0').includes(`GATE_PTY_TEST_ROOT=${root}`)) return [];
+        return [{ pid, session: fs.readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1].split(' ')[3],
+          command: fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8') }];
+      } catch { return []; }
+    });
+    const until = async (fn) => {
+      for (let i = 0; i < 120; i++) { if (await fn()) return; await delay(50); }
+      throw new Error('Native terminal condition timed out');
+    };
+    try {
+      await rpc({ method: 'start', runId: 'native', command: '/usr/bin/python3',
+        args: [fileURLToPath(new URL('../../server/runtime/terminal.py', import.meta.url))], cwd: root, protocol: true,
+        initialInput: JSON.stringify({ cwd: root, executable: wrapper, args: ['--no-daemon', '--no-alt-screen'],
+          nodeDirectory: path.dirname(process.execPath) }) + '\n' });
+      await until(async () => {
+        const events = (await rpc({ method: 'events', runId: 'native' })).events;
+        return events.some((event) => event.data?.type === 'terminal-output' && Buffer.from(event.data.data, 'base64').toString().includes('Codex'));
+      });
+      await delay(400);
+      const processes = tagged();
+      assert.ok(processes.length);
+      assert.equal(new Set(processes.map((item) => item.session)).size, 1);
+      assert.ok(processes.every((item) => !item.command.includes('pid-update-loop') && !item.command.split('\0').includes('daemon')));
+      await rpc({ method: 'interrupt', runId: 'native' });
+      await until(async () => (await rpc({ method: 'get', runId: 'native' })).state === 'exited');
+      assert.ok((await rpc({ method: 'events', runId: 'native' })).events.some((event) => event.data?.type === 'terminal-exit'));
+      await until(() => tagged().length === 0);
+    } finally { await runtime.close(); fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
 test('PTY supports Unicode, resize, Ctrl-C, redacted input and confirmed cleanup of foreground/background jobs', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-pty-'));
   let runtime = await startRuntime(root);

@@ -152,6 +152,8 @@ Managed terminal connections use `/ws/terminal?runId=<id>&after=<cursor>` separa
 Client messages claim control or send an input ID plus a base64-input/resize message. Server frames carry control
 capabilities, ordered events, ready state, acknowledgements, and errors. Only terminal runs accept these connections.
 Keep input redacted in journals and never replay unacknowledged keystrokes automatically.
+Launch native Codex terminals with `--no-daemon` and probe support first. The default shared daemon can outlive
+the terminal and its owned process session, so it cannot provide the managed-terminal exit guarantee.
 
 ## Responsive Breakpoints
 

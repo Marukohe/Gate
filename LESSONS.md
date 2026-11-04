@@ -182,6 +182,9 @@ Keep this file concise; implementation progress belongs in [the refactor plan](d
   releasing the checkout. A worker exit alone is insufficient and becomes lost ownership.
 - Check: `terminal.test.mjs` interrupts a shell with background/TERM-resistant jobs; execution tests keep the checkout
   locked when the worker exits without cleanup confirmation. Processes that create another session remain outside this guarantee.
+- Real Codex 0.166.0 TUI inspection showed that its default shared daemon survives TUI exit, and its updater can
+  survive a daemon stop. Native Gate launches now require `--no-daemon`; the optional installed-CLI PTY test checks
+  a single owned session and absence of tagged survivors after stop. Do not infer agent exit from TUI exit.
 
 ## Wait for the specific input acknowledgement before testing disconnect survival
 
