@@ -28,6 +28,10 @@ Browser (React) <--WebSocket--> Node.js Backend <--SSH--> Remote Server
 
 ## Key Features
 
+- **Task workbench** — The default Overview groups independent tasks by delivery status. Projects can have working
+  copies on multiple machines; each task keeps its own goal, acceptance criteria, agent choice, and execution history.
+  The Sessions entry preserves access to existing workspace chats. Managed task execution is the next refactor stage.
+
 - **Code from anywhere** — Start on your desktop, pick up on your phone. Sessions persist across devices via SSH and CLI resume.
 - **Attach to existing sessions** — Already running a CLI in a terminal? Gate finds its transcript and resumes right where you left off.
 - **Clean chat UI** — Terminal output parsed into markdown messages, collapsible tool cards, syntax-highlighted code blocks, and scrollable tables.

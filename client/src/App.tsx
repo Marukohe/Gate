@@ -15,6 +15,7 @@ import { usePlanStore } from '@/stores/plan-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 import { useWebSocket } from '@/hooks/use-websocket';
+import { Workbench } from '@/components/workbench/Workbench';
 
 function App() {
   // Sync dark mode class on <html>
@@ -41,12 +42,12 @@ function App() {
   const setActiveWorkspace = useWorkspaceStore((s) => s.setActiveWorkspace);
   const workspaces = useWorkspaceStore((s) => s.workspaces);
 
-  type Route = { kind: 'home' } | { kind: 'workspace'; id: string } | { kind: 'session'; serverId: string; sessionId: string };
-  const [route, setRoute] = useState<Route>({ kind: 'home' });
+  type Route = { kind: 'workbench' } | { kind: 'home' } | { kind: 'workspace'; id: string } | { kind: 'session'; serverId: string; sessionId: string };
+  const [route, setRoute] = useState<Route>({ kind: 'workbench' });
   const enterHome = useCallback(() => {
     setActiveWorkspace(null);
     setRightPanelOpen(false);
-    setRoute({ kind: 'home' });
+    setRoute({ kind: 'workbench' });
   }, [setActiveWorkspace, setRightPanelOpen]);
   const enterWorkspace = useCallback((id: string) => setRoute({ kind: 'workspace', id }), []);
   const enterSession = useCallback(
@@ -166,10 +167,10 @@ function App() {
 
   // Connect when activeSessionId changes (onopen handles WS-not-ready case)
   useEffect(() => {
-    if (!activeServerId || !activeSessionId) return;
+    if (route.kind !== 'session' || !activeServerId || !activeSessionId) return;
     connectToSession(activeServerId, activeSessionId);
     listCheckpoints(activeServerId, activeSessionId);
-  }, [activeServerId, activeSessionId, connectToSession, listCheckpoints]);
+  }, [route.kind, activeServerId, activeSessionId, connectToSession, listCheckpoints]);
 
   // Fetch git info immediately and refresh periodically
   useEffect(() => {
@@ -336,7 +337,11 @@ function App() {
 
   return (
     <>
-      <AppShell
+      {route.kind === 'workbench' ? <Workbench
+        onLegacy={() => setRoute({ kind: 'home' })}
+        onAddServer={() => { setEditingServer(null); setServerDialogOpen(true); }}
+        onLegacySession={handleSidebarSelectSession}
+      /> : <AppShell
         mainView={mainView}
         onAddServer={() => { setEditingServer(null); setServerDialogOpen(true); }}
         onEditServer={(server) => { setEditingServer(server); setServerDialogOpen(true); }}
@@ -347,7 +352,7 @@ function App() {
         onDeleteSession={handleDeleteSessionFromSidebar}
         onAddWorkspace={() => setAddWorkspaceOpen(true)}
         inspectorWorkspaceId={inspectorWorkspaceId}
-      />
+      />}
       <ServerDialog
         open={serverDialogOpen}
         onOpenChange={(open) => { setServerDialogOpen(open); if (!open) setEditingServer(null); }}

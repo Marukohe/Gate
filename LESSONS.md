@@ -51,3 +51,18 @@ Keep this file concise; implementation progress belongs in [the refactor plan](d
 - Affected paths: `server/src/providers/codex/index.ts` and commit-message generation in `server/src/ssh-manager.ts`.
 - Fix: share explicit `--ask-for-approval on-request exec --sandbox workspace-write` arguments across launch,
   resume, and commit-message generation. Run the optional real-CLI test with `GATE_CODEX_BIN` set to its executable.
+
+## Browsing saved sessions must not launch them
+
+- Observed: the legacy WebSocket opened or reconnected the session stored in localStorage on every connection.
+- Cause: persisted navigation state was treated as execution intent, including when opening the new workbench.
+- Fix: reconnect only the target explicitly opened during this page lifetime; the workbench does not auto-connect.
+- Check: seed a previous selection in localStorage, open Overview, force a WebSocket reconnect, and verify no
+  `connect` command is sent. Explicitly opening a legacy session still requests a connection.
+
+## Check element bounds as well as document overflow on mobile
+
+- Observed: a narrow workbench header extended beyond the viewport even though the root hid horizontal overflow.
+- Fix: allow navigation wrapping and reduce its narrow-screen spacing.
+- Check: compare visible element bounds with the viewport at 320px and 390px, then inspect an actual screenshot.
+  A `documentElement.scrollWidth` check alone can miss clipped controls.

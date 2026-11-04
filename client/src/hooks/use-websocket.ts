@@ -25,6 +25,7 @@ const HEARTBEAT_TIMEOUT = 45_000;
 
 // Queued connect request — sent when WS opens
 let pendingConnect: { serverId: string; sessionId: string } | null = null;
+let requestedTarget: { serverId: string; sessionId: string } | null = null;
 let pendingMessages: string[] = [];
 
 // One-shot callback for cli-sessions / claude-sessions response
@@ -83,14 +84,6 @@ function newRequestId(): string {
 let lastConnectedSession: string | null = null;
 let lastConnectedServer: string | null = null;
 
-function getActiveTarget(): { serverId: string; sessionId: string } | null {
-  const serverId = useServerStore.getState().activeServerId;
-  if (!serverId) return null;
-  const sessionId = useSessionStore.getState().activeSessionId[serverId];
-  if (!sessionId) return null;
-  return { serverId, sessionId };
-}
-
 function sendConnect(socket: WebSocket, serverId: string, sessionId: string) {
   // Only skip if already fully connected — allow re-sending if stuck in 'connecting'
   const status = useSessionStore.getState().connectionStatus[sessionId];
@@ -144,7 +137,8 @@ function setupSocket() {
     socket.send(JSON.stringify({ type: 'list-workspaces' }));
     // Re-bind the current active session after reconnects, even if no new UI
     // interaction occurred while the socket was down.
-    const target = pendingConnect ?? getActiveTarget();
+    // A persisted selection is navigation state, not a request to launch a CLI while browsing the workbench.
+    const target = pendingConnect ?? requestedTarget;
     if (target) {
       pendingConnect = null;
       sendConnect(socket, target.serverId, target.sessionId);
@@ -388,7 +382,7 @@ function setupSocket() {
     ws = null;
     if (heartbeatTimer) clearTimeout(heartbeatTimer);
     if (reconnectTimer) clearTimeout(reconnectTimer);
-    const activeTarget = getActiveTarget();
+    const activeTarget = requestedTarget;
     if (activeTarget) {
       pendingConnect = activeTarget;
       stores().session.setConnectionStatus(activeTarget.sessionId, 'connecting');
@@ -414,6 +408,7 @@ export function useWebSocket() {
   }, []);
 
   const connectToSession = useCallback((serverId: string, sessionId: string) => {
+    requestedTarget = { serverId, sessionId };
     // Clear stale guard when switching servers
     if (serverId !== lastConnectedServer) {
       lastConnectedSession = null;
@@ -527,6 +522,8 @@ export function useWebSocket() {
   }, []);
 
   const disconnectSession = useCallback((serverId: string, sessionId: string) => {
+    if (requestedTarget?.sessionId === sessionId) requestedTarget = null;
+    if (pendingConnect?.sessionId === sessionId) pendingConnect = null;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: 'disconnect', serverId, sessionId }));
   }, []);

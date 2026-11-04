@@ -128,6 +128,14 @@ export class WorkbenchStore {
     return project;
   }
 
+  createProjectWithCheckout(project: Parameters<WorkbenchStore['createProject']>[0],
+    checkout: Omit<Parameters<WorkbenchStore['createCheckout']>[0], 'projectId'>): { project: Project; checkout: Checkout } {
+    return this.db.transaction(() => {
+      const created = this.createProject(project);
+      return { project: created, checkout: this.createCheckout({ ...checkout, projectId: created.id }) };
+    })();
+  }
+
   updateProject(id: string, input: Partial<Pick<Project, 'name' | 'defaultBranch' | 'defaultProvider' | 'archivedAt'>>): Project {
     const project = this.project(id);
     if (!project) throw new Error('Project not found');

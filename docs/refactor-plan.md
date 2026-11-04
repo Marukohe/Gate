@@ -73,12 +73,14 @@ Evidence and limits: [P0 runtime evaluation](runtime-evaluation.md).
 
 - [x] Add Project, Checkout, Task, and Run persistence with additive, tested migrations.
 - [x] Preserve old workspace/session history; avoid guessing ambiguous task relationships.
-- [ ] Add task creation, project/task lists, and independent goals and delivery status.
+- [x] Add task creation, project/task lists, and independent goals and delivery status.
 - [x] Verify two tasks in the same repository do not overwrite each other's state.
 
 Persistence evidence: `server/src/__tests__/workbench-store.test.ts` covers repeated upgrades, untouched history,
 ambiguous primary sessions, independent task state, cross-project constraints, durable checkout ownership,
-request deduplication, and transactional event projection. Task navigation remains in progress.
+request deduplication, and transactional event projection. Workbench API tests cover project/checkout creation,
+independent task updates, invalid requests, and connection reuse. Browser validation covers creating/editing tasks,
+status changes, project navigation, deep-link reload, and narrow-screen layout. Managed execution is P2.
 
 ### P2: Persistent managed execution
 

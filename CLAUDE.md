@@ -72,6 +72,7 @@ Data is stored in `~/.gate/gate.db` by default.
 - `tools/runtime-probe/` — Isolated P0 stdio runtime and localhost SSH checks; not used by production sessions
 - `server/src/db.ts` — SQLite layer for servers, sessions, messages, workspaces, and provider session maps
 - `server/src/workbench/` — Project, checkout, task, and run persistence; additive legacy import and event cursors
+- `server/src/workbench/routes.ts` — REST `/api/workbench` project/checkout/task management and run event reads
 - `server/src/ssh-manager.ts` — SSH connection pool, CLI channel management, and command execution via ssh2
 - `server/src/ssh-browse.ts` — Remote directory browsing over SSH
 - `server/src/git-utils.ts` — Git command helpers
@@ -86,6 +87,7 @@ Data is stored in `~/.gate/gate.db` by default.
 - `server/src/providers/codex/` — OpenAI Codex provider, parser, transcript support, tool utils, command building
 
 **Client:**
+- `client/src/components/workbench/` — Default overview, projects, task goals, acceptance criteria, and execution history
 - `client/src/App.tsx` — Top-level route state for home, workspace overview, and chat sessions
 - `client/src/hooks/use-websocket.ts` — Singleton WebSocket connection with auto-reconnect and queued workspace actions
 - `client/src/stores/` — Zustand stores: server, session, chat, git, plan, plan-mode, workspace, ui

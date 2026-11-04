@@ -11,6 +11,7 @@ import { listRemoteDirectory, createRemoteDirectory } from './ssh-browse.js';
 import { ProviderRegistry } from './providers/registry.js';
 import { ClaudeProvider } from './providers/claude/index.js';
 import { CodexProvider } from './providers/codex/index.js';
+import { createWorkbenchRoutes } from './workbench/routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -73,6 +74,7 @@ const httpServer = createServer(app);
 const sshManager = setupWebSocket(httpServer, db, registry);
 
 app.use('/api/servers', createServerRoutes(db, sshManager));
+app.use('/api/workbench', createWorkbenchRoutes(db, sshManager));
 
 // Serve built client in production
 const clientDist = path.resolve(__dirname, '../../client/dist');
