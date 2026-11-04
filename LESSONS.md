@@ -74,3 +74,10 @@ Keep this file concise; implementation progress belongs in [the refactor plan](d
 - Fix: serialize preparations for the same repository and reuse an existing task UUID branch without resetting it.
   Git must still reject branches checked out elsewhere; verify the resulting repository root and branch.
 - Check: `tools/runtime-probe/workbench-smoke.mjs` seeds this partial state, then starts two task worktrees over SSH.
+
+## Lazy syntax grammars need alias normalization
+
+- Observed: the async highlighter loads canonical grammar names, while fenced code commonly uses `js`, `py`, or `sh`.
+- Fix: preserve Refractor's aliases in `client/src/lib/code-languages.ts` before loading a grammar asynchronously.
+- Check: render JavaScript/Python aliases and an unknown language in a browser; confirm highlighting, unchanged
+  source text, and plain-text fallback. Refresh the alias metadata when upgrading Refractor.

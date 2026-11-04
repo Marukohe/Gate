@@ -42,6 +42,16 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) return 'react';
+          if (id.includes('node_modules/@radix-ui/')) return 'ui';
+        },
+      },
+    },
+  },
   server: {
     host: '0.0.0.0',
     proxy: {

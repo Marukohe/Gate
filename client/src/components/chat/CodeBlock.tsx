@@ -1,9 +1,10 @@
 import { Check, Copy } from 'lucide-react';
 import { useState, useSyncExternalStore } from 'react';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Button } from '@/components/ui/button';
+import { codeLanguageAliases } from '@/lib/code-languages';
 
 // Shared singleton observer — all CodeBlock instances reuse one MutationObserver
 const themeListeners = new Set<() => void>();
@@ -74,7 +75,7 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
       </div>
       <div className="overflow-x-auto">
         <SyntaxHighlighter
-          language={displayLang}
+          language={codeLanguageAliases[displayLang] ?? displayLang}
           style={isDark ? oneDark : oneLight}
           customStyle={{
             margin: 0,

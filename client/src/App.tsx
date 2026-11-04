@@ -1,11 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { Toaster } from 'sonner';
-import { AppShell } from '@/components/layout/AppShell';
-import { ChatView } from '@/components/chat/ChatView';
 import { ServerDialog } from '@/components/server/ServerDialog';
 import { CreateSessionDialog } from '@/components/chat/CreateSessionDialog';
 import { CommandCenter } from '@/components/home/CommandCenter';
-import { WorkspaceHome } from '@/components/workspace/WorkspaceHome';
 import type { WorkspaceStartOptions } from '@/components/workspace/WorkspaceStart';
 import { AddWorkspaceDialog } from '@/components/workspace/AddWorkspaceDialog';
 import { useServerStore, type Server } from '@/stores/server-store';
@@ -16,6 +13,10 @@ import { useUIStore } from '@/stores/ui-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { Workbench } from '@/components/workbench/Workbench';
+
+const AppShell = lazy(() => import('@/components/layout/AppShell').then((module) => ({ default: module.AppShell })));
+const ChatView = lazy(() => import('@/components/chat/ChatView').then((module) => ({ default: module.ChatView })));
+const WorkspaceHome = lazy(() => import('@/components/workspace/WorkspaceHome').then((module) => ({ default: module.WorkspaceHome })));
 
 function App() {
   // Sync dark mode class on <html>
@@ -336,7 +337,7 @@ function App() {
       : null;
 
   return (
-    <>
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
       {route.kind === 'workbench' ? <Workbench
         onLegacy={() => setRoute({ kind: 'home' })}
         onAddServer={() => { setEditingServer(null); setServerDialogOpen(true); }}
@@ -373,7 +374,7 @@ function App() {
         />
       )}
       <Toaster position="top-right" theme={darkMode ? 'dark' : 'light'} richColors />
-    </>
+    </Suspense>
   );
 }
 
