@@ -2,6 +2,12 @@ import type BetterSqlite3 from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { Checkout, Project, Run, RunEvent, RunKind, RunState, Task, TaskStatus, WorkbenchSnapshot } from './types.js';
+import type { LaunchSpec, RuntimeSettings } from './remote.js';
+
+export interface Execution {
+  runId: string; settings: RuntimeSettings; launch: LaunchSpec | null; source: string | null; branch: string | null;
+  stopRequested: boolean; connectionError: string | null; lastSeenAt: number | null;
+}
 
 const taskStatuses: TaskStatus[] = ['backlog', 'in-progress', 'paused', 'review', 'done', 'canceled'];
 const runKinds: RunKind[] = ['implementation', 'retry', 'handoff', 'review', 'terminal', 'test', 'external'];
@@ -57,8 +63,77 @@ export class WorkbenchStore {
         CREATE TABLE IF NOT EXISTS workbench_legacy_imports (
           workspaceId TEXT PRIMARY KEY, projectId TEXT NOT NULL REFERENCES projects(id)
         );
+        CREATE TABLE IF NOT EXISTS runtime_settings (
+          serverId TEXT PRIMARY KEY REFERENCES servers(id), settings TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS run_execution (
+          runId TEXT PRIMARY KEY REFERENCES runs(id), data TEXT NOT NULL
+        );
       `);
       this.importLegacyWorkspaces();
+    })();
+  }
+
+  runtimeSettings(serverId: string): RuntimeSettings | undefined {
+    const row = this.db.prepare('SELECT settings FROM runtime_settings WHERE serverId = ?').get(serverId) as
+      { settings: string } | undefined;
+    return row ? JSON.parse(row.settings) : undefined;
+  }
+
+  saveRuntimeSettings(settings: RuntimeSettings): void {
+    this.db.prepare('INSERT OR REPLACE INTO runtime_settings VALUES (?, ?)').run(settings.serverId, JSON.stringify(settings));
+  }
+
+  execution(runId: string): Execution | undefined {
+    const row = this.db.prepare('SELECT data FROM run_execution WHERE runId = ?').get(runId) as { data: string } | undefined;
+    return row ? JSON.parse(row.data) : undefined;
+  }
+
+  saveExecution(value: Execution): void {
+    this.db.prepare('INSERT OR REPLACE INTO run_execution VALUES (?, ?)').run(value.runId, JSON.stringify(value));
+  }
+
+  prepareRun(runId: string, launch: LaunchSpec, codeRef: string): void {
+    this.db.transaction(() => {
+      const execution = this.execution(runId);
+      if (!execution || execution.launch) throw new Error('Run preparation is no longer pending');
+      this.saveExecution({ ...execution, launch });
+      this.updateRun(runId, { state: 'starting', codeRef });
+    })();
+  }
+
+  enqueue(taskId: string, requestId: string, prompt: string): Run {
+    return this.db.transaction(() => {
+      const existing = this.db.prepare('SELECT * FROM runs WHERE requestId = ?').get(requestId) as Run | undefined;
+      if (existing) {
+        if (existing.taskId !== taskId || existing.prompt !== prompt) throw new Error('Request ID belongs to another request');
+        return existing;
+      }
+      const task = this.task(taskId);
+      if (!task) throw new Error('Task not found');
+      if (['done', 'canceled'].includes(task.status)) throw new Error('Reopen the task before starting a run');
+      if (this.activeRuns().some((run) => run.taskId === taskId) ||
+        this.db.prepare("SELECT 1 FROM runs WHERE taskId = ? AND state = 'lost'").get(taskId)) {
+        throw new Error('Task has an active run or unresolved ownership loss');
+      }
+      let checkout = this.checkout(task.checkoutId)!;
+      const settings = this.runtimeSettings(checkout.serverId);
+      if (!settings) throw new Error('Set up the remote runtime on this machine first');
+      let source: string | null = null;
+      let branch: string | null = null;
+      if (task.isolation === 'worktree' && checkout.kind !== 'worktree') {
+        source = checkout.path;
+        branch = `gate/${task.id}`;
+        checkout = this.createCheckout({ projectId: task.projectId, serverId: checkout.serverId,
+          path: `${source}.gate-worktrees/${task.id}`, branch, kind: 'worktree' });
+        this.updateTask(taskId, { checkoutId: checkout.id });
+      }
+      const run = this.createRun({ taskId, requestId, prompt, kind: 'implementation', checkoutId: checkout.id });
+      this.acquireCheckout(run.id);
+      this.saveExecution({ runId: run.id, settings, launch: null, source, branch,
+        stopRequested: false, connectionError: null, lastSeenAt: null });
+      this.updateTask(taskId, { status: 'in-progress' });
+      return run;
     })();
   }
 

@@ -30,10 +30,12 @@ Browser (React) <--WebSocket--> Node.js Backend <--SSH--> Remote Server
 
 - **Task workbench** — The default Overview groups independent tasks by delivery status. Projects can have working
   copies on multiple machines; each task keeps its own goal, acceptance criteria, agent choice, and execution history.
-  The Sessions entry preserves access to existing workspace chats. Managed task execution is the next refactor stage.
+  The Sessions entry preserves access to existing workspace chats. Managed tasks run independently through a remote
+  runtime, with replay after backend/SSH reconnect, isolated worktrees, and confirmed stop status.
 
 - **Code from anywhere** — Start on your desktop, pick up on your phone. Sessions persist across devices via SSH and CLI resume.
-- **Attach to existing sessions** — Already running a CLI in a terminal? Gate finds its transcript and resumes right where you left off.
+- **Resume saved conversations** — Find a CLI transcript and resume its conversation. This starts a new process;
+  it does not attach to a process already running in another terminal.
 - **Clean chat UI** — Terminal output parsed into markdown messages, collapsible tool cards, syntax-highlighted code blocks, and scrollable tables.
 - **Multi-server, multi-session** — Manage several remote servers with multiple sessions each. Swipe or tap to switch.
 - **Workspace command center** — Repositories are first-class workspaces grouped by backlog, in-progress, review, done, or canceled status. Pin, archive, and continue work without opening every chat.
@@ -84,7 +86,9 @@ The task workbench refactor is tracked in [the implementation plan](docs/refacto
 Contributors should read [LESSONS.md](LESSONS.md) before making changes and record verified problems there.
 Each completed refactor step is validated and committed separately.
 The [runtime feasibility probe](tools/runtime-probe/README.md) checks independent execution and replay over SSH.
-It is an isolated experiment; existing Gate sessions continue using the current backend.
+It uses isolated fixtures against the runtime shipped in `server/runtime/`.
+See [managed execution](docs/managed-execution.md) for setup, guarantees, and validation limits.
+Existing Sessions continue using the legacy backend connection path.
 The new task model is stored alongside legacy workspaces and sessions. Migration preserves existing chat history
 and imports explicit workspace goals once; ambiguous sessions remain available in the legacy workspace views.
 

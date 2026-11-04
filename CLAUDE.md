@@ -9,12 +9,13 @@ Gate is a responsive web app for "vibe coding" — chat with AI coding CLIs (Cla
 ## Architecture
 
 ```
-Browser (React) <--WebSocket--> Node.js Backend <--SSH--> Remote Server (CLI tools)
+Browser (React) <--HTTP/WebSocket--> Node.js Backend <--SSH--> Remote runtime / legacy CLI tools
                                      |
                               Provider Layer
                               Claude  Codex  ...
 ```
 
+- Managed tasks use a detached remote runtime with durable events, replay cursors, provider adapters, and checkout locks.
 - **Monorepo** with npm workspaces: `client/` and `server/`
 - Backend parses CLI terminal output into structured messages via provider-specific parsers and streams them to the frontend via WebSocket
 - Frontend renders parsed messages as chat bubbles with markdown, syntax highlighting, collapsible tool cards, diff views, and plan panels
@@ -49,8 +50,10 @@ cd server && npx vitest run
 cd server && npx tsc --noEmit
 
 # Isolated runtime feasibility tests (from repository root)
-node --test tools/runtime-probe/runtime.test.mjs
+node --test tools/runtime-probe/runtime.test.mjs tools/runtime-probe/provider.test.mjs
 node tools/runtime-probe/ssh-smoke.mjs --host localhost
+# Production backend restart and SSH recovery (build first; uses isolated localhost fixtures)
+node tools/runtime-probe/workbench-smoke.mjs
 ```
 
 ## Deployment
@@ -69,10 +72,13 @@ Data is stored in `~/.gate/gate.db` by default.
 ## Key Modules
 
 **Server:**
-- `tools/runtime-probe/` — Isolated P0 stdio runtime and localhost SSH checks; not used by production sessions
+- `server/runtime/` — Packaged remote daemon, durable journals, socket CLI, and Claude/Codex provider worker
+- `tools/runtime-probe/` — Isolated runtime/provider tests and real localhost SSH/backend restart checks
 - `server/src/db.ts` — SQLite layer for servers, sessions, messages, workspaces, and provider session maps
 - `server/src/workbench/` — Project, checkout, task, and run persistence; additive legacy import and event cursors
-- `server/src/workbench/routes.ts` — REST `/api/workbench` project/checkout/task management and run event reads
+- `server/src/workbench/routes.ts` — REST project/checkout/task management, runtime setup, run start/stop, event reads
+- `server/src/workbench/execution.ts` — Durable launch, reconnection, event projection, and confirmed stop handling
+- `server/src/workbench/remote.ts` — Runtime deployment, JSON over SSH stdin, and idempotent worktree preparation
 - `server/src/ssh-manager.ts` — SSH connection pool, CLI channel management, and command execution via ssh2
 - `server/src/ssh-browse.ts` — Remote directory browsing over SSH
 - `server/src/git-utils.ts` — Git command helpers
@@ -87,7 +93,7 @@ Data is stored in `~/.gate/gate.db` by default.
 - `server/src/providers/codex/` — OpenAI Codex provider, parser, transcript support, tool utils, command building
 
 **Client:**
-- `client/src/components/workbench/` — Default overview, projects, task goals, acceptance criteria, and execution history
+- `client/src/components/workbench/` — Default overview, projects, task goals, runtime setup, managed execution, and replayed output
 - `client/src/App.tsx` — Top-level route state for home, workspace overview, and chat sessions
 - `client/src/hooks/use-websocket.ts` — Singleton WebSocket connection with auto-reconnect and queued workspace actions
 - `client/src/stores/` — Zustand stores: server, session, chat, git, plan, plan-mode, workspace, ui

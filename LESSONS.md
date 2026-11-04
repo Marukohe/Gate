@@ -66,3 +66,11 @@ Keep this file concise; implementation progress belongs in [the refactor plan](d
 - Fix: allow navigation wrapping and reduce its narrow-screen spacing.
 - Check: compare visible element bounds with the viewport at 320px and 390px, then inspect an actual screenshot.
   A `documentElement.scrollWidth` check alone can miss clipped controls.
+
+## Worktree creation can leave a branch after failure
+
+- Observed: parallel SSH worktree preparation left one task queued with `a branch named ... already exists`.
+- Cause: `git worktree add -b` can create the branch before a later filesystem step fails; retrying `-b` is not idempotent.
+- Fix: serialize preparations for the same repository and reuse an existing task UUID branch without resetting it.
+  Git must still reject branches checked out elsewhere; verify the resulting repository root and branch.
+- Check: `tools/runtime-probe/workbench-smoke.mjs` seeds this partial state, then starts two task worktrees over SSH.

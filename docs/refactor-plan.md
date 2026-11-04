@@ -84,10 +84,14 @@ status changes, project navigation, deep-link reload, and narrow-screen layout. 
 
 ### P2: Persistent managed execution
 
-- [ ] Integrate the validated runtime with SSH and provider adapters.
-- [ ] Replay events after reconnect, deduplicate requests/events, and reconcile run state.
-- [ ] Confirm stop results and distinguish connection loss from process failure.
-- [ ] Test backend restart and SSH failure against real remote execution.
+- [x] Integrate the validated runtime with SSH and provider adapters.
+- [x] Replay events after reconnect, deduplicate requests/events, and reconcile run state.
+- [x] Confirm stop results and distinguish connection loss from process failure.
+- [x] Test backend restart and SSH failure against real remote execution.
+
+Evidence and current limits: [managed execution](managed-execution.md). Lifecycle checks use real localhost SSH
+and the actual Gate backend with a deterministic provider fixture; real CLI initialization is verified separately.
+Model turns and semantic decision controls are not claimed by these checks.
 
 ### P3: Attention and verification
 

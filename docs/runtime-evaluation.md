@@ -1,5 +1,7 @@
 # P0 runtime evaluation
 
+This is the P0 decision record. Current integration and validation are in [managed execution](managed-execution.md).
+
 ## Decision
 
 Proceed with an SSH-connected, independently supervised runtime boundary for managed execution.
@@ -41,7 +43,10 @@ Host scope: Linux, Node.js v24.14.0, real OpenSSH connections to localhost, isol
 Reproduce with the commands in [the probe README](../tools/runtime-probe/README.md).
 The optional JSON report records executed checks and provider versions without private transcript content.
 
-## Unverified and required before production
+## P0 limits (historical baseline)
+
+P2 integration and subsequent evidence are tracked in [managed execution](managed-execution.md).
+The following list records the limits at the end of P0, before production integration:
 
 - Real model turns, tool execution, semantic turn interruption, approval responses, and Claude bidirectional control.
 - PTYs, terminal resizing/attachment, external hooks, non-Linux hosts, and WAN failure behavior.

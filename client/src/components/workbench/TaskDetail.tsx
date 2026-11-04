@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { Checkout, Run, Task, TaskStatus } from '../../../../server/src/workbench/types';
 import type { WorkbenchActions } from './use-workbench';
+import { RunPanel } from './RunPanel';
 import { selectClass } from './ProjectForm';
 
 export const taskLabels: Record<TaskStatus, string> = {
@@ -50,16 +51,9 @@ export function TaskDetail({ task, checkout, runs, mutate, busy, onLegacySession
         <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{task.acceptance || 'No criteria added yet.'}</p>
       </>}
     </section>
-    <section className="rounded-xl border bg-card p-5">
-      <h2 className="font-medium">Execution history</h2>
-      {runs.length ? <div className="mt-3 divide-y">{runs.map((run) => <div key={run.id} className="py-3 text-sm">
-        <span className="font-medium">{run.provider} · {run.kind}</span>
-        <span className="ml-3 text-muted-foreground">{run.state}</span>
-        <p className="mt-1 text-xs text-muted-foreground">{new Date(run.createdAt).toLocaleString()}</p>
-      </div>)}</div> : <p className="mt-3 text-sm text-muted-foreground">No executions yet.</p>}
-      {task.legacySessionId && <Button className="mt-4" variant="outline"
-        onClick={() => onLegacySession(checkout.serverId, task.legacySessionId!)}>Open previous conversation</Button>}
-    </section>
+    <RunPanel task={task} checkout={checkout} runs={runs} mutate={mutate} busy={busy} />
+    {task.legacySessionId && <Button variant="outline"
+      onClick={() => onLegacySession(checkout.serverId, task.legacySessionId!)}>Open previous conversation</Button>}
     {task.prUrl && <a className="text-sm underline" href={task.prUrl} target="_blank" rel="noreferrer">Open pull request</a>}
   </div>;
 }

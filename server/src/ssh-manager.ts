@@ -2,6 +2,7 @@ import { Client, type ConnectConfig } from 'ssh2';
 import type { ClientChannel } from 'ssh2';
 import { EventEmitter } from 'events';
 import { readFileSync } from 'fs';
+import { StringDecoder } from 'node:string_decoder';
 import { parseRepoScripts, type RepoScripts } from './repo-scripts.js';
 import { CODEX_EXEC_COMMAND } from './providers/codex/command.js';
 
@@ -140,13 +141,13 @@ export class SSHManager extends EventEmitter {
       });
 
       client.on('error', (err) => {
-        this.connections.delete(config.id);
+        if (this.connections.get(config.id)?.client === client) this.connections.delete(config.id);
         this.emit('status', config.id, null, 'error', err.message);
         reject(err);
       });
 
       client.on('close', () => {
-        this.connections.delete(config.id);
+        if (this.connections.get(config.id)?.client === client) this.connections.delete(config.id);
         this.emit('status', config.id, null, 'disconnected');
       });
 
@@ -205,6 +206,7 @@ export class SSHManager extends EventEmitter {
       const alive = await this.checkAlive(serverId);
       if (alive) return;
       // Stale — tear down and reconnect
+      this.connections.get(serverId)?.client.destroy();
       this.connections.delete(serverId);
     }
     await this.reconnect(serverId);
@@ -330,6 +332,53 @@ export class SSHManager extends EventEmitter {
   }
 
   /** Close all channels and the SSH connection. */
+  async execute(serverId: string, command: string, input = '', timeoutMs = 30_000):
+    Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    const conn = this.connections.get(serverId);
+    if (!conn) throw new Error(`No connection for server ${serverId}`);
+    return new Promise((resolve, reject) => {
+      let channel: ClientChannel | undefined;
+      let settled = false;
+      const finish = (error?: Error, code?: number) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        conn.client.off('close', lost);
+        if (error) { channel?.close(); reject(error); }
+        else resolve({ stdout, stderr, exitCode: code! });
+      };
+      let stdout = '';
+      let stderr = '';
+      const outDecoder = new StringDecoder('utf8');
+      const errDecoder = new StringDecoder('utf8');
+      const lost = () => finish(new Error('SSH connection closed before command completion'));
+      conn.client.once('close', lost);
+      const timer = setTimeout(() => finish(new Error('SSH command timed out')), timeoutMs);
+      conn.client.exec(command, (error, stream) => {
+        if (error) { finish(error); return; }
+        channel = stream;
+        if (settled) { stream.close(); return; }
+        stream.on('data', (data: Buffer) => {
+          stdout += outDecoder.write(data);
+          if (stdout.length > 4 * 1024 * 1024) finish(new Error('SSH response exceeded size limit'));
+        });
+        stream.stderr.on('data', (data: Buffer) => {
+          stderr += errDecoder.write(data);
+          if (stderr.length > 1024 * 1024) finish(new Error('SSH stderr exceeded size limit'));
+        });
+        stream.on('error', (error: Error) => finish(error));
+        stream.on('close', (code: number | undefined) => {
+          stdout += outDecoder.end();
+          stderr += errDecoder.end();
+          if (typeof code !== 'number') finish(new Error('SSH channel closed without exit status'));
+          else finish(undefined, code);
+        });
+        // Payloads are stdin bytes, never shell-interpolated text.
+        stream.end(input);
+      });
+    });
+  }
+
   async disconnect(serverId: string): Promise<void> {
     const conn = this.connections.get(serverId);
     if (!conn) return;

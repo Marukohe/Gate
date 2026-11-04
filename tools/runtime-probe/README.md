@@ -1,12 +1,12 @@
 # Remote runtime feasibility probe
 
-P0 experiment, isolated from the Gate server and its database. Requires Node.js 20+ on a Unix host.
-Do not use this as a production daemon: journals are unbounded and event paging currently reads whole files.
+Isolated tests of the runtime shipped in `server/runtime/`. Requires Node.js 20+ on a Unix host.
+The P0 entry points now import the production implementation; fixtures never use the normal Gate database.
 
 ## Run
 
 ```bash
-node --test tools/runtime-probe/runtime.test.mjs
+node --test tools/runtime-probe/runtime.test.mjs tools/runtime-probe/provider.test.mjs
 node tools/runtime-probe/ssh-smoke.mjs --host localhost
 ```
 
@@ -27,9 +27,20 @@ kills its own watching SSH client, then uses fresh SSH connections to check exec
 Successful runs stop the owned processes and remove the temporary directory. Failed runs preserve evidence
 and print the directory; never stop unrelated processes or remove directories based on a broad name match.
 
-Provider checks run `--version`. The optional Codex check also initializes an actual app-server over stdio
-using an isolated `CODEX_HOME`, without starting a model turn or loading the user's conversations/configuration.
-Claude model output, semantic approvals, terminal attachment, and hooks are not exercised by this probe.
+Provider checks run `--version` and initialize each CLI's bidirectional protocol over stdio, using isolated
+`CODEX_HOME` / `CLAUDE_CONFIG_DIR` directories. No user prompt or model turn is sent. Semantic approvals, terminal
+attachment, and hooks are not exercised by this probe.
+
+The production workbench check additionally restarts the actual backend, disconnects its SSH transport, checks
+parallel worktrees and confirmed completion/stop, and exercises a deterministic Codex app-server fixture:
+
+```bash
+npm run build
+node tools/runtime-probe/workbench-smoke.mjs
+```
+
+This check uses localhost SSH and `~/.ssh/id_rsa` by default; set `GATE_TEST_SSH_KEY` for another private key.
+Optional browser checks use `GATE_TEST_PLAYWRIGHT` (absolute module path) and `GATE_TEST_CHROMIUM` (executable).
 
 ## Protocol v1
 
@@ -40,7 +51,7 @@ The direct socket request must include that version explicitly.
 | Method | Fields | Result |
 | --- | --- | --- |
 | `ping` | None | Version, shutdown state, explicit capabilities |
-| `start` | `runId`, `command`, `args`, absolute `cwd` | Run snapshot |
+| `start` | `runId`, `command`, `args`, absolute `cwd`, optional `initialInput`, `protocol` | Run snapshot |
 | `list` | None | All run snapshots |
 | `get` | `runId` | Run snapshot |
 | `events` | `runId`, optional `after` and `limit` | Events, next cursor, more flag |
@@ -65,10 +76,12 @@ to stdin; a crash between acceptance and writing has an unknown delivery outcome
 - Browser/backend/SSH disconnection: the independent runtime continues owning the process and recording output.
 - Clean runtime shutdown: owned processes are terminated and reaped; completed journals remain readable after restart.
 - Runtime crash: active journals become `lost` on recovery. No relaunch, reattachment, or stale-PID signalling.
-  A leftover socket requires operator inspection; the prototype will not remove it automatically.
+  A leftover socket requires operator inspection; it is never removed automatically.
 - Truncated/corrupt journal: fail startup and preserve evidence instead of guessing which command ran.
-- Machine reboot, disk-full recovery, quota enforcement, automatic installation/upgrades, PTYs, and semantic
-  approvals are outside this prototype. Descendants that leave the owned process group are not contained.
+- Journals have a 64 MiB per-run output limit and indexed, byte-bounded replay; exceeding the limit stops the run.
+  Completed journals are retained until explicitly removed while the runtime is stopped. Aggregate disk use is not bounded.
+- Machine reboot, disk-full recovery, automatic runtime upgrades, and PTYs remain outside these checks.
+  Descendants that leave the owned process group are not contained.
 
 The directory and socket must remain private to the owning OS user. Journals contain command arguments and
 input/output; they are local diagnostic data and must not be committed with credentials or private transcripts.

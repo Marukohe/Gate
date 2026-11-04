@@ -1,6 +1,7 @@
 import { Router, type ErrorRequestHandler } from 'express';
 import type { Database } from '../db.js';
 import type { SSHManager } from '../ssh-manager.js';
+import type { ExecutionService } from './execution.js';
 
 function text(value: unknown, name: string, optional = false): string {
   if (optional && value === undefined) return '';
@@ -15,7 +16,7 @@ function provider(value: unknown): string {
   return value;
 }
 
-export function createWorkbenchRoutes(db: Database, ssh: SSHManager): Router {
+export function createWorkbenchRoutes(db: Database, ssh: SSHManager, execution?: ExecutionService): Router {
   const router = Router();
   const store = db.workbench;
 
@@ -31,6 +32,40 @@ export function createWorkbenchRoutes(db: Database, ssh: SSHManager): Router {
   }
 
   router.get('/', (_req, res) => res.json(store.snapshot()));
+
+  router.get('/machines/:id/runtime', (req, res) => {
+    if (!db.getServer(String(req.params.id))) return res.status(404).json({ error: 'Server not found' });
+    res.json(store.runtimeSettings(String(req.params.id)) ?? null);
+  });
+
+  router.put('/machines/:id/runtime', async (req, res) => {
+    if (!execution) throw new Error('Managed execution is unavailable');
+    const settings = { serverId: String(req.params.id), nodePath: text(req.body.nodePath, 'Node.js path'),
+      claudePath: text(req.body.claudePath, 'Claude path'), codexPath: text(req.body.codexPath, 'Codex path'),
+      directory: text(req.body.directory, 'runtime directory') };
+    await execution.configure(settings);
+    res.json(settings);
+  });
+
+  router.post('/tasks/:id/runs', (req, res) => {
+    if (!execution) throw new Error('Managed execution is unavailable');
+    const task = store.task(String(req.params.id));
+    if (!task) throw new Error('Task not found');
+    const prompt = text(req.body.prompt ?? `${task.goal}\n\nAcceptance criteria:\n${task.acceptance}`, 'prompt');
+    res.status(202).json(execution.run(task.id, text(req.body.requestId, 'request ID'), prompt));
+  });
+
+  router.post('/runs/:id/stop', async (req, res) => {
+    if (!execution) throw new Error('Managed execution is unavailable');
+    await execution.stop(String(req.params.id));
+    res.json(store.run(String(req.params.id)));
+  });
+
+  router.get('/runs/:id/connection', (req, res) => {
+    const state = store.execution(String(req.params.id));
+    if (!state) return res.status(404).json({ error: 'Managed run not found' });
+    res.json({ connectionError: state.connectionError, lastSeenAt: state.lastSeenAt, stopRequested: state.stopRequested });
+  });
 
   router.post('/projects', async (req, res) => {
     const name = text(req.body.name, 'project name');

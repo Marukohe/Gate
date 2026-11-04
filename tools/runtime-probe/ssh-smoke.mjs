@@ -55,7 +55,7 @@ try {
   root = await remote('mktemp -d /tmp/gate-p0.XXXXXX');
   assert.match(root, /^\/tmp\/gate-p0\.[a-zA-Z0-9]+$/);
   for (const name of ['runtime.mjs', 'cli.mjs', 'fixture.mjs']) {
-    await remote(`cat > ${quote(`${root}/${name}`)}`, fs.readFileSync(new URL(name, import.meta.url), 'utf8'));
+    await remote(`cat > ${quote(`${root}/${name}`)}`, fs.readFileSync(new URL(name === 'fixture.mjs' ? name : `../../server/runtime/${name}`, import.meta.url), 'utf8'));
   }
   const cli = `${quote(remoteNode)} ${quote(`${root}/cli.mjs`)}`;
   rpc = async (request) => JSON.parse(await remote(`${cli} request ${quote(root)}`, JSON.stringify(request)));
@@ -157,6 +157,27 @@ try {
     await rpc({ method: 'interrupt', runId: 'codex-protocol' });
     await exited('codex-protocol');
     report.providers.codex.initialize = 'passed; no model turn or account access';
+  }
+  if (values.claude) {
+    await remote(`mkdir ${quote(`${root}/claude-home`)}`);
+    await start('claude-protocol', '/usr/bin/env', [
+      `CLAUDE_CONFIG_DIR=${root}/claude-home`, values.claude, '-p', '--verbose',
+      '--input-format', 'stream-json', '--output-format', 'stream-json', '--permission-prompt-tool', 'stdio',
+    ]);
+    await until(async () => (await rpc({ method: 'get', runId: 'claude-protocol' })).state === 'running');
+    await rpc({ method: 'input', runId: 'claude-protocol', inputId: 'initialize', data: JSON.stringify({
+      type: 'control_request', request_id: 'gate-init', request: { subtype: 'initialize' },
+    }) + '\n' });
+    await until(async () => (await stdout('claude-protocol')).split('\n').some((line) => {
+      try {
+        const message = JSON.parse(line);
+        return message.type === 'control_response' && message.response?.request_id === 'gate-init' &&
+          message.response.subtype === 'success';
+      } catch { return false; }
+    }));
+    await rpc({ method: 'interrupt', runId: 'claude-protocol' });
+    await exited('claude-protocol');
+    report.providers.claude.initialize = 'passed; no user prompt or model turn';
   }
 
   await rpc({ method: 'shutdown' });

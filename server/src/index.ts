@@ -12,6 +12,7 @@ import { ProviderRegistry } from './providers/registry.js';
 import { ClaudeProvider } from './providers/claude/index.js';
 import { CodexProvider } from './providers/codex/index.js';
 import { createWorkbenchRoutes } from './workbench/routes.js';
+import { ExecutionService } from './workbench/execution.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -74,7 +75,9 @@ const httpServer = createServer(app);
 const sshManager = setupWebSocket(httpServer, db, registry);
 
 app.use('/api/servers', createServerRoutes(db, sshManager));
-app.use('/api/workbench', createWorkbenchRoutes(db, sshManager));
+const execution = new ExecutionService(db);
+execution.start();
+app.use('/api/workbench', createWorkbenchRoutes(db, sshManager, execution));
 
 // Serve built client in production
 const clientDist = path.resolve(__dirname, '../../client/dist');
@@ -96,7 +99,7 @@ httpServer.listen(PORT, HOST, () => {
 
 function shutdown() {
   console.log('Shutting down...');
-  sshManager.disconnectAll().catch(() => {}).finally(() => {
+  Promise.all([execution.close(), sshManager.disconnectAll()]).catch(() => {}).finally(() => {
     httpServer.close();
     db.close();
     process.exit(0);

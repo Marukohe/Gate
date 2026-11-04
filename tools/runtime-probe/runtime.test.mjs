@@ -150,3 +150,33 @@ test('rejects ambiguous commands, invalid requests, and a second owner', async (
   await assert.rejects(startRuntime(root), /EADDRINUSE/);
   assert.equal((await rpc({ method: 'ping' })).version, 1);
 });
+
+test('journals complete protocol messages with initial input and bounded replay', async () => {
+  const script = `process.stdin.once('data', (data) => {
+    process.stdout.write('{"type":"message","text":');
+    setTimeout(() => { console.log(JSON.stringify(data.toString()) + '}'); process.exit(0); }, 30);
+  });`;
+  const spec = { method: 'start', runId: 'protocol', command: process.execPath, args: ['-e', script],
+    cwd: root, initialInput: 'literal 中文 $HOME `echo no`\n', protocol: true };
+  await rpc(spec);
+  await until(async () => (await rpc({ method: 'get', runId: 'protocol' })).state === 'exited');
+  const all = await events('protocol');
+  assert.equal(all.filter((e) => e.type === 'protocol').length, 1);
+  assert.deepEqual(all.find((e) => e.type === 'protocol').data, { type: 'message', text: spec.initialInput });
+  await assert.rejects(rpc({ ...spec, initialInput: 'different' }), /different command/);
+  assert.deepEqual((await rpc({ method: 'events', runId: 'protocol', after: 99999 })).events, []);
+  await runtime.close();
+  runtime = await startRuntime(root);
+  assert.deepEqual(await events('protocol'), all);
+});
+
+test('stops runaway output and keeps an error plus confirmed exit within a bounded journal', async () => {
+  await runtime.close();
+  runtime = await startRuntime(root, { maxJournalBytes: 16 * 1024, stopTimeoutMs: 100 });
+  await start('flood', ['-e', 'setInterval(() => process.stdout.write("x".repeat(4096)), 1)']);
+  await until(async () => (await rpc({ method: 'get', runId: 'flood' })).state === 'exited');
+  const all = await events('flood');
+  assert.ok(all.some((e) => e.type === 'error' && e.message.includes('journal limit')));
+  assert.equal(all.at(-1).type, 'exited');
+  assert.ok(fs.statSync(path.join(root, 'flood.jsonl')).size < 20 * 1024);
+});

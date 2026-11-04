@@ -9,6 +9,7 @@
   "files": [
     "bin/",
     "server/dist/",
+    "server/runtime/",
     "client/dist/"
   ],
   "workspaces": [
