@@ -2,7 +2,7 @@ import type BetterSqlite3 from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { Attention, Verification, CollaborationRecord, FrozenSnapshot, Checkout, Project, Run, RunEvent, RunKind, RunState, Task, TaskStatus, WorkbenchSnapshot } from './types.js';
-import { describeAttention, supportsStructuredAnswers, validateDecision } from './attention.js';
+import { describeAttention, supportsNativeCancel, supportsStructuredAnswers, validateDecision } from './attention.js';
 import type { LaunchSpec, RuntimeSettings } from './remote.js';
 import type { HookSettings, ObservedSession } from './types.js';
 import type { Delivery, DeliveryRequest } from './types.js';
@@ -11,6 +11,7 @@ export interface Execution {
   runId: string; settings: RuntimeSettings; launch: LaunchSpec | null; source: string | null; branch: string | null;
   stopRequested: boolean; connectionError: string | null; lastSeenAt: number | null;
   terminalExit?: { exitCode: number; signal: string | null };
+  providerInterrupted?: boolean;
 }
 
 const taskStatuses: TaskStatus[] = ['backlog', 'in-progress', 'paused', 'review', 'done', 'canceled'];
@@ -382,6 +383,12 @@ export class WorkbenchStore {
       description = { kind: 'unsupported', title: 'Review runs cannot grant additional access', questions: [], choices: [] };
     }
     const execution = this.execution(runId);
+    if (description.kind === 'approval' && run.provider === 'codex' && execution?.launch &&
+      !supportsNativeCancel(execution.launch.initialInput)) {
+      description.choices = description.choices.filter((choice) => choice !== 'cancel');
+      if (!description.choices.length) description = { kind: 'unsupported', title: 'This older run cannot cancel a native turn',
+        questions: [], choices: [] };
+    }
     if (description.kind === 'question' && run.provider === 'claude' && execution?.launch &&
       !supportsStructuredAnswers(execution.launch.initialInput)) {
       description = { kind: 'unsupported', title: 'This older Claude run cannot receive structured answers',

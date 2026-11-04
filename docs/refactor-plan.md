@@ -103,7 +103,7 @@ Model turns and semantic decision controls are not claimed by these checks.
 Evidence: attention/store/execution tests cover conflicting answers, restart, stale requests, multiple pending
 questions, P2 event backfill, and response acknowledgement loss. The localhost SSH check runs real test commands,
 compares code trees, downloads logs, and uses two browser pages to answer a provider fixture and accept a task explicitly.
-Actual model-generated requests remain part of final provider validation, not a claim of this fixture check.
+Actual model-generated requests are covered separately in final Codex acceptance below.
 
 ### P4: Collaboration and external sessions
 
@@ -121,20 +121,20 @@ model-generated findings. See [managed execution](managed-execution.md) for reta
 External-session evidence: scoped Claude/Codex hook installation preserves existing configuration and records identity
 and activity over the private runtime socket. Localhost SSH/browser checks cover restart, task association, same-checkout
 conflict rejection, manual inspection, renewed activity, and hook removal. Real Claude initialization emits SessionStart;
-real Codex lists the installed hooks as untrusted. Codex hook execution after native trust remains a final validation item.
+real Codex lists the installed hooks as untrusted. Final acceptance below verifies execution after native trust.
 Hooks are advisory: unmanaged tools can still start or write without reporting to Gate.
 
 ### Final workflow acceptance
 
 - [x] Verify project defaults/scripts and task delivery actions against the user surfaces above.
 - [x] Verify managed terminal input, resize, attachment, reconnect, and confirmed exit.
-- [ ] Validate real provider model/tool/decision flows and trusted Codex hook execution in isolated checkouts.
+- [x] Validate real provider model/tool/decision flows and trusted Codex hook execution in isolated checkouts.
 - [ ] Audit the complete start → blockers → evidence → delivery workflow on desktop and mobile.
 
 Terminal evidence: Linux PTY tests cover UTF-8, resize, Ctrl-C, foreground/background cleanup, keyed input deduplication,
 and journal recovery. The actual localhost SSH/backend/browser check covers a shell surviving backend restart,
 cursor replay, read-only second attachment, browser keyboard input, control transfer, mobile resizing, and confirmed exit.
-Native Claude/Codex model turns remain in final provider validation. Terminal support currently requires Linux and Python 3.9+
+Native model acceptance is described separately below. Terminal support currently requires Linux and Python 3.9+
 with pidfd APIs; descendants that create a different OS session are outside the cleanup guarantee.
 
 Project/delivery evidence: restart tests preserve project defaults without changing existing tasks. Localhost SSH
@@ -143,6 +143,14 @@ and keep setup/run purpose distinct from test evidence. Real Git checks reject s
 preserve normal commit hooks, retain actual artifacts if hooks change the tree, commit inspected changes, and push
 the pinned commit to a temporary bare origin. Backend restart returns the existing delivery instead of repeating it.
 GitHub PR argument transport, push-destination checks, and reuse use a deterministic CLI fixture; no real PR is published.
+
+Live-provider acceptance uses Codex per the user's instruction to proceed with Codex while Claude is unavailable.
+Actual localhost SSH runs verify native command approvals, a file modification, persisted decisions across execution
+service restart, and canceled-turn outcome without task acceptance. The local sandbox required explicit escalation
+for the tested command; Gate preserved the approval boundary. Native `/hooks` trust and a real Codex turn verify
+SessionStart/UserPromptSubmit/Stop delivery; the opt-in hook test repeats this using only inspected fixture definitions.
+Claude protocol fixtures and real initialization remain covered; its model request failed with revoked authentication,
+so successful live Claude execution is not claimed.
 
 ## Validation and delivery
 

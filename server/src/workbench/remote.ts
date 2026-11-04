@@ -193,7 +193,7 @@ export class RemoteRuntime {
 
   launch(settings: RuntimeSettings, provider: string, cwd: string, prompt: string, review?: FrozenSnapshot): LaunchSpec {
     return { command: settings.nodePath, args: [`${this.releaseDirectory(settings)}/worker.mjs`], cwd, protocol: true,
-      initialInput: JSON.stringify({ gateProtocol: 2, provider, executable: provider === 'codex' ? settings.codexPath : settings.claudePath,
+      initialInput: JSON.stringify({ gateProtocol: 3, provider, executable: provider === 'codex' ? settings.codexPath : settings.claudePath,
         cwd, prompt, ...(review ? { readOnly: true, review } : {}) }) + '\n' };
   }
 

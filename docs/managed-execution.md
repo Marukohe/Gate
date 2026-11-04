@@ -208,9 +208,15 @@ deterministic GitHub CLI fixture; no real GitHub PR is published by the acceptan
 
 ## Remaining boundaries
 
-The end-to-end lifecycle test uses a deterministic provider fixture. Real model/tool/approval execution still needs
-separate validation. Machine reboot, runtime-crash reattachment,
+The main end-to-end lifecycle test uses a deterministic provider fixture. Opt-in live acceptance separately verifies
+Codex model output, a real file modification, command approvals, service restart while waiting, and native turn cancellation.
+The native `/hooks` UI and `live-hooks-smoke.mjs` verify persisted trust followed by real SessionStart/UserPromptSubmit/Stop
+callbacks. The test only trusts definitions it generated and inspected, in a disposable configuration directory;
+the product still requires users to review their own hooks. See [native hook trust](https://learn.chatgpt.com/docs/hooks).
+Per the user's instruction, live model acceptance uses Codex while Claude is unavailable. Claude initialization,
+protocol fixtures, and an actual authentication-failure path are verified; successful live Claude model execution is not claimed.
+
+Machine reboot, runtime-crash reattachment,
 disk-full recovery, automatic journal retention, and descendants escaping the owned process group are not guaranteed.
 Concurrent writers started outside managed task execution are not covered by checkout locks; hooks surface only reported activity.
-Observation snapshots and hook backups are retained without automatic cleanup. Codex hook execution after native trust
-has not yet been validated; installation and untrusted discovery are verified separately.
+Observation snapshots and hook backups are retained without automatic cleanup.

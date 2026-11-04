@@ -99,6 +99,28 @@ to stdin; a crash between acceptance and writing has an unknown delivery outcome
 - Machine reboot, disk-full recovery, and unattended supervisor upgrades remain outside these checks.
   Descendants that leave the owned process group are not contained.
 
+## Optional live provider acceptance
+
+These checks send real model requests and use existing provider login. Build Gate first. Codex is the default;
+set `GATE_LIVE_PROVIDERS=claude,codex` only when both accounts are available. Localhost SSH must be configured.
+
+```bash
+GATE_LIVE_PROVIDER_TEST=1 node tools/runtime-probe/live-workbench-smoke.mjs
+GATE_LIVE_PROVIDER_TEST=1 GATE_LIVE_CANCEL=1 node tools/runtime-probe/live-workbench-smoke.mjs
+GATE_LIVE_PROVIDER_TEST=1 node tools/runtime-probe/live-hooks-smoke.mjs
+```
+
+The workbench check asks for a harmless approval probe and a fixture file, restarting the execution service while
+the request is pending. It automatically answers only its known question/command; unexpected approval requests
+are printed for inspection and can be answered through stdin as `{"id":"...","response":{"decision":"accept"}}`.
+The installed CLI may ask for additional approval when its sandbox is unavailable. Never approve an unrelated command.
+Cancellation must leave the run interrupted, the fixture file absent, and the task unaccepted.
+
+`live-config.py` copies authentication and model settings into private disposable directories; it does not copy
+existing project instructions, MCP servers, or hook trust. The hook check inspects each generated hook key/command/hash
+before recording fixture-only trust, then verifies events from a real Codex turn. Credential copies are removed after
+confirmed runtime cleanup. Failure evidence stays in the printed fixture directory; no private config is committed.
+
 The directory and socket must remain private to the owning OS user. Journals contain command arguments and
 input/output; they are local diagnostic data and must not be committed with credentials or private transcripts.
 Terminal raw input is excluded from journals, while visible/echoed output remains. The private runtime `input.key` is

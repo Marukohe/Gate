@@ -3,10 +3,10 @@ export function createAdapter(config, send, emit, finish) {
   let threadId = config.nativeSessionId;
   let completed = false;
   const pending = new Map();
-  const done = (failed, message) => {
+  const done = (failed, message, interrupted = false) => {
     if (completed) return;
     completed = true;
-    emit({ type: 'result', failed, message: message ?? null });
+    emit({ type: 'result', failed, message: message ?? null, ...(interrupted ? { interrupted: true } : {}) });
     finish(failed);
   };
   const attention = (id, kind, detail) => {
@@ -62,7 +62,7 @@ export function createAdapter(config, send, emit, finish) {
         else if (item) emit({ type: 'tool', item });
       } else if (msg.method === 'turn/completed') {
         const turn = msg.params?.turn;
-        done(turn?.status !== 'completed', turn?.error?.message ?? (turn?.status === 'interrupted' ? 'Turn interrupted' : null));
+        done(!['completed', 'interrupted'].includes(turn?.status), turn?.error?.message ?? null, turn?.status === 'interrupted');
       } else if (msg.method === 'serverRequest/resolved') {
         const id = String(msg.params?.requestId);
         if (pending.delete(id)) emit({ type: 'attention-resolved', id });
@@ -100,7 +100,7 @@ export function createAdapter(config, send, emit, finish) {
     if (!request) throw new Error('Decision is no longer pending');
     const { id, kind, detail } = request;
     if (config.provider === 'codex' && ['item/commandExecution/requestApproval', 'item/fileChange/requestApproval'].includes(kind)) {
-      if (!['accept', 'decline'].includes(value.decision)) throw new Error('Choose accept or decline');
+      if (!['accept', 'decline', 'cancel'].includes(value.decision)) throw new Error('Choose accept or decline, or cancel the turn');
       if (detail.availableDecisions && !detail.availableDecisions.includes(value.decision)) {
         throw new Error('Decision is not offered by the provider');
       }

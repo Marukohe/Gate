@@ -34,6 +34,21 @@ describe('Durable decisions', () => {
     expect(db.workbench.task(db.workbench.run(runId)!.taskId)?.status).toBe('backlog');
   });
 
+  it('offers cancellation when the provider offers cancel instead of decline', () => {
+    const item = db.workbench.addAttention(runId, '42', 'item/commandExecution/requestApproval',
+      { command: 'printf probe', availableDecisions: ['accept', { acceptWithExecpolicyAmendment: {} }, 'cancel'] }, Date.now());
+    expect(item.choices).toEqual(['accept', 'cancel']);
+    expect(() => db.workbench.decide(item.id, { decision: 'decline' })).toThrow(/not offered/);
+    expect(db.workbench.decide(item.id, { decision: 'cancel' }).response).toEqual({ decision: 'cancel' });
+    db.workbench.saveExecution({ runId, settings: { serverId: 'fixture', nodePath: '/node', directory: '/runtime',
+      claudePath: '/claude', codexPath: '/codex' }, source: null, branch: null, stopRequested: false,
+      connectionError: null, lastSeenAt: null, launch: { command: '/node', args: ['/old/worker.mjs'], cwd: '/repo',
+        initialInput: '{"gateProtocol":2}', protocol: true } });
+    const old = db.workbench.addAttention(runId, 'old-worker', 'item/commandExecution/requestApproval',
+      { availableDecisions: ['accept', 'cancel'] }, Date.now());
+    expect(old.choices).toEqual(['accept']);
+  });
+
   it('expires provider-cancelled and terminal-run requests without treating them as answered', () => {
     const item = db.workbench.addAttention(runId, '42', 'item/fileChange/requestApproval', {}, Date.now());
     db.workbench.resolveAttention(runId, '42', Date.now());

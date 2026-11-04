@@ -339,6 +339,9 @@ export class ExecutionService {
           exitCode: typeof message.exitCode === 'number' ? message.exitCode : null,
           signal: typeof message.signal === 'string' ? message.signal : null });
         if (message.type === 'result' && message.failed) store.updateRun(run.id, { error: String(message.message ?? 'Provider failed') });
+        if (message.type === 'result' && message.interrupted === true) {
+          store.saveExecution({ ...store.execution(run.id)!, providerInterrupted: true });
+        }
         break;
       }
       case 'exited': {
@@ -348,13 +351,14 @@ export class ExecutionService {
           store.addAttention(run.id, 'ownership-loss', 'failure', { message: error }, event.time);
           break;
         }
-        const missingDelivery = run.kind === 'delivery' && !store.delivery(run.id)?.result && !payload.interrupted;
+        const interrupted = payload.interrupted || store.execution(run.id)?.providerInterrupted;
+        const missingDelivery = run.kind === 'delivery' && !store.delivery(run.id)?.result && !interrupted;
         const failed = run.error || missingDelivery || (!payload.interrupted && payload.exitCode !== 0);
         const failureMessage = run.error ?? (missingDelivery
           ? 'Delivery exited without a confirmed result; inspect the repository before retrying'
           : `Process exited ${payload.exitCode ?? payload.signal}`);
         const outcome = run.kind === 'terminal' ? store.execution(run.id)!.terminalExit! : payload;
-        store.updateRun(run.id, { state: failed ? 'failed' : payload.interrupted ? 'interrupted' : 'completed',
+        store.updateRun(run.id, { state: failed ? 'failed' : interrupted ? 'interrupted' : 'completed',
           ...(missingDelivery && !run.error ? { error: failureMessage } : {}),
           exitCode: typeof outcome.exitCode === 'number' ? outcome.exitCode : null,
           signal: typeof outcome.signal === 'string' ? outcome.signal : null, endedAt: event.time });
@@ -364,19 +368,19 @@ export class ExecutionService {
           { message: failureMessage, exitCode: payload.exitCode }, event.time);
         const verification = store.verification(run.id);
         if (verification) store.saveVerification({ ...verification,
-          state: failed ? 'failed' : payload.interrupted ? 'interrupted' : 'passed',
+          state: failed ? 'failed' : interrupted ? 'interrupted' : 'passed',
           endedAt: verification.endedAt ?? event.time,
           exitCode: verification.endedAt ? verification.exitCode : typeof payload.exitCode === 'number' ? payload.exitCode : null,
           signal: verification.signal ?? (typeof payload.signal === 'string' ? payload.signal : null) });
         const collaboration = store.collaboration(run.id);
         if (collaboration) store.saveCollaboration({ ...collaboration,
-          state: failed ? 'failed' : payload.interrupted ? 'interrupted' : 'completed',
+          state: failed ? 'failed' : interrupted ? 'interrupted' : 'completed',
           result: store.agentMessages(run.id).join('\n\n') || null });
         const delivery = store.delivery(run.id);
-        if (delivery) store.saveDelivery({ ...delivery, state: failed ? 'failed' : payload.interrupted ? 'interrupted' : 'completed',
+        if (delivery) store.saveDelivery({ ...delivery, state: failed ? 'failed' : interrupted ? 'interrupted' : 'completed',
           endedAt: event.time });
         // A review finishing in its own checkout must not overwrite a concurrently running implementation's status.
-        if (!failed && !payload.interrupted && !['review', 'terminal', 'delivery'].includes(run.kind) &&
+        if (!failed && !interrupted && !['review', 'terminal', 'delivery'].includes(run.kind) &&
           (run.kind !== 'script' || verification?.purpose === 'test')) store.updateTask(run.taskId, { status: 'review' });
         break;
       }

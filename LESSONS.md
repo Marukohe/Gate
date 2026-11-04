@@ -150,6 +150,23 @@ Keep this file concise; implementation progress belongs in [the refactor plan](d
   payload minimization, unrelated settings, and rejection of symlinked configuration.
 - Shared-checkout observations remain conflicts until SessionEnd or explicit inspection; new activity clears a manual
   dismissal. The localhost workbench smoke verifies this across backend restart and browser operations.
+- Native Codex `/hooks` persists trust by source key and definition hash. Real model turns then invoke SessionStart,
+  UserPromptSubmit, and Stop; thread creation alone did not trigger SessionStart in the installed version.
+  `live-hooks-smoke.mjs` checks the exact generated definitions before granting fixture-only trust in a disposable home.
+
+## A local login status is not proof of a working provider credential
+
+- Observed: Claude reported logged in, but a real model request returned HTTP 401 for a revoked OAuth token.
+- Prevention: distinguish stored credentials, protocol initialization, and a successful authenticated model request.
+- Check: opt-in `live-workbench-smoke.mjs`; its private credential copies are removed after runtime drain.
+
+## Use the approval choices the installed provider actually offers
+
+- Observed: Codex 0.166.0 offered `accept` and `cancel` for an escalated command, without `decline`.
+- Fix: expose supported choices, forward cancellation explicitly, and persist the provider's interrupted outcome
+  until worker exit. Do not mark the task ready for review or release the checkout before confirmed exit.
+- Check: provider/attention/execution tests and `GATE_LIVE_CANCEL=1` in the opt-in live workbench check.
+  Older persisted workers keep their existing capability set and can still be stopped through Gate.
 
 ## Runtime upgrades must wait for owned execution to drain
 

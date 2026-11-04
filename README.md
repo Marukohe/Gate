@@ -33,6 +33,7 @@ Browser (React) <--WebSocket--> Node.js Backend <--SSH--> Remote Server
   The Sessions entry preserves access to existing workspace chats. Managed tasks run independently through a remote
   runtime, with replay after backend/SSH reconnect, isolated worktrees, and confirmed stop status.
 - **Decisions and evidence** — Resolve agent questions and supported approvals from the attention-first Overview.
+  Codex approvals expose the offered Allow/Decline/Cancel choices; a canceled turn stays interrupted until confirmed exit.
   Run test commands, inspect changes, and compare recorded evidence with the checkout's code snapshot.
   Task acceptance stays explicit; test success does not automatically mark work done.
 - **Project defaults and scripts** — Choose the default agent, working copy, and isolation for new tasks.

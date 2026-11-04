@@ -1,7 +1,11 @@
 import type { Attention, Question } from './types.js';
 
 export function supportsStructuredAnswers(initialInput: string): boolean {
-  try { return JSON.parse(initialInput).gateProtocol === 2; } catch { return false; }
+  try { return JSON.parse(initialInput).gateProtocol >= 2; } catch { return false; }
+}
+
+export function supportsNativeCancel(initialInput: string): boolean {
+  try { return JSON.parse(initialInput).gateProtocol >= 3; } catch { return false; }
 }
 
 export function describeAttention(provider: string, method: string, detail: Record<string, any>):
@@ -23,7 +27,7 @@ export function describeAttention(provider: string, method: string, detail: Reco
   if ((provider === 'claude' && method === 'can_use_tool') ||
     (provider === 'codex' && ['item/commandExecution/requestApproval', 'item/fileChange/requestApproval'].includes(method))) {
     const choices = provider === 'codex' && Array.isArray(detail.availableDecisions)
-      ? ['accept', 'decline'].filter((value) => detail.availableDecisions.includes(value)) : ['accept', 'decline'];
+      ? ['accept', 'decline', 'cancel'].filter((value) => detail.availableDecisions.includes(value)) : ['accept', 'decline'];
     if (!choices.length) return { kind: 'unsupported', title: 'No supported approval choice', questions: [], choices: [] };
     return { kind: 'approval', title: provider === 'claude' ? `Allow ${detail.tool_name ?? 'tool'}?` :
       method.includes('commandExecution') ? 'Allow this command?' : 'Allow these file changes?', questions: [], choices };

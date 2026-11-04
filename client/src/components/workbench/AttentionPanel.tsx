@@ -91,7 +91,7 @@ function Decision({ item, mutate, busy }: WorkbenchActions & { item: Attention }
         {JSON.stringify(item.detail, null, 2)}</pre>}
       {item.kind === 'approval' && <div className="flex flex-wrap gap-2">{item.choices.map((choice) =>
         <Button key={choice} disabled={disabled} variant={choice === 'accept' ? 'default' : 'outline'}
-          onClick={() => void respond({ decision: choice })}>{choice === 'accept' ? 'Allow once' : 'Decline'}</Button>)}</div>}
+          onClick={() => void respond({ decision: choice })}>{choice === 'accept' ? 'Allow once' : choice === 'cancel' ? 'Cancel turn' : 'Decline'}</Button>)}</div>}
       {item.kind === 'failure' && <Button disabled={disabled} variant="outline"
         onClick={() => void respond({ decision: 'acknowledge' })}>Acknowledge failure</Button>}
       {item.kind === 'unsupported' && <p className="text-sm">Gate cannot answer this request. Stop the run before continuing in the native tool.</p>}

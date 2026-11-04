@@ -54,6 +54,9 @@ node --test tools/runtime-probe/*.test.mjs
 node tools/runtime-probe/ssh-smoke.mjs --host localhost
 # Production backend restart and SSH recovery (build first; uses isolated localhost fixtures)
 node tools/runtime-probe/workbench-smoke.mjs
+# Optional real model acceptance; requires existing provider login and sends model requests
+GATE_LIVE_PROVIDER_TEST=1 node tools/runtime-probe/live-workbench-smoke.mjs
+GATE_LIVE_PROVIDER_TEST=1 node tools/runtime-probe/live-hooks-smoke.mjs
 ```
 
 ## Deployment
@@ -80,6 +83,8 @@ Data is stored in `~/.gate/gate.db` by default.
 - `server/src/db.ts` — SQLite layer for servers, sessions, messages, workspaces, and provider session maps
 - `server/src/workbench/` — Project, checkout, task, and run persistence; additive legacy import and event cursors
 - `server/src/workbench/attention.ts` — Provider request capabilities, question normalization, and decision validation
+- Managed launch protocol 3 adds native Codex cancellation; protocol 2 introduced structured question answers.
+  Keep old workers pinned and do not advertise a new decision capability to an older launch.
 - `server/src/workbench/collaboration.ts` — Recorded handoff packets and fresh review context
 - `server/runtime/collaboration.mjs` — Pinned code snapshots, comparison diffs, and detached review worktrees
 - `server/runtime/observations.mjs`, `hook.mjs`, `hook-install.mjs` — Scoped external-session observation over the

@@ -47,6 +47,17 @@ test('Claude initializes streaming control and returns the exact tool input only
   assert.ok(a.events.some((e) => e.text === 'Verified'));
 });
 
+test('Codex exposes offered cancellation and distinguishes interrupted turns from failures', () => {
+  const a = adapter('codex');
+  a.message({ id: 1, method: 'item/commandExecution/requestApproval', params: { command: 'printf probe', availableDecisions: ['accept', 'cancel'] } });
+  assert.throws(() => a.input({ id: '1', decision: 'decline' }), /not offered/);
+  a.input({ id: '1', decision: 'cancel' });
+  assert.deepEqual(a.sent.at(-1), { id: 1, result: { decision: 'cancel' } });
+  a.message({ method: 'turn/completed', params: { turn: { status: 'interrupted', error: null } } });
+  assert.deepEqual(a.finished, [false]);
+  assert.deepEqual(a.events.at(-1), { type: 'result', failed: false, message: null, interrupted: true });
+});
+
 test('unknown provider requests remain pending and never receive an invented approval', () => {
   const a = adapter('codex');
   a.message({ id: 2, method: 'future/requestApproval', params: {} });

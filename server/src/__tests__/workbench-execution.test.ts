@@ -230,4 +230,19 @@ describe('Managed execution recovery', () => {
     expect(db.workbench.attentionItems(run.id)[0].detail.message).toContain('without a confirmed result');
   });
 
+  it('persists a provider cancellation until confirmed exit without declaring review readiness', async () => {
+    const run = service.run(taskId, 'native-cancel', 'work');
+    await service.reconcile(run.id);
+    remote.push(run.id, 'protocol', { data: { type: 'result', failed: false, interrupted: true } });
+    await service.reconcile(run.id);
+    expect(() => service.run(otherTaskId, 'too-early', 'work')).toThrow(/in use/);
+    await service.close(); service = new ExecutionService(db, remote as unknown as RemoteRuntime);
+    remote.push(run.id, 'exited', { exitCode: 0 });
+    await service.reconcile(run.id);
+    expect(db.workbench.run(run.id)?.state).toBe('interrupted');
+    expect(db.workbench.task(taskId)?.status).toBe('in-progress');
+    expect(db.workbench.attentionItems(run.id)).toEqual([]);
+    expect(() => service.run(otherTaskId, 'after-exit', 'work')).not.toThrow();
+  });
+
 });
