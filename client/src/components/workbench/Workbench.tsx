@@ -8,6 +8,7 @@ import { useWorkbench } from './use-workbench';
 import { ProjectForm, selectClass } from './ProjectForm';
 import { TaskForm } from './TaskForm';
 import { TaskDetail, taskLabels } from './TaskDetail';
+import { ExternalSessions } from './ExternalSessions';
 
 function readRoute() {
   const [kind, id] = window.location.hash.slice(1).split('/');
@@ -94,6 +95,11 @@ export function Workbench({ onLegacy, onAddServer, onLegacySession }: {
                 attention={snapshot.attention.filter((item) => item.taskId === task.id)}
                 collaborations={snapshot.collaborations.filter((item) => item.taskId === task.id)}
                 verifications={snapshot.verifications.filter((item) => item.taskId === task.id)}
+                checkoutBlocked={snapshot.observedSessions.some((item) => item.checkoutId === checkout.id &&
+                  item.state !== 'ended' && item.dismissedRevision !== item.revision)}
+                externalSessions={<ExternalSessions checkouts={[checkout]}
+                  sessions={snapshot.observedSessions.filter((item) => item.checkoutId === checkout.id)}
+                  settings={snapshot.hookSettings} tasks={snapshot.tasks} configure mutate={mutate} busy={busy} />}
                 mutate={mutate} busy={busy} onLegacySession={onLegacySession} />
             </> : project ? <>
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -110,6 +116,9 @@ export function Workbench({ onLegacy, onAddServer, onLegacySession }: {
                 </div>)}</div>
               <TaskForm project={project} checkouts={snapshot.checkouts.filter((c) => c.projectId === project.id)}
                 mutate={mutate} busy={busy} onCreated={(task) => navigate('task', task.id)} />
+              <ExternalSessions checkouts={snapshot.checkouts.filter((c) => c.projectId === project.id)}
+                sessions={snapshot.observedSessions.filter((item) => snapshot.checkouts.some((c) => c.id === item.checkoutId && c.projectId === project.id))}
+                settings={snapshot.hookSettings} tasks={snapshot.tasks} configure mutate={mutate} busy={busy} />
               <section className="space-y-3"><h2 className="font-medium">Tasks</h2>
                 {snapshot.tasks.some((t) => t.projectId === project.id)
                   ? taskList(snapshot.tasks.filter((t) => t.projectId === project.id))
@@ -151,6 +160,11 @@ export function Workbench({ onLegacy, onAddServer, onLegacySession }: {
                 <h2 className="font-medium text-amber-600">Needs attention <span className="ml-1">{needsAttention.length}</span></h2>
                 {taskList(needsAttention)}
               </section>}
+              <ExternalSessions checkouts={snapshot.checkouts} settings={snapshot.hookSettings} tasks={snapshot.tasks}
+                sessions={snapshot.observedSessions.filter((item) => item.state !== 'ended' && item.dismissedRevision !== item.revision &&
+                  (!machineFilter || snapshot.checkouts.find((c) => c.id === item.checkoutId)?.serverId === machineFilter) &&
+                  (!projectFilter || snapshot.checkouts.find((c) => c.id === item.checkoutId)?.projectId === projectFilter))}
+                mutate={mutate} busy={busy} />
               {(['review', 'in-progress', 'backlog', 'paused', 'done', 'canceled'] as const).map((status) => {
                 const group = filteredTasks.filter((task) => task.status === status && !needsAttention.includes(task));
                 return group.length > 0 && <section key={status} className="space-y-3">

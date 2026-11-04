@@ -21,6 +21,8 @@ node tools/runtime-probe/ssh-smoke.mjs --host localhost \
   --codex /absolute/path/to/codex --claude /absolute/path/to/claude \
   --report /tmp/gate-runtime-report.json
 GATE_CODEX_BIN=/absolute/path/to/codex node --test tools/runtime-probe/provider-cli.test.mjs
+GATE_CODEX_BIN=/absolute/path/to/codex GATE_CLAUDE_BIN=/absolute/path/to/claude \
+  node --test tools/runtime-probe/hooks-cli.test.mjs
 ```
 
 The script uploads only these probe modules to a fresh `/tmp/gate-p0.*` directory, starts a detached runtime,
@@ -33,6 +35,7 @@ Provider checks run `--version` and initialize each CLI's bidirectional protocol
 attachment, and hooks are not exercised by this probe.
 Review launch restrictions and Codex configuration reads are included. The optional Codex test creates a read-only
 thread and verifies an inherited MCP server stays disabled; it intercepts the turn request before sending any prompt.
+The hook CLI test verifies actual Claude SessionStart delivery and untrusted Codex hook discovery in isolated configs.
 
 The production workbench check additionally restarts the actual backend, disconnects its SSH transport, checks
 parallel worktrees and confirmed completion/stop, persists decisions across restart, rejects conflicting answers,
@@ -47,6 +50,8 @@ node tools/runtime-probe/workbench-smoke.mjs
 
 This check uses localhost SSH and `~/.ssh/id_rsa` by default; set `GATE_TEST_SSH_KEY` for another private key.
 Optional browser checks use `GATE_TEST_PLAYWRIGHT` (absolute module path) and `GATE_TEST_CHROMIUM` (executable).
+Scoped-hook checks also cover event delivery through localhost SSH, record recovery, task association, shared-checkout
+conflicts, manual inspection, new activity after inspection, and preserving removal through the browser.
 
 ## Protocol v1
 
@@ -64,6 +69,9 @@ The direct socket request must include that version explicitly.
 | `input` | `runId`, `inputId`, `data` | Accepted/duplicate status |
 | `interrupt` | `runId` | Snapshot; poll until confirmed exit |
 | `shutdown` | None | Acknowledgement; socket closes after owned children exit |
+| `observe-configure` | `scopeId`, canonical `cwd`, `provider`, `enabled` | Scoped observer settings |
+| `observe` | `scopeId`, `provider`, `sessionId`, canonical `cwd`, `event` | Durable latest activity |
+| `observe-list` | `scopeId` | Scope and observed session snapshots; no process-control capabilities |
 
 Executable arguments are passed directly with `spawn`, without shell interpolation. Each live child owns a
 Unix process group. Interruption sends TERM and escalates to KILL after a timeout. This is process termination,

@@ -54,7 +54,7 @@ try {
   report.node = await remote(`${quote(remoteNode)} --version`);
   root = await remote('mktemp -d /tmp/gate-p0.XXXXXX');
   assert.match(root, /^\/tmp\/gate-p0\.[a-zA-Z0-9]+$/);
-  for (const name of ['runtime.mjs', 'cli.mjs', 'fixture.mjs']) {
+  for (const name of ['runtime.mjs', 'cli.mjs', 'observations.mjs', 'fixture.mjs']) {
     await remote(`cat > ${quote(`${root}/${name}`)}`, fs.readFileSync(new URL(name === 'fixture.mjs' ? name : `../../server/runtime/${name}`, import.meta.url), 'utf8'));
   }
   const cli = `${quote(remoteNode)} ${quote(`${root}/cli.mjs`)}`;

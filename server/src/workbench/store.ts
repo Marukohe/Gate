@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { Attention, Verification, CollaborationRecord, FrozenSnapshot, Checkout, Project, Run, RunEvent, RunKind, RunState, Task, TaskStatus, WorkbenchSnapshot } from './types.js';
 import { describeAttention, supportsStructuredAnswers, validateDecision } from './attention.js';
 import type { LaunchSpec, RuntimeSettings } from './remote.js';
+import type { HookSettings, ObservedSession } from './types.js';
 
 export interface Execution {
   runId: string; settings: RuntimeSettings; launch: LaunchSpec | null; source: string | null; branch: string | null;
@@ -81,6 +82,12 @@ export class WorkbenchStore {
         CREATE TABLE IF NOT EXISTS run_execution (
           runId TEXT PRIMARY KEY REFERENCES runs(id), data TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS hook_settings (
+          checkoutId TEXT PRIMARY KEY REFERENCES checkouts(id), data TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS observed_sessions (
+          id TEXT PRIMARY KEY, checkoutId TEXT NOT NULL REFERENCES checkouts(id), data TEXT NOT NULL
+        );
       `);
       this.importLegacyWorkspaces();
       this.importAttentionEvents();
@@ -124,6 +131,53 @@ export class WorkbenchStore {
     const row = this.db.prepare('SELECT settings FROM runtime_settings WHERE serverId = ?').get(serverId) as
       { settings: string } | undefined;
     return row ? JSON.parse(row.settings) : undefined;
+  }
+
+  hookSettings(): HookSettings[] {
+    return (this.db.prepare('SELECT data FROM hook_settings').all() as { data: string }[]).map((row) => JSON.parse(row.data));
+  }
+
+  saveHookSettings(settings: HookSettings): void {
+    this.db.prepare('INSERT OR REPLACE INTO hook_settings VALUES (?, ?)').run(settings.checkoutId, JSON.stringify(settings));
+  }
+
+  observedSessions(): ObservedSession[] {
+    return (this.db.prepare('SELECT data FROM observed_sessions').all() as { data: string }[]).map((row) => JSON.parse(row.data));
+  }
+
+  saveObservedSession(item: ObservedSession): void {
+    this.db.prepare('INSERT OR REPLACE INTO observed_sessions VALUES (?, ?, ?)').run(item.id, item.checkoutId, JSON.stringify(item));
+  }
+
+  ingestObserved(checkoutId: string, sessions: ObservedSession[]): void {
+    this.db.transaction(() => {
+      const known = new Map(this.observedSessions().map((item) => [item.id, item]));
+      for (const value of sessions) {
+        if (value.scopeId !== checkoutId || value.cwd !== this.checkout(checkoutId)?.path) throw new Error('Observation checkout mismatch');
+        const previous = known.get(value.id);
+        if (previous && previous.revision >= value.revision) continue;
+        const next = { ...value, checkoutId, taskId: previous?.taskId ?? null,
+          dismissedRevision: previous?.dismissedRevision ?? null };
+        this.saveObservedSession(next);
+        known.set(next.id, next);
+      }
+    })();
+  }
+
+  updateObserved(id: string, input: { taskId?: string | null; inspected?: boolean }): ObservedSession {
+    const item = this.observedSessions().find((value) => value.id === id);
+    if (!item) throw new Error('Observed session not found');
+    if (input.taskId && this.task(input.taskId)?.checkoutId !== item.checkoutId) throw new Error('Choose a task in this checkout');
+    const next = { ...item, ...(input.taskId !== undefined ? { taskId: input.taskId } : {}),
+      ...(input.inspected === true ? { dismissedRevision: item.revision } : {}) };
+    this.saveObservedSession(next);
+    return next;
+  }
+
+  assertNoObservedWriter(checkoutId: string): void {
+    const conflict = this.observedSessions().find((item) => item.checkoutId === checkoutId && item.state !== 'ended' &&
+      item.dismissedRevision !== item.revision);
+    if (conflict) throw new Error(`Checkout has an observed ${conflict.provider} session (${conflict.sessionId}). Stop it in its native terminal or confirm it has exited in External sessions.`);
   }
 
   saveRuntimeSettings(settings: RuntimeSettings): void {
@@ -245,6 +299,8 @@ export class WorkbenchStore {
       attention: this.attentionItems(),
       verifications: this.verifications(),
       collaborations: this.collaborations(),
+      observedSessions: this.observedSessions(),
+      hookSettings: this.hookSettings(),
     };
   }
 
@@ -524,6 +580,7 @@ export class WorkbenchStore {
       { runId: string } | undefined;
     if (lease?.runId === run.id) return;
     if (lease) throw new Error(`Checkout is in use by run ${lease.runId}`);
+    this.assertNoObservedWriter(run.checkoutId);
     this.db.prepare('INSERT INTO checkout_leases VALUES (?, ?)').run(run.checkoutId, run.id);
   }
 

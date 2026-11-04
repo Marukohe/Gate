@@ -125,3 +125,20 @@ Keep this file concise; implementation progress belongs in [the refactor plan](d
   of review completion. Check the review checkout again before marking the run successful.
 - Check: the localhost workbench smoke runs source verification during review, checks that review does not overwrite
   `in-progress`, detects stale evidence, and rejects a review whose own checkout changed.
+
+## Hook installation and hook execution are different evidence
+
+- Verified: Claude initialization emits SessionStart from a checkout observer; Codex lists new definitions as untrusted.
+- Prevention: preserve native trust decisions, show installation separately from received activity, and never infer
+  attachment, stop, approval, or process exit capabilities from a session ID or silent hook.
+- Check: `hooks-cli.test.mjs` exercises installed CLIs without a model turn; `hooks.test.mjs` checks scope, restart,
+  payload minimization, unrelated settings, and rejection of symlinked configuration.
+- Shared-checkout observations remain conflicts until SessionEnd or explicit inspection; new activity clears a manual
+  dismissal. The localhost workbench smoke verifies this across backend restart and browser operations.
+
+## Runtime upgrades must wait for owned execution to drain
+
+- Found during hook integration: checking idle state while another browser starts a run can race runtime shutdown.
+- Fix: serialize Gate start requests with hook installation/upgrade, inspect confirmed remote exit, and refuse upgrades
+  with active or lost ownership. Slow observation polls run separately from managed execution reconciliation.
+- Check: `workbench-hooks-upgrade.test.ts` holds a start in flight and verifies that neither active nor lost runs trigger shutdown.

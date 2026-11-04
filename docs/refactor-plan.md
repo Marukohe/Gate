@@ -107,16 +107,29 @@ Actual model-generated requests remain part of final provider validation, not a 
 
 ### P4: Collaboration and external sessions
 
-- [ ] Discover external sessions through scoped hooks/plugins without claiming unsupported control.
+- [x] Discover external sessions through scoped hooks/plugins without claiming unsupported control.
 - [ ] Add a managed terminal launch entry point and explicit attachment capabilities.
 - [x] Add agent handoff and independent review tied to a fixed code snapshot.
-- [ ] Isolate concurrent writers with worktrees and surface shared-checkout conflicts.
+- [x] Isolate concurrent writers with worktrees and surface shared-checkout conflicts.
 
 Collaboration evidence: localhost SSH/backend/browser checks cover handoff across providers, persisted context,
 review restart, concurrent verification in the task checkout, stale review detection, and modified-review rejection.
 Review pins a synthetic commit and comparison base; its separate checkout is verified again at completion.
 Actual Codex configuration checks confirm inherited MCP entries are disabled for review. These checks do not claim
 model-generated findings. See [managed execution](managed-execution.md) for retained artifacts and provider limits.
+
+External-session evidence: scoped Claude/Codex hook installation preserves existing configuration and records identity
+and activity over the private runtime socket. Localhost SSH/browser checks cover restart, task association, same-checkout
+conflict rejection, manual inspection, renewed activity, and hook removal. Real Claude initialization emits SessionStart;
+real Codex lists the installed hooks as untrusted. Codex hook execution after native trust remains a final validation item.
+Hooks are advisory: unmanaged tools can still start or write without reporting to Gate.
+
+### Final workflow acceptance
+
+- [ ] Verify project defaults/scripts and task delivery actions against the user surfaces above.
+- [ ] Verify managed terminal input, resize, attachment, reconnect, and confirmed exit.
+- [ ] Validate real provider model/tool/decision flows and trusted Codex hook execution in isolated checkouts.
+- [ ] Audit the complete start → blockers → evidence → delivery workflow on desktop and mobile.
 
 ## Validation and delivery
 

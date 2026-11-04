@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
+import { observations } from './observations.mjs';
 
 export const PROTOCOL_VERSION = 1;
 const MAX_REQUEST_BYTES = 1024 * 1024;
@@ -49,6 +50,7 @@ export async function startRuntime(directory, { stopTimeoutMs = 1500, maxJournal
   const socketPath = path.join(root, 'runtime.sock');
   if (Buffer.byteLength(socketPath) > 100) throw new Error('Runtime socket path is too long');
   const runs = new Map();
+  const observed = observations(root);
   const clients = new Set();
   let closing = false;
   let closePromise;
@@ -175,10 +177,13 @@ export async function startRuntime(directory, { stopTimeoutMs = 1500, maxJournal
     if (!request || request.version !== PROTOCOL_VERSION) throw new Error('Unsupported protocol version');
     if (request.method === 'ping') {
       return { version: PROTOCOL_VERSION, closing,
-        capabilities: { stdio: true, replay: true, pty: false, approvals: false } };
+        capabilities: { stdio: true, replay: true, pty: false, approvals: false, observations: true } };
     }
     if (closing) throw new Error('Runtime is shutting down');
     switch (request.method) {
+      case 'observe-configure': return observed.configure(request);
+      case 'observe-list': return observed.list(request.scopeId);
+      case 'observe': return observed.observe(request);
       case 'list':
         return [...runs.values()].map(snapshot);
       case 'start':

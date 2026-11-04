@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,7 +14,9 @@ export const taskLabels: Record<TaskStatus, string> = {
   backlog: 'Backlog', 'in-progress': 'In progress', paused: 'Paused', review: 'Ready for review', done: 'Done', canceled: 'Canceled',
 };
 
-export function TaskDetail({ task, checkout, runs, attention, verifications, collaborations, mutate, busy, onLegacySession }: WorkbenchActions & {
+export function TaskDetail({ task, checkout, runs, attention, verifications, collaborations, externalSessions, checkoutBlocked,
+  mutate, busy, onLegacySession }: WorkbenchActions & {
+  externalSessions: ReactNode; checkoutBlocked: boolean;
   task: Task; checkout: Checkout; runs: Run[]; attention: Attention[]; verifications: Verification[]; collaborations: CollaborationRecord[]; onLegacySession: (serverId: string, sessionId: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -40,6 +42,7 @@ export function TaskDetail({ task, checkout, runs, attention, verifications, col
     </div>
     {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
     <AttentionPanel items={attention} mutate={mutate} busy={busy} />
+    {checkoutBlocked && externalSessions}
     <section className="rounded-xl border bg-card p-5">
       {editing ? <form onSubmit={save} className="space-y-3">
         <label className="block text-sm">Title<Input name="title" defaultValue={task.title} required /></label>
@@ -58,7 +61,8 @@ export function TaskDetail({ task, checkout, runs, attention, verifications, col
     </section>
     <TaskResults task={task} runs={runs} verifications={verifications} onSnapshot={setCurrent} mutate={mutate} busy={busy} />
     <CollaborationPanel task={task} runs={runs} records={collaborations} current={current} mutate={mutate} busy={busy} />
-    <RunPanel task={task} checkout={checkout} runs={runs} mutate={mutate} busy={busy} />
+    <RunPanel task={task} checkout={checkout} runs={runs} checkoutBlocked={checkoutBlocked} mutate={mutate} busy={busy} />
+    {!checkoutBlocked && externalSessions}
     {task.legacySessionId && <Button variant="outline"
       onClick={() => onLegacySession(checkout.serverId, task.legacySessionId!)}>Open previous conversation</Button>}
     {task.prUrl && <a className="text-sm underline" href={task.prUrl} target="_blank" rel="noreferrer">Open pull request</a>}

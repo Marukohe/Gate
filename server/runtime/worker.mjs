@@ -30,7 +30,7 @@ input.on('line', (line) => {
           '--disable-slash-commands', '--settings', '{"disableAllHooks":true}',
           ...(value.review?.patchPath ? ['--add-dir', path.dirname(value.review.patchPath)] : [])] : [])];
     child = spawn(value.executable, args, { cwd: value.cwd, stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ''}` } });
+      env: { ...process.env, GATE_MANAGED: '1', PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ''}` } });
     child.stderr.pipe(process.stderr);
     child.on('error', fail);
     child.stdin.on('error', fail);

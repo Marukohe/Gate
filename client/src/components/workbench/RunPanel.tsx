@@ -7,15 +7,16 @@ import { workbenchRequest, type WorkbenchActions } from './use-workbench';
 
 const active = ['queued', 'starting', 'running', 'waiting', 'stopping'];
 
-export function RunPanel({ task, checkout, runs, mutate, busy }: WorkbenchActions & {
-  task: Task; checkout: Checkout; runs: Run[];
+export function RunPanel({ task, checkout, runs, checkoutBlocked, mutate, busy }: WorkbenchActions & {
+  task: Task; checkout: Checkout; runs: Run[]; checkoutBlocked: boolean;
 }) {
   const [error, setError] = useState('');
   const [settings, setSettings] = useState<Record<string, string> | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [prompt, setPrompt] = useState('');
   const requestId = useRef<string | null>(null);
-  const pending = runs.some((run) => (active.includes(run.state) || run.state === 'lost') &&
+  const pending = (checkoutBlocked && (task.isolation === 'shared' || checkout.kind === 'worktree')) ||
+    runs.some((run) => (active.includes(run.state) || run.state === 'lost') &&
     (run.kind !== 'review' || run.checkoutId === task.checkoutId));
   useEffect(() => {
     let disposed = false;

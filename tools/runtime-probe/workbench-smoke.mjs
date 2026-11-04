@@ -81,6 +81,30 @@ try {
   const settings = { serverId: machine.id, nodePath: process.execPath, codexPath: `${root}/fake-codex.mjs`,
     claudePath: `${root}/fake-codex.mjs`, directory: `${root}/rt` };
   await api(`/machines/${machine.id}/runtime`, 'PUT', settings);
+  const hook = await api(`/checkouts/${checkout.id}/hooks`, 'PUT', { provider: 'claude', enabled: true });
+  const codexHook = await api(`/checkouts/${checkout.id}/hooks`, 'PUT', { provider: 'codex', enabled: true });
+  assert.equal(codexHook.needsTrust, true);
+  const emitHook = (event, command = hook.command, sessionId = 'external-claude') => ssh(command,
+    JSON.stringify({ cwd: checkout.path, session_id: sessionId, hook_event_name: event, prompt: 'private input' }));
+  emitHook('SessionStart');
+  const observed = await until(async () => (await api('')).observedSessions.find((item) => item.sessionId === 'external-claude'), 'external hook event');
+  const externalTask = await api('/tasks', 'POST', { projectId: project.id, checkoutId: checkout.id,
+    title: 'External shared task', goal: 'External work', isolation: 'shared' });
+  await assert.rejects(api(`/tasks/${externalTask.id}/runs`, 'POST', { requestId: 'conflicting-writer' }), /observed claude/);
+  await api(`/observed-sessions/${observed.id}`, 'PATCH', { taskId: externalTask.id });
+  await stopBackend(); await startBackend();
+  assert.equal((await api('')).observedSessions.find((item) => item.id === observed.id).taskId, externalTask.id);
+  await api(`/observed-sessions/${observed.id}`, 'PATCH', { inspected: true });
+  emitHook('PermissionRequest');
+  await until(async () => (await api('')).observedSessions.find((item) => item.id === observed.id).revision > observed.revision, 'activity after inspection');
+  await assert.rejects(api(`/tasks/${externalTask.id}/runs`, 'POST', { requestId: 'conflicting-again' }), /observed claude/);
+  emitHook('SessionEnd');
+  emitHook('SessionStart', codexHook.command, 'external-codex');
+  emitHook('SessionEnd', codexHook.command, 'external-codex');
+  await until(async () => {
+    const items = (await api('')).observedSessions;
+    return items.length === 2 && items.every((item) => item.state === 'ended');
+  }, 'external session end');
   const prompt = 'literal 中文 $(touch injected) `touch injected2` $HOME';
   const [one, duplicate] = await Promise.all([
     api(`/tasks/${first.id}/runs`, 'POST', { requestId: 'first-request', prompt }),
@@ -253,6 +277,24 @@ try {
           elements.filter((element) => { const box = element.getBoundingClientRect(); return box.left < 0 || box.right > innerWidth + 1; }).length);
         assert.equal(clipped, 0, `Collaboration controls at ${width}px`);
       }
+      emitHook('PermissionRequest');
+      await page.goto(`${base}/#task/${externalTask.id}`);
+      await page.getByRole('button', { name: 'I confirmed this session exited', exact: true }).waitFor();
+      await page.getByRole('combobox', { name: 'Task for external-claude', exact: true }).selectOption(externalTask.id);
+      for (const width of [320, 390, 1365]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.getByRole('heading', { name: 'External sessions', exact: true }).scrollIntoViewIfNeeded();
+        const clipped = await page.locator('button:visible, input:visible, textarea:visible, select:visible').evaluateAll((elements) =>
+          elements.filter((element) => { const box = element.getBoundingClientRect(); return box.left < 0 || box.right > innerWidth + 1; }).length);
+        assert.equal(clipped, 0, `External session controls at ${width}px`);
+        if (width === 390) await page.screenshot({ path: '/tmp/gate-p4-hooks.png' });
+      }
+      await page.getByRole('button', { name: 'I confirmed this session exited', exact: true }).click();
+      await page.getByText('claude · manually cleared', { exact: true }).waitFor();
+      await page.getByText('Manage checkout hooks', { exact: true }).click();
+      await page.getByRole('button', { name: 'Remove claude hooks', exact: true }).click();
+      await page.getByRole('button', { name: 'Install claude hooks', exact: true }).waitFor();
+      assert.equal(JSON.stringify(JSON.parse(fs.readFileSync(hook.file, 'utf8'))).includes('gate-observer:'), false);
       await page.goto(`${base}/#task/${first.id}`);
       await page.getByText(/tick 1/).waitFor();
       for (const width of [320, 390, 1365]) {
@@ -299,7 +341,8 @@ try {
   const report = { backendRestart: 'passed', sshReconnect: 'passed', deduplicatedStart: 'passed', literalPrompt: 'passed',
     parallelWorktrees: 'passed', confirmedCompletionAndStop: 'passed',
     durableDecisions: 'passed', concurrentDecisionConflict: 'passed', verificationSnapshotsAndLogs: 'passed', handoff: 'passed', fixedReviewWithConcurrentWriter: 'passed',
-    modifiedReviewRejected: 'passed', provider: 'deterministic app-server fixture; no model call' };
+    modifiedReviewRejected: 'passed', scopedHooksAndExternalConflicts: 'passed',
+    provider: 'deterministic app-server fixture and hook payloads; no model call' };
   console.log(JSON.stringify(report, null, 2));
   await remote.request(settings, { method: 'shutdown' });
   await until(async () => { try { await remote.request(settings, { method: 'ping' }); return false; } catch { return true; } }, 'runtime drain');

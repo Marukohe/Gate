@@ -33,6 +33,19 @@ export function createWorkbenchRoutes(db: Database, ssh: SSHManager, execution?:
 
   router.get('/', (_req, res) => res.json(store.snapshot()));
 
+  router.put('/checkouts/:id/hooks', async (req, res) => {
+    if (!execution) throw new Error('Managed execution is unavailable');
+    if (typeof req.body.enabled !== 'boolean') throw new Error('Choose whether to enable hooks');
+    res.json(await execution.configureHooks(String(req.params.id), provider(req.body.provider), req.body.enabled));
+  });
+
+  router.patch('/observed-sessions/:id', (req, res) => {
+    res.json(store.updateObserved(String(req.params.id), {
+      taskId: req.body.taskId === undefined ? undefined : req.body.taskId === null ? null : text(req.body.taskId, 'task'),
+      inspected: req.body.inspected === true,
+    }));
+  });
+
   router.get('/machines/:id/runtime', (req, res) => {
     if (!db.getServer(String(req.params.id))) return res.status(404).json({ error: 'Server not found' });
     res.json(store.runtimeSettings(String(req.params.id)) ?? null);

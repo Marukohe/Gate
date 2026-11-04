@@ -1,7 +1,7 @@
 import type { Database } from '../db.js';
 import { ACTIVE_RUN_STATES } from './store.js';
 import { RemoteRuntime, type RemoteEvent, type RuntimeSettings } from './remote.js';
-import type { CodeSnapshot, RunEvent } from './types.js';
+import type { CodeSnapshot, ObservedSession, RunEvent } from './types.js';
 import path from 'node:path';
 import { collaborationPacket } from './collaboration.js';
 import { supportsStructuredAnswers } from './attention.js';
@@ -9,6 +9,7 @@ import { supportsStructuredAnswers } from './attention.js';
 export class ExecutionService {
   private timer?: ReturnType<typeof setTimeout>;
   private pending = new Map<string, Promise<void>>();
+  private observing = new Map<string, Promise<void>>();
   private closed = false;
   constructor(private db: Database, readonly remote = new RemoteRuntime(db)) {}
 
@@ -16,6 +17,10 @@ export class ExecutionService {
     const tick = async () => {
       if (this.closed) return;
       await Promise.all(this.db.workbench.activeRuns().map((run) => this.reconcile(run.id)));
+      if (this.closed) return;
+      for (const item of this.db.workbench.hookSettings().filter((item) => Object.values(item.providers).some(Boolean))) {
+        if (!item.lastSyncedAt || Date.now() - item.lastSyncedAt >= 5000) void this.refreshObserved(item.checkoutId).catch(() => {});
+      }
       if (!this.closed) this.timer = setTimeout(() => void tick(), 1000);
     };
     void tick();
@@ -30,6 +35,44 @@ export class ExecutionService {
     if (Buffer.byteLength(`${settings.directory}/runtime.sock`) > 100) throw new Error('Runtime directory is too long');
     const ready = await this.remote.install(settings);
     this.db.workbench.saveRuntimeSettings(ready);
+  }
+
+  async configureHooks(checkoutId: string, provider: string, enabled: boolean) {
+    const store = this.db.workbench;
+    const checkout = store.checkout(checkoutId);
+    if (!checkout) throw new Error('Checkout not found');
+    const settings = store.runtimeSettings(checkout.serverId);
+    if (!settings) throw new Error('Set up the machine runtime from a task first');
+    const result = await this.remote.installHooks(settings, checkout.id, checkout.path, provider, enabled);
+    const previous = store.hookSettings().find((item) => item.checkoutId === checkoutId);
+    store.saveHookSettings({ checkoutId, providers: { ...previous?.providers, [provider]: enabled },
+      connectionError: null, lastSyncedAt: previous?.lastSyncedAt ?? null });
+    await this.refreshObserved(checkoutId);
+    return result;
+  }
+
+  async refreshObserved(checkoutId: string): Promise<void> {
+    const existing = this.observing.get(checkoutId);
+    if (existing) return existing;
+    const pending = this.syncObserved(checkoutId).finally(() => this.observing.delete(checkoutId));
+    this.observing.set(checkoutId, pending);
+    return pending;
+  }
+
+  private async syncObserved(checkoutId: string): Promise<void> {
+    const store = this.db.workbench;
+    const settings = store.hookSettings().find((item) => item.checkoutId === checkoutId);
+    if (!settings) return;
+    const checkout = store.checkout(checkoutId)!;
+    try {
+      const remote = store.runtimeSettings(checkout.serverId)!;
+      const result = await this.remote.request<{ sessions: ObservedSession[] }>(remote, { method: 'observe-list', scopeId: checkoutId });
+      store.ingestObserved(checkoutId, result.sessions);
+      store.saveHookSettings({ ...store.hookSettings().find((item) => item.checkoutId === checkoutId)!, connectionError: null, lastSyncedAt: Date.now() });
+    } catch (error) {
+      store.saveHookSettings({ ...store.hookSettings().find((item) => item.checkoutId === checkoutId)!, connectionError: (error as Error).message });
+      throw error;
+    }
   }
 
   run(taskId: string, requestId: string, prompt: string) {
@@ -106,6 +149,8 @@ export class ExecutionService {
         }
         execution.settings = await this.remote.install(execution.settings);
         store.saveExecution({ ...store.execution(runId)!, settings: execution.settings });
+        await this.refreshObserved(checkout.id);
+        store.assertNoObservedWriter(checkout.id);
         let codeRef = await this.remote.prepare(execution.settings, checkout.path, execution.source, execution.branch);
         let collaboration = store.collaboration(runId);
         if (collaboration && !collaboration.snapshot) {
@@ -251,6 +296,7 @@ export class ExecutionService {
     clearTimeout(this.timer);
     await this.remote.disconnect();
     await Promise.all(this.pending.values());
+    await Promise.allSettled(this.observing.values());
     await this.remote.disconnect();
   }
 }

@@ -20,7 +20,8 @@ export interface RemoteEvent {
   runId: string; seq: number; time: number; type: string; [key: string]: unknown;
 }
 export const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
-const bundle = ['runtime.mjs', 'cli.mjs', 'worker.mjs', 'provider.mjs', 'snapshot.mjs', 'verifier.mjs', 'collaboration.mjs'].map((name) => ({ name,
+const bundle = ['runtime.mjs', 'cli.mjs', 'worker.mjs', 'provider.mjs', 'snapshot.mjs', 'verifier.mjs', 'collaboration.mjs',
+  'observations.mjs', 'hook.mjs', 'hook-install.mjs'].map((name) => ({ name,
   data: fs.readFileSync(fileURLToPath(new URL(`../../runtime/${name}`, import.meta.url))) }));
 const build = createHash('sha256').update(Buffer.concat(bundle.map((file) => file.data))).digest('hex').slice(0, 16);
 
@@ -29,6 +30,7 @@ export class RemoteRuntime {
   private connecting = new Map<string, Promise<void>>();
   private installing = new Map<string, Promise<RuntimeSettings>>();
   private preparing = new Map<string, Promise<unknown>>();
+  private configuringHooks = new Map<string, Promise<unknown>>();
   constructor(private db: Database) {}
 
   async connect(serverId: string): Promise<void> {
@@ -80,10 +82,55 @@ export class RemoteRuntime {
   }
 
   async request<T>(settings: RuntimeSettings, request: object): Promise<T> {
+    if ((request as { method?: string }).method === 'start') {
+      return this.runtimeChange(settings, () => this.sendRequest<T>(settings, request));
+    }
+    return this.sendRequest<T>(settings, request);
+  }
+
+  private async sendRequest<T>(settings: RuntimeSettings, request: object): Promise<T> {
     const output = await this.shell(settings.serverId,
       `${quote(settings.nodePath)} ${quote(`${this.releaseDirectory(settings)}/cli.mjs`)} request ${quote(settings.directory)}`,
       JSON.stringify(request));
     return JSON.parse(output) as T;
+  }
+
+  async installHooks(settings: RuntimeSettings, scopeId: string, cwd: string, provider: string, enabled: boolean) {
+    return this.runtimeChange(settings, () => this.installCheckoutHooks(settings, scopeId, cwd, provider, enabled));
+  }
+
+  private async runtimeChange<T>(settings: RuntimeSettings, action: () => Promise<T>): Promise<T> {
+    const key = `${settings.serverId}:${settings.directory}`;
+    const previous = this.configuringHooks.get(key) ?? Promise.resolve();
+    const pending = previous.catch(() => {}).then(action);
+    this.configuringHooks.set(key, pending);
+    try { return await pending; } finally { if (this.configuringHooks.get(key) === pending) this.configuringHooks.delete(key); }
+  }
+
+  private async installCheckoutHooks(settings: RuntimeSettings, scopeId: string, cwd: string, provider: string, enabled: boolean) {
+    let ready = await this.install(settings);
+    const ping = await this.request<{ capabilities: { observations?: boolean } }>(ready, { method: 'ping' });
+    if (!ping.capabilities.observations) {
+      const runs = await this.request<{ state: string }[]>(ready, { method: 'list' });
+      if (runs.some((run) => run.state !== 'exited')) throw new Error('Finish active runs and inspect lost ownership before upgrading the runtime for hooks');
+      await this.request(ready, { method: 'shutdown' });
+      // Upgrade only a drained supervisor. A live socket means shutdown has not completed yet.
+      let drained = false;
+      for (let i = 0; i < 50; i++) {
+        const exists = await this.shell(ready.serverId, `if test -S ${quote(`${ready.directory}/runtime.sock`)}; then printf live; fi`);
+        if (!exists) { drained = true; break; }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      if (!drained) throw new Error('Runtime shutdown is still draining; retry hook installation');
+      ready = await this.install(settings);
+    }
+    await this.prepare(ready, cwd, null, null);
+    const result = JSON.parse(await this.shell(ready.serverId,
+      `${quote(ready.nodePath)} ${quote(`${this.releaseDirectory(ready)}/hook-install.mjs`)}`,
+      JSON.stringify({ cwd, scopeId, provider, enabled, directory: ready.directory, nodePath: ready.nodePath,
+        hookPath: `${this.releaseDirectory(ready)}/hook.mjs` })));
+    await this.request(ready, { method: 'observe-configure', scopeId, cwd, provider, enabled });
+    return result;
   }
 
   async prepare(settings: RuntimeSettings, directory: string, source: string | null, branch: string | null): Promise<string> {

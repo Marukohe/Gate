@@ -72,6 +72,39 @@ automatic cleanup is not implemented. Ignored files and external dependencies ar
 Provider references: [Codex app-server](https://learn.chatgpt.com/docs/app-server) and
 [Anthropic's streaming control implementation](https://github.com/anthropics/claude-agent-sdk-python/blob/main/src/claude_agent_sdk/_internal/query.py).
 
+## External sessions
+
+Open **Manage checkout hooks** in a project or task to install/remove Claude or Codex observers for that working copy.
+Set up the machine runtime first. Claude entries go into `.claude/settings.local.json`; Codex entries go into
+`.codex/hooks.json`. Existing settings and unrelated hooks are preserved. Changed files are backed up privately under
+the runtime's `hook-backups/` directory. Removal deletes only Gate's matching entries and does not restore an old file
+over subsequent user changes. Symlinked configuration files/directories are refused to preserve checkout scope.
+
+Restart the native CLI after installation. For Codex, start with `codex --enable hooks`, trust the project if appropriate,
+and review the new definitions in `/hooks`. Gate does not modify user-wide configuration or grant hook trust.
+Hook files may appear in Git changes; inspect them before including machine-specific paths in a commit.
+New task worktrees do not automatically inherit an observer installed in another working copy.
+
+The hook sends only provider/session identity, checkout, and event name to the runtime's private socket. It does not
+store prompt text, tool arguments, transcripts, credentials, or process IDs. Gate-managed workers suppress these external
+observations. Hooks emit no model context, never decide permissions, and return quietly if Gate is unavailable.
+They do not discover a session that was already running before installation. Missed events are not reconstructed.
+
+Overview and task/project pages show the latest reported activity and optional task association. These records provide
+observation only: no history, conversation resume, live input, approvals, stop, or terminal attachment is advertised.
+Silence means unknown process status, not completion. SessionEnd is a provider report, not an OS exit observation.
+Unended sessions block new Gate runs in the same checkout; a separate task worktree remains available. After inspecting
+that a native process has exited, use **I confirmed this session exited** to clear a stale record. A new event restores
+the conflict. Removing hooks does not assert that a previously observed process exited.
+
+Hook snapshots survive backend/runtime restart. The backend refreshes them separately from managed-run polling and
+rechecks before launch. Hook reporting is advisory and cannot prevent external tools from writing or starting later.
+An older runtime is upgraded during installation only after its runs have confirmed exit; active/lost ownership blocks
+the upgrade. Gate serializes its start requests with this operation. Use one Gate backend for each runtime directory.
+
+References: [Claude hooks](https://code.claude.com/docs/en/hooks), [Codex hooks](https://learn.chatgpt.com/docs/hooks),
+and [Herdr integrations](https://acrogenesis.com/herdr/docs/integrations/).
+
 ## Verified
 
 - Runtime tests: replay, input/start deduplication, Unicode, signal escalation, child process groups, shutdown drain,
@@ -93,10 +126,16 @@ Provider references: [Codex app-server](https://learn.chatgpt.com/docs/app-serve
   isolated configuration directories. No model prompts or account operations were performed.
 - `GATE_CODEX_BIN=/path/to/codex node --test tools/runtime-probe/provider-cli.test.mjs` creates a real read-only
   Codex thread with an inherited MCP fixture and confirms it stays disabled without starting a model turn.
+- `hooks.test.mjs` covers scoped installation/removal, unrelated settings, malformed/symlinked configuration,
+  private payload minimization, managed/subagent suppression, and runtime restart.
+- `GATE_CLAUDE_BIN=/path/to/claude GATE_CODEX_BIN=/path/to/codex node --test tools/runtime-probe/hooks-cli.test.mjs`
+  verifies actual Claude SessionStart delivery and Codex discovery without automatically trusting hooks or sending a model turn.
 
 ## Remaining boundaries
 
 The end-to-end lifecycle test uses a deterministic provider fixture. Real model/tool/approval execution still needs
-separate validation. Managed PTYs and external-session hooks remain in P4. Machine reboot, runtime-crash reattachment,
+separate validation. Managed PTYs remain in P4. Machine reboot, runtime-crash reattachment,
 disk-full recovery, automatic journal retention, and descendants escaping the owned process group are not guaranteed.
-Concurrent writers started outside managed task execution are not covered by checkout locks.
+Concurrent writers started outside managed task execution are not covered by checkout locks; hooks surface only reported activity.
+Observation snapshots and hook backups are retained without automatic cleanup. Codex hook execution after native trust
+has not yet been validated; installation and untrusted discovery are verified separately.
