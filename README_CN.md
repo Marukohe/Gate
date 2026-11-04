@@ -58,8 +58,7 @@ gate --data-dir /my/data  # 自定义数据目录（默认 ~/.gate）
 ## 开发
 
 默认界面及状态定义见[Session 监控说明](docs/session-monitor.md)。修改前阅读 [LESSONS.md](LESSONS.md)，
-每个完成的步骤验证并提交。[旧规划](docs/refactor-plan.md)与[验收记录](docs/workbench-acceptance.md)
-保留 Runtime 和任务集成的历史，其导航方案已被 Session 面板替代。
+文档只保留当前使用方式和架构说明，不提交实施日志、进度流水或验收报告。
 
 ### 设置
 

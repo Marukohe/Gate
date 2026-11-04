@@ -186,9 +186,7 @@ the terminal and its owned process session, so it cannot provide the managed-ter
 ## Before Starting Work
 
 Read `LESSONS.md` for relevant problems and prevention rules before investigating or changing code.
-The staged refactor and its acceptance criteria are tracked in `docs/refactor-plan.md`.
 Current product scope and monitoring guarantees are in `docs/session-monitor.md`.
-Historical runtime/task coverage is recorded in `docs/workbench-acceptance.md`.
 
 1. Review recent history:
    ```bash
@@ -209,12 +207,15 @@ Always:
 4. Check changes with `git status`
 5. Commit completed changes with a small, reviewable Conventional Commit
 
-## Lessons and Progress
+## Documentation and Lessons
 
-- Record verified failures, root causes, fixes, and prevention checks in `LESSONS.md` as they occur.
+- Keep `LESSONS.md` concise: reusable failure causes, prevention rules, and relevant checks; no work diary.
 - Update an existing entry when learning more about the same issue; avoid duplicate notes and speculative rules.
 - Include a regression test, command, or source reference that makes each lesson actionable.
 - Keep credentials, personal connection details, and raw private transcripts out of lessons and documentation.
-- Update `docs/refactor-plan.md` when a milestone or validation result changes; distinguish prototypes from shipped features.
+- Keep `docs/` for current usage and architecture. Do not add implementation journals, progress reports,
+  acceptance reports, session transcripts, or generated agent plans to Git.
+- Put optional scratch notes in `.agent-notes/` (gitignored). Report progress and validation in conversation
+  or concise commit bodies rather than creating additional documentation.
 - Commit each completed step separately. Explain its behavior, relevant validation, and remaining limits in the commit body.
 - `AGENTS.md` is a symlink to this file. Preserve the link so both entry points stay synchronized.

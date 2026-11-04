@@ -6,3 +6,7 @@ dist/
 .worktrees/
 .claude/
 .entire/
+
+# Local agent working notes and generated process documents
+.agent-notes/
+docs/superpowers/

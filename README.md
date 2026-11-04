@@ -61,9 +61,7 @@ Click **Add server** → fill in your SSH credentials (password or private key).
 The default view is the [session monitor](docs/session-monitor.md). Its read-only API polls saved messages,
 managed runtime state, and existing hook observations without establishing SSH or launching sessions.
 Contributors should read [LESSONS.md](LESSONS.md) and record verified problems there.
-Each completed change is validated and committed separately.
-The older [implementation plan](docs/refactor-plan.md) and [acceptance record](docs/workbench-acceptance.md)
-retain the runtime/task integration history; their navigation proposals are superseded by the monitor.
+Keep documentation focused on current usage and architecture; do not commit implementation journals or acceptance reports.
 See [managed execution](docs/managed-execution.md) for runtime setup and guarantees.
 
 ### Setup

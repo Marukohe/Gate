@@ -33,12 +33,3 @@ an accidental second writer. Existing managed ownership takes precedence over du
 Only registered sessions, managed agent/terminal runs, and sessions reported by configured hooks appear.
 The monitor does not automatically discover arbitrary processes on remote servers. Existing hook configuration
 and managed workflow deep links remain supported; no session data is deleted by this UI change.
-
-## Verification
-
-- `server/src/__tests__/monitor.test.ts`: read-only projection, credential exclusion, selected-provider creation,
-  persisted completion/errors, equal timestamp ordering, reset boundaries, stale observations, and native identity.
-- `tools/runtime-probe/monitor-smoke.mjs`: fixture-based panel actions, no automatic launch, status polling,
-  refresh failure/recovery, WebSocket reconnect without CLI resume, external-session limits, and mobile/desktop themes.
-- `tools/runtime-probe/workbench-smoke.mjs`: actual localhost SSH/backend runtime data on the panel, managed log
-  opening, and retained task/workspace workflow compatibility.
