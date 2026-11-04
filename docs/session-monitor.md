@@ -13,11 +13,11 @@ activity and identity; their input and lifecycle remain in the native terminal.
 ## Status evidence
 
 `GET /api/monitor` is a read-only projection refreshed every three seconds. It combines saved chat messages and
-owned SSH channels, managed runtime records, and existing checkout hook observations. It returns bounded activity
+owned SSH channels, managed runtime records, checkout hooks, and cached terminal discovery. It returns bounded activity
 previews without prompts, review packets, full tool payloads, or server credentials.
 
 - Running: a live owned chat channel without a final result, a recently confirmed active managed run, or a fresh
-  native busy event. It is not a completion percentage.
+  native busy event or recent recorded Codex activity. It is not a completion percentage or proof of process liveness.
 - Needs you: a current question or managed approval, or a fresh external waiting event.
 - Finished/Failed: an explicit saved result/error or confirmed managed outcome. Finished means the turn/run ended;
   it does not accept a task or imply an interactive CLI has exited.
@@ -30,6 +30,15 @@ Legacy records lacking result subtypes are not guessed complete. Native conversa
 a matching externally resumed conversation replaces an inactive saved entry with an observed entry, preventing
 an accidental second writer. Existing managed ownership takes precedence over duplicate hook signals.
 
-Only registered sessions, managed agent/terminal runs, and sessions reported by configured hooks appear.
-The monitor does not automatically discover arbitrary processes on remote servers. Existing hook configuration
-and managed workflow deep links remain supported; no session data is deleted by this UI change.
+## Terminal Codex sessions
+
+While the panel is open, Gate checks each server over a separate SSH/SFTP connection approximately every 15 seconds.
+It reads the SSH user's `~/.codex/sessions`, or `$CODEX_HOME/sessions` when that variable is available to the SSH shell.
+No hooks, project registration, remote runtime, or Codex restart are needed. A custom home set only in a terminal
+must also be available to the SSH shell. Gate cannot discover another OS user's private sessions.
+
+Discovery reads bounded headers and tails of the 100 most recently modified rollouts, including resumed files
+in older date directories. Unchanged files are cached; child-agent rollouts are excluded. These rows show recorded
+activity and open read-only details. They do not attach to, send input to, or stop the native process.
+Connection failures appear under the server; cached activity remains visible with unknown status until recovery.
+Existing checkout hooks continue to supply events, including approval requests that rollouts may not record.

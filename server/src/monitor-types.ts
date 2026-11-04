@@ -3,9 +3,11 @@ export interface MonitoredSession {
   id: string; serverId: string; name: string; provider: string; cwd: string | null;
   source: 'chat' | 'managed' | 'external'; state: SessionState; activity: string; updatedAt: number;
   sessionId?: string; runId?: string; nativeSessionId?: string | null;
+  observation?: 'hook' | 'transcript';
 }
 export interface MonitorSnapshot {
   capturedAt: number;
-  servers: { id: string; name: string; host: string; port: number; username: string; sessions: MonitoredSession[] }[];
+  servers: { id: string; name: string; host: string; port: number; username: string; sessions: MonitoredSession[];
+    discovery?: { scanning: boolean; checkedAt?: number; error?: string } }[];
 }
 

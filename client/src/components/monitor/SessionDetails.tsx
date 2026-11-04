@@ -7,7 +7,9 @@ export function SessionDetails({ session }: { session: MonitoredSession }) {
   if (session.source === 'external') return <div className="space-y-3 text-sm">
     <p>{session.activity}</p>
     <p className="break-all text-xs text-muted-foreground">Session {session.nativeSessionId}</p>
-    <p className="text-muted-foreground">Observed through hooks. Continue in the original terminal; Gate cannot control this session.</p>
+    <p className="text-muted-foreground">{session.observation === 'transcript'
+      ? 'Discovered from Codex session files. Status reflects the last recorded activity.' : 'Observed through hooks.'}
+      {' '}Continue in the original terminal; Gate cannot control this session.</p>
   </div>;
   return <ManagedSession runId={session.runId!} />;
 }

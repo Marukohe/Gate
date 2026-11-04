@@ -79,8 +79,10 @@ Data is stored in `~/.gate/gate.db` by default.
 
 **Server:**
 - `server/src/monitor.ts` / `monitor-types.ts` — Read-only server/session summary and shared response types
-- `GET /api/monitor` — Bounded message previews, owned-channel liveness, runtime health, and hook observations;
-  never connect SSH or start/resume processes while reading. Persist message subtypes for explicit result/error evidence.
+- `GET /api/monitor` — Bounded message previews, owned-channel liveness, runtime health, hooks, and cached discovery.
+  Never start/resume coding agents while monitoring. Persist message subtypes for explicit result/error evidence.
+- `server/src/session-discovery.ts` / `providers/codex/discovery.ts` — Background SSH/SFTP discovery of terminal
+  Codex sessions; separate connections, bounded cached file reads, and explicit per-server discovery errors.
 - `server/runtime/` — Packaged remote daemon, durable journals, socket CLI, provider worker, code snapshots, and test runner
 - `server/runtime/scripts.mjs` — Strict checkout script discovery; project overrides and preview checks live in execution.ts
 - `server/runtime/delivery.mjs` — Snapshot-checked commit, pinned non-force push, and explicit draft PR creation/reuse

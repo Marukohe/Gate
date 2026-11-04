@@ -2,6 +2,7 @@ import type { Database } from './db.js';
 import type { SSHManager } from './ssh-manager.js';
 
 import type { MonitoredSession, MonitorSnapshot, SessionState } from './monitor-types.js';
+import type { DiscoveryResult } from './session-discovery.js';
 
 const compact = (text: string) => text.replace(/\s+/g, ' ').trim().slice(0, 200);
 const hookActivity: Record<string, string> = { SessionStart: 'Session started', UserPromptSubmit: 'Working on a request',
@@ -9,12 +10,13 @@ const hookActivity: Record<string, string> = { SessionStart: 'Session started', 
   Stop: 'Last turn finished', SessionEnd: 'Session ended' };
 const rank: Record<SessionState, number> = { waiting: 0, failed: 1, running: 2, unknown: 3, idle: 4, completed: 5, stopped: 6 };
 
-// Reading the monitor never establishes SSH, resumes a conversation, or starts a process.
-export function monitorSnapshot(db: Database, ssh: Pick<SSHManager, 'hasActiveChannel'>, now = Date.now()): MonitorSnapshot {
+// Project cached evidence only; background discovery owns its separate read-only SSH connections.
+export function monitorSnapshot(db: Database, ssh: Pick<SSHManager, 'hasActiveChannel'>, now = Date.now(),
+  discovery: Map<string, DiscoveryResult> = new Map()): MonitorSnapshot {
   const snapshot = db.workbench.monitorRecords();
   const checkouts = new Map(snapshot.checkouts.map((item) => [item.id, item]));
   const tasks = new Map(snapshot.tasks.map((item) => [item.id, item]));
-  const servers = db.listServers().map(({ id, name, host, port, username }) => ({
+  const servers: MonitorSnapshot['servers'] = db.listServers().map(({ id, name, host, port, username }) => ({
     id, name, host, port, username, sessions: [] as MonitoredSession[],
   }));
   const byServer = new Map(servers.map((server) => [server.id, server]));
@@ -86,9 +88,30 @@ export function monitorSnapshot(db: Database, ssh: Pick<SSHManager, 'hasActiveCh
     const state: SessionState = ended ? 'stopped' : stale ? 'unknown' : observed.state === 'busy' ? 'running' : observed.state === 'waiting' ? 'waiting' : 'idle';
     server.sessions.push({ id: `external:${observed.id}`, serverId: server.id,
       name: known?.name ?? tasks.get(observed.taskId ?? '')?.title ?? observed.cwd.split('/').filter(Boolean).at(-1) ?? 'External session',
-      provider: observed.provider, cwd: observed.cwd, source: 'external', state,
+      provider: observed.provider, cwd: observed.cwd, source: 'external', observation: 'hook', state,
       nativeSessionId: observed.sessionId, updatedAt: observed.lastSeenAt,
       activity: compact(`${stale ? 'No recent update · ' : ''}${hookActivity[observed.event] ?? 'Observed activity'}`) });
+  }
+  for (const server of servers) {
+    const result = discovery.get(server.id);
+    if (!result) continue;
+    server.discovery = { scanning: result.scanning, checkedAt: result.checkedAt, error: result.error };
+    for (const discovered of result.sessions) {
+      const known = server.sessions.find((item) => item.provider === discovered.provider &&
+        item.nativeSessionId === discovered.nativeSessionId && item.cwd === discovered.cwd);
+      if (known) {
+        const owned = known.source === 'chat' ? ssh.hasActiveChannel(server.id, known.sessionId!)
+          : known.source === 'managed' && ['queued', 'starting', 'running', 'waiting', 'stopping', 'lost'].includes(
+            snapshot.runs.find((run) => run.id === known.runId)?.state ?? '');
+        if (owned || known.updatedAt >= discovered.updatedAt) continue;
+        server.sessions.splice(server.sessions.indexOf(known), 1);
+      }
+      const stale = !!result.error || !result.checkedAt || now - result.checkedAt > 30_000 ||
+        (['running', 'waiting', 'idle'].includes(discovered.state) && now - discovered.updatedAt > 60_000);
+      server.sessions.push({ ...discovered, name: known?.name ?? discovered.name,
+        state: stale ? 'unknown' : discovered.state,
+        activity: stale ? compact(`No recent update · ${discovered.activity}`) : discovered.activity });
+    }
   }
   for (const server of servers) server.sessions.sort((a, b) => rank[a.state] - rank[b.state] || b.updatedAt - a.updatedAt);
   return { capturedAt: now, servers };

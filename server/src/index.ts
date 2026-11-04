@@ -6,6 +6,7 @@ import os from 'os';
 import fs from 'fs';
 import { createDb } from './db.js';
 import { monitorSnapshot } from './monitor.js';
+import { SessionDiscovery } from './session-discovery.js';
 import { createServerRoutes } from './routes/servers.js';
 import { setupWebSocket } from './ws-handler.js';
 import { listRemoteDirectory, createRemoteDirectory } from './ssh-browse.js';
@@ -77,7 +78,11 @@ const httpServer = createServer(app);
 const sshManager = setupWebSocket(httpServer, db, registry);
 
 app.use('/api/servers', createServerRoutes(db, sshManager));
-app.get('/api/monitor', (_req, res) => res.json(monitorSnapshot(db, sshManager)));
+const discovery = new SessionDiscovery();
+app.get('/api/monitor', (_req, res) => {
+  const discovered = discovery.snapshot(db.listServers());
+  res.json(monitorSnapshot(db, sshManager, Date.now(), discovered));
+});
 const execution = new ExecutionService(db);
 const closeTerminals = setupTerminalWebSocket(httpServer, db, execution);
 execution.start();
@@ -103,6 +108,7 @@ httpServer.listen(PORT, HOST, () => {
 
 function shutdown() {
   console.log('Shutting down...');
+  discovery.close();
   closeTerminals();
   Promise.all([execution.close(), sshManager.disconnectAll()]).catch(() => {}).finally(() => {
     httpServer.close();

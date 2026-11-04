@@ -8,6 +8,8 @@ Keep reusable prevention rules here, not implementation history or test-run repo
   navigation layers to perform that job.
 - Saved conversation IDs are not live process handles. Listing history must not launch a CLI; externally resumed
   conversations remain observed. Returning to the panel must clear automatic CLI reconnect intent.
+- Terminal discovery must work without project/task registration or preinstalled hooks. Keep read-only SSH scans
+  separate from owned chat connections; expire stale activity. See `server/src/__tests__/session-discovery.test.ts`.
 - Check visible control bounds at 320px and 390px and inspect screenshots. Hidden horizontal overflow can conceal
   clipped controls. See `tools/runtime-probe/monitor-smoke.mjs`.
 - Sibling React keys must include the component role as well as the record ID; otherwise polling can duplicate forms.

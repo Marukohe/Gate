@@ -79,6 +79,10 @@ export function SessionMonitor({ onOpen, onAddServer, onEditServer }: {
             <Plus /><span className="hidden min-[380px]:inline">Session</span>
           </Button>
         </div>
+        {server.discovery?.error && <p role="alert" className="break-words border-b px-5 py-3 text-xs text-amber-700 dark:text-amber-400">
+          Could not check terminal sessions: {server.discovery.error}. Retrying automatically.</p>}
+        {server.discovery?.scanning && !server.discovery.checkedAt && !server.discovery.error &&
+          <p role="status" className="px-5 py-3 text-xs text-muted-foreground">Looking for terminal sessions…</p>}
         {server.sessions.map((session) => <button key={session.id} className="monitor-session"
           onClick={() => session.source === 'chat' && session.sessionId ? onOpen(server.id, session.sessionId) : setSelected(session)}>
           <span className={`monitor-dot monitor-${error ? 'unknown' : session.state}`} aria-hidden="true" />
@@ -94,7 +98,7 @@ export function SessionMonitor({ onOpen, onAddServer, onEditServer }: {
           <ArrowUpRight className="hidden size-3.5 shrink-0 text-muted-foreground sm:block" />
         </button>)}
         {!server.sessions.length && <p className="px-5 py-8 text-sm text-muted-foreground">
-          {query ? 'No matching sessions.' : 'No sessions yet. Create one with + Session.'}</p>}
+          {query ? 'No matching sessions.' : 'No sessions found. Codex sessions started in your terminal appear here automatically.'}</p>}
       </section>)}
       {snapshot && query && !filtered?.length && <p className="py-12 text-center text-sm text-muted-foreground">No matching servers or sessions.</p>}
     </div>

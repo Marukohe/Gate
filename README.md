@@ -21,8 +21,8 @@ Browser (React) <--HTTP/WebSocket--> Node.js Backend <--SSH--> Remote Server
   appear first within each server. Unknown or stale activity is clearly distinguished from a running process.
 - **Direct actions** — Add a server, create a Codex/Claude session, edit SSH settings, or open a conversation directly.
   Managed sessions open their logs, pending decisions, stop controls, or terminal attachment in a focused dialog.
-- **Native activity** — Existing checkout hooks report external sessions. They remain controlled in their original
-  terminals. The panel does not scan arbitrary remote processes or launch CLIs merely to monitor them.
+- **Native activity** — Codex sessions started in a terminal appear automatically through SSH/SFTP discovery.
+  Existing checkout hooks also report external activity. These sessions remain controlled in their original terminals.
 - **Responsive and persistent** — The same panel works on desktop and phone, with light/dark themes and saved history.
   Old managed task/workspace data and deep links remain available for compatibility.
 
@@ -54,12 +54,14 @@ gate --data-dir /my/data  # custom data directory (default: ~/.gate)
 
 ### Add a Server
 
-Click **Add server** → fill in your SSH credentials (password or private key). Then use **+ Session** beside that server to create a conversation.
+Click **Add server** → fill in your SSH credentials (password or private key). Existing Codex sessions under that
+SSH user's `~/.codex` appear automatically. Use **+ Session** to create a conversation from Gate.
 
 ## Development
 
 The default view is the [session monitor](docs/session-monitor.md). Its read-only API polls saved messages,
-managed runtime state, and existing hook observations without establishing SSH or launching sessions.
+managed runtime state, hook observations, and cached Codex activity. Background SSH/SFTP discovery reads session
+files without launching or resuming coding agents.
 Contributors should read [LESSONS.md](LESSONS.md) and record verified problems there.
 Keep documentation focused on current usage and architecture; do not commit implementation journals or acceptance reports.
 See [managed execution](docs/managed-execution.md) for runtime setup and guarantees.

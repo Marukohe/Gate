@@ -8,6 +8,7 @@ import express from 'express';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createServerRoutes } from '../routes/servers.js';
+import type { DiscoveryResult } from '../session-discovery.js';
 
 describe('Session monitor', () => {
   let db: Database;
@@ -118,5 +119,34 @@ describe('Session monitor', () => {
     const stale = monitorSnapshot(db, ssh, now + 61_000).servers[0].sessions;
     expect(stale.find((item) => item.source === 'external')).toMatchObject({ state: 'unknown', activity: 'No recent update · Working on a request' });
     expect(stale.find((item) => item.source === 'managed')?.state).toBe('completed');
+  });
+
+  it('shows terminal discoveries without registration, preserves ownership, and expires unconfirmed activity', () => {
+    const now = Date.now();
+    const result: DiscoveryResult = { scanning: false, checkedAt: now, sessions: [{ id: 'discovered', serverId,
+      name: 'repo', provider: 'codex', cwd: '/repo', source: 'external', observation: 'transcript', nativeSessionId: 'native',
+      state: 'running', activity: 'Using a tool', updatedAt: now }] };
+    const discovered = new Map([[serverId, result]]);
+    const read = (at = now) => monitorSnapshot(db, ssh, at, discovered).servers[0];
+    expect(read().sessions).toMatchObject([{ source: 'external', state: 'running' }]);
+    expect(db.listSessions(serverId)).toHaveLength(0);
+    const saved = db.createSession(serverId, 'My work', '/repo', 'codex');
+    db.updateCliSessionId(saved.id, 'native');
+    result.sessions[0].updatedAt = now + 10;
+    expect(read().sessions).toMatchObject([{ name: 'My work', source: 'external' }]);
+    active.add(saved.id);
+    expect(read().sessions).toMatchObject([{ source: 'chat' }]);
+    active.clear();
+    expect(read(now + 61_000).sessions[0].state).toBe('unknown');
+    result.error = 'Offline';
+    // Losing SSH must not turn an observed native process back into a launchable saved chat.
+    expect(read().sessions[0]).toMatchObject({ source: 'external', state: 'unknown' });
+    db.deleteSession(saved.id);
+    expect(read()).toMatchObject({ discovery: { error: 'Offline' }, sessions: [{ state: 'unknown' }] });
+    delete result.error;
+    result.sessions[0].state = 'completed';
+    result.checkedAt = now + 61_000;
+    expect(read(now + 61_000).sessions[0].state).toBe('completed');
+    expect(ssh.connect).not.toHaveBeenCalled(); expect(ssh.startCLI).not.toHaveBeenCalled();
   });
 });

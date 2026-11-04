@@ -36,7 +36,8 @@ try {
   }] })) };
   monitor.servers[0].sessions.push({ id: 'external:one', serverId: servers[0].id, name: 'Compiler benchmarks',
     provider: 'codex', cwd: '/projects/compiler', source: 'external', state: 'unknown',
-    activity: 'No recent update · Working on a request', updatedAt: Date.now() - 120_000, nativeSessionId: 'native-external' });
+    activity: 'No recent update · Working on a request', observation: 'transcript',
+    updatedAt: Date.now() - 120_000, nativeSessionId: 'native-external' });
   monitor.servers[1].sessions.push({ id: 'chat:session-docs', sessionId: 'session-docs', serverId: servers[1].id, name: 'Update documentation',
     provider: 'codex', cwd: '/projects/docs', source: 'chat', state: 'completed',
     activity: 'Updated the getting started guide', updatedAt: Date.now() - 600_000, nativeSessionId: 'native-docs' });
@@ -87,9 +88,16 @@ try {
   assert.ok(sent.some((message) => message.type === 'connect' && message.sessionId === 'session-0'));
   await page.getByRole('button', { name: 'All sessions', exact: true }).click();
   await page.getByRole('heading', { name: 'Sessions', exact: true }).waitFor();
+  const beforeExternal = sent.filter((message) => message.type === 'connect').length;
   await page.getByRole('button', { name: /Compiler benchmarks/ }).click();
   await page.getByRole('dialog').getByText(/Continue in the original terminal/).waitFor();
+  await page.getByRole('dialog').getByText(/Discovered from Codex session files/).waitFor();
   await page.getByRole('button', { name: 'Close', exact: true }).click();
+  monitor.servers[1].discovery = { scanning: false, error: 'SSH connection timed out' };
+  await page.getByRole('alert').filter({ hasText: 'Could not check terminal sessions' }).waitFor();
+  assert.equal(sent.filter((message) => message.type === 'connect').length, beforeExternal, 'Reading external details must not launch a CLI');
+  monitor.servers[1].discovery = { scanning: false, checkedAt: Date.now() };
+  await page.getByRole('alert').filter({ hasText: 'Could not check terminal sessions' }).waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: 'New session on Development' }).click();
   await page.getByRole('textbox', { name: 'Name', exact: true }).fill('New work');
   await page.getByRole('textbox', { name: 'Directory', exact: true }).fill('/projects/new');
