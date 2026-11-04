@@ -106,6 +106,7 @@ function RunOutput({ run, mutate, busy }: WorkbenchActions & { run: Run }) {
     if (event.type === 'stderr') return [String(event.data.data)];
     if (event.type !== 'protocol') return [];
     const data = event.data.data as Record<string, unknown>;
+    if (data.type === 'test-output') return [`[${data.stream}] ${data.text}`];
     if (data.type === 'message') return [String(data.text)];
     if (data.type === 'tool') return [JSON.stringify(data.item, null, 2)];
     if (data.type === 'attention') return [`Waiting for a decision: ${data.kind}`];
@@ -119,6 +120,8 @@ function RunOutput({ run, mutate, busy }: WorkbenchActions & { run: Run }) {
     {run.state === 'lost' && <p className="mt-2 text-sm text-destructive">Runtime ownership was lost. The checkout remains locked until the remote process is inspected.</p>}
     {(error || run.error) && <p role="alert" className="mt-2 break-words text-sm text-destructive">{error || run.error}</p>}
     <pre className="my-3 max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs">{messages.join('\n\n') || 'Waiting for output…'}</pre>
+    <p className="mb-3 text-xs text-muted-foreground">Showing the latest 1,000 events.{' '}
+      <a className="underline" href={`/api/workbench/runs/${run.id}/log`} download>Download full event log</a></p>
     {active.includes(run.state) && <Button size="sm" variant="outline" disabled={busy || connection.stopRequested}
       onClick={() => { void mutate(`/runs/${run.id}/stop`, 'POST').catch((err) => setError(err.message)); }}>
       {connection.stopRequested ? 'Stop requested — awaiting confirmation' : 'Stop run'}

@@ -41,6 +41,9 @@ export function Workbench({ onLegacy, onAddServer, onLegacySession }: {
     (!machineFilter || snapshot?.checkouts.find((c) => c.id === task.checkoutId)?.serverId === machineFilter));
   const activeRuns = snapshot?.runs.filter((run) => ['queued', 'starting', 'running', 'waiting', 'stopping'].includes(run.state)) ?? [];
 
+  const needsAttention = filteredTasks.filter((task) => snapshot?.attention.some((item) => item.taskId === task.id &&
+    ['pending', 'sending'].includes(item.state)));
+
   function taskList(tasks: Task[]) {
     return <div className="divide-y overflow-hidden rounded-xl border bg-card">
       {tasks.map((task) => {
@@ -50,7 +53,9 @@ export function Workbench({ onLegacy, onAddServer, onLegacySession }: {
           className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left transition-colors hover:bg-accent/50">
           <div className="min-w-0"><p className="truncate text-sm font-medium">{task.title}</p>
             <p className="mt-1 truncate text-xs text-muted-foreground">{parent?.name} · {task.provider}
-              {run ? ` · ${run.state}` : ''}</p></div>
+              {run ? ` · ${run.state}` : ''}</p>
+            {snapshot?.attention.some((item) => item.taskId === task.id && ['pending', 'sending'].includes(item.state)) &&
+              <p className="mt-1 text-xs text-amber-600">Needs your attention</p>}</div>
           <ArrowUpRight className="size-4 shrink-0 text-muted-foreground" />
         </button>;
       })}
@@ -86,6 +91,8 @@ export function Workbench({ onLegacy, onAddServer, onLegacySession }: {
               <Button variant="ghost" size="sm" onClick={() => navigate('project', task.projectId)}><ArrowLeft />
                 {snapshot.projects.find((p) => p.id === task.projectId)?.name}</Button>
               <TaskDetail key={task.id} task={task} checkout={checkout} runs={snapshot.runs.filter((r) => r.taskId === task.id)}
+                attention={snapshot.attention.filter((item) => item.taskId === task.id)}
+                verifications={snapshot.verifications.filter((item) => item.taskId === task.id)}
                 mutate={mutate} busy={busy} onLegacySession={onLegacySession} />
             </> : project ? <>
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -139,8 +146,12 @@ export function Workbench({ onLegacy, onAddServer, onLegacySession }: {
                 <Button className="mt-5" onClick={() => visibleProjects.length ? navigate('projects') : setAddingProject(true)}>
                   {visibleProjects.length ? 'Choose a project' : 'Add your first project'}</Button>
               </div>}
+              {needsAttention.length > 0 && <section className="space-y-3">
+                <h2 className="font-medium text-amber-600">Needs attention <span className="ml-1">{needsAttention.length}</span></h2>
+                {taskList(needsAttention)}
+              </section>}
               {(['review', 'in-progress', 'backlog', 'paused', 'done', 'canceled'] as const).map((status) => {
-                const group = filteredTasks.filter((task) => task.status === status);
+                const group = filteredTasks.filter((task) => task.status === status && !needsAttention.includes(task));
                 return group.length > 0 && <section key={status} className="space-y-3">
                   <h2 className="text-sm font-medium">{taskLabels[status]} <span className="ml-1 text-muted-foreground">{group.length}</span></h2>
                   {taskList(group)}</section>;

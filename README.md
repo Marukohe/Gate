@@ -32,6 +32,9 @@ Browser (React) <--WebSocket--> Node.js Backend <--SSH--> Remote Server
   copies on multiple machines; each task keeps its own goal, acceptance criteria, agent choice, and execution history.
   The Sessions entry preserves access to existing workspace chats. Managed tasks run independently through a remote
   runtime, with replay after backend/SSH reconnect, isolated worktrees, and confirmed stop status.
+- **Decisions and evidence** — Resolve agent questions and supported approvals from the attention-first Overview.
+  Run test commands, inspect changes, and compare recorded evidence with the checkout's code snapshot.
+  Task acceptance stays explicit; test success does not automatically mark work done.
 
 - **Code from anywhere** — Start on your desktop, pick up on your phone. Sessions persist across devices via SSH and CLI resume.
 - **Resume saved conversations** — Find a CLI transcript and resume its conversation. This starts a new process;

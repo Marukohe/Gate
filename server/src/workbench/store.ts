@@ -1,7 +1,8 @@
 import type BetterSqlite3 from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import type { Checkout, Project, Run, RunEvent, RunKind, RunState, Task, TaskStatus, WorkbenchSnapshot } from './types.js';
+import type { Attention, Verification, Checkout, Project, Run, RunEvent, RunKind, RunState, Task, TaskStatus, WorkbenchSnapshot } from './types.js';
+import { describeAttention, supportsStructuredAnswers, validateDecision } from './attention.js';
 import type { LaunchSpec, RuntimeSettings } from './remote.js';
 
 export interface Execution {
@@ -66,12 +67,54 @@ export class WorkbenchStore {
         CREATE TABLE IF NOT EXISTS runtime_settings (
           serverId TEXT PRIMARY KEY REFERENCES servers(id), settings TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS attention (
+          id TEXT PRIMARY KEY, runId TEXT NOT NULL REFERENCES runs(id), requestId TEXT NOT NULL,
+          data TEXT NOT NULL, UNIQUE(runId, requestId)
+        );
+        CREATE TABLE IF NOT EXISTS workbench_features (name TEXT PRIMARY KEY);
+        CREATE TABLE IF NOT EXISTS verifications (
+          id TEXT PRIMARY KEY, runId TEXT NOT NULL UNIQUE REFERENCES runs(id), data TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS run_execution (
           runId TEXT PRIMARY KEY REFERENCES runs(id), data TEXT NOT NULL
         );
       `);
       this.importLegacyWorkspaces();
+      this.importAttentionEvents();
     })();
+  }
+
+  private importAttentionEvents(): void {
+    if (this.db.prepare("SELECT 1 FROM workbench_features WHERE name = 'attention-v1'").get()) return;
+    let afterRun = '';
+    let afterSeq = 0;
+    while (true) {
+      // Finish each read before writing projections; better-sqlite3 forbids writes during an active iterator.
+      const rows = this.db.prepare(`SELECT * FROM run_events WHERE
+        (type IN ('exited','lost') OR
+          (type = 'protocol' AND json_extract(data, '$.data.type') IN ('attention','attention-resolved')))
+        AND (runId > ? OR (runId = ? AND seq > ?)) ORDER BY runId, seq LIMIT 100`)
+        .all(afterRun, afterRun, afterSeq) as (Omit<RunEvent, 'data'> & { data: string })[];
+      if (!rows.length) break;
+      for (const row of rows) {
+        const data = JSON.parse(row.data);
+        const message = data.data;
+        if (row.type === 'protocol' && message?.type === 'attention') {
+          this.addAttention(row.runId, String(message.id), String(message.kind), message.detail, row.time);
+        } else if (row.type === 'protocol' && message?.type === 'attention-resolved') {
+          this.resolveAttention(row.runId, String(message.id), row.time);
+        } else if (row.type === 'exited' || row.type === 'lost') {
+          this.expireAttention(row.runId, row.time);
+          const run = this.run(row.runId)!;
+          if (run.state === 'failed' || row.type === 'lost') this.addAttention(row.runId,
+            row.type === 'lost' ? 'ownership-loss' : 'run-failure', 'failure',
+            { message: run.error ?? `Process exited ${data.exitCode ?? data.signal}` }, row.time);
+        }
+      }
+      afterRun = rows.at(-1)!.runId;
+      afterSeq = rows.at(-1)!.seq;
+    }
+    this.db.prepare("INSERT INTO workbench_features VALUES ('attention-v1')").run();
   }
 
   runtimeSettings(serverId: string): RuntimeSettings | undefined {
@@ -102,11 +145,11 @@ export class WorkbenchStore {
     })();
   }
 
-  enqueue(taskId: string, requestId: string, prompt: string): Run {
+  enqueue(taskId: string, requestId: string, prompt: string, kind: 'implementation' | 'test' = 'implementation'): Run {
     return this.db.transaction(() => {
       const existing = this.db.prepare('SELECT * FROM runs WHERE requestId = ?').get(requestId) as Run | undefined;
       if (existing) {
-        if (existing.taskId !== taskId || existing.prompt !== prompt) throw new Error('Request ID belongs to another request');
+        if (existing.taskId !== taskId || existing.prompt !== prompt || existing.kind !== kind) throw new Error('Request ID belongs to another request');
         return existing;
       }
       const task = this.task(taskId);
@@ -128,10 +171,13 @@ export class WorkbenchStore {
           path: `${source}.gate-worktrees/${task.id}`, branch, kind: 'worktree' });
         this.updateTask(taskId, { checkoutId: checkout.id });
       }
-      const run = this.createRun({ taskId, requestId, prompt, kind: 'implementation', checkoutId: checkout.id });
+      const run = this.createRun({ taskId, requestId, prompt, kind, provider: kind === 'test' ? 'shell' : task.provider, checkoutId: checkout.id });
       this.acquireCheckout(run.id);
       this.saveExecution({ runId: run.id, settings, launch: null, source, branch,
         stopRequested: false, connectionError: null, lastSeenAt: null });
+      if (kind === 'test') this.saveVerification({ id: randomUUID(), taskId, runId: run.id, command: prompt,
+        cwd: checkout.path, state: 'queued', before: null, after: null, startedAt: null, endedAt: null,
+        exitCode: null, signal: null });
       this.updateTask(taskId, { status: 'in-progress' });
       return run;
     })();
@@ -174,7 +220,94 @@ export class WorkbenchStore {
       checkouts: this.db.prepare('SELECT * FROM checkouts ORDER BY createdAt, id').all() as Checkout[],
       tasks: this.db.prepare('SELECT * FROM tasks ORDER BY updatedAt DESC, id').all() as Task[],
       runs: this.db.prepare('SELECT * FROM runs ORDER BY createdAt DESC, id').all() as Run[],
+      attention: this.attentionItems(),
+      verifications: this.verifications(),
     };
+  }
+
+
+  attentionItems(runId?: string): Attention[] {
+    const rows = (runId ? this.db.prepare('SELECT data FROM attention WHERE runId = ?').all(runId)
+      : this.db.prepare('SELECT data FROM attention').all()) as { data: string }[];
+    return rows.map((row) => JSON.parse(row.data)).sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  attentionItem(id: string): Attention | undefined {
+    const row = this.db.prepare('SELECT data FROM attention WHERE id = ?').get(id) as { data: string } | undefined;
+    return row ? JSON.parse(row.data) : undefined;
+  }
+
+  saveAttention(item: Attention): void {
+    this.db.prepare('INSERT INTO attention VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET data=excluded.data')
+      .run(item.id, item.runId, item.requestId, JSON.stringify(item));
+  }
+
+  addAttention(runId: string, requestId: string, method: string, detail: Record<string, unknown>, time: number): Attention {
+    const existing = this.attentionItems(runId).find((item) => item.requestId === requestId);
+    if (existing) return existing;
+    const run = this.run(runId)!;
+    let description = method === 'failure'
+      ? { kind: 'failure' as const, title: String(detail.message ?? 'Run failed'), questions: [], choices: ['acknowledge'] }
+      : describeAttention(run.provider, method, detail);
+    const execution = this.execution(runId);
+    if (description.kind === 'question' && run.provider === 'claude' && execution?.launch &&
+      !supportsStructuredAnswers(execution.launch.initialInput)) {
+      description = { kind: 'unsupported', title: 'This older Claude run cannot receive structured answers',
+        questions: [], choices: [] };
+    }
+    const item: Attention = { id: randomUUID(), taskId: run.taskId, runId, requestId, method, detail, ...description,
+      state: 'pending', response: null, createdAt: time, submittedAt: null, resolvedAt: null };
+    this.saveAttention(item);
+    return item;
+  }
+
+  decide(id: string, response: unknown): Attention {
+    return this.db.transaction(() => {
+      const item = this.attentionItem(id);
+      if (!item) throw new Error('Attention item not found');
+      const normalized = validateDecision(item, response);
+      if (item.response && JSON.stringify(item.response) === JSON.stringify(normalized) && item.state !== 'expired') return item;
+      if (item.state !== 'pending') throw new Error('Conflict: this item was already answered or expired');
+      const run = this.run(item.runId)!;
+      if (item.kind !== 'failure' && (!ACTIVE_RUN_STATES.includes(run.state) || this.execution(run.id)?.stopRequested)) {
+        throw new Error('Conflict: this run can no longer accept a decision');
+      }
+      const now = Date.now();
+      const next: Attention = { ...item, response: normalized, submittedAt: now,
+        state: item.kind === 'failure' ? 'resolved' : 'sending', resolvedAt: item.kind === 'failure' ? now : null };
+      this.saveAttention(next);
+      return next;
+    })();
+  }
+
+  resolveAttention(runId: string, requestId: string, time: number): void {
+    const item = this.attentionItems(runId).find((value) => value.requestId === requestId);
+    if (item && ['pending', 'sending'].includes(item.state)) {
+      this.saveAttention({ ...item, state: item.response ? 'resolved' : 'expired', resolvedAt: time });
+    }
+  }
+
+  expireAttention(runId: string, time: number): void {
+    for (const item of this.attentionItems(runId)) {
+      if (item.kind !== 'failure' && ['pending', 'sending'].includes(item.state)) {
+        this.saveAttention({ ...item, state: 'expired', resolvedAt: time });
+      }
+    }
+  }
+
+  verifications(): Verification[] {
+    return (this.db.prepare('SELECT data FROM verifications').all() as { data: string }[])
+      .map((row) => JSON.parse(row.data));
+  }
+
+  verification(runId: string): Verification | undefined {
+    const row = this.db.prepare('SELECT data FROM verifications WHERE runId = ?').get(runId) as { data: string } | undefined;
+    return row ? JSON.parse(row.data) : undefined;
+  }
+
+  saveVerification(item: Verification): void {
+    this.db.prepare('INSERT INTO verifications VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET data=excluded.data')
+      .run(item.id, item.runId, JSON.stringify(item));
   }
 
   project(id: string): Project | undefined {

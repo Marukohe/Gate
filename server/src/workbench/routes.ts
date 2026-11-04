@@ -44,7 +44,23 @@ export function createWorkbenchRoutes(db: Database, ssh: SSHManager, execution?:
       claudePath: text(req.body.claudePath, 'Claude path'), codexPath: text(req.body.codexPath, 'Codex path'),
       directory: text(req.body.directory, 'runtime directory') };
     await execution.configure(settings);
-    res.json(settings);
+    res.json(store.runtimeSettings(settings.serverId));
+  });
+
+  router.post('/attention/:id/respond', (req, res) => {
+    if (!execution) throw new Error('Managed execution is unavailable');
+    res.json(execution.decide(String(req.params.id), req.body));
+  });
+
+  router.post('/tasks/:id/verify', (req, res) => {
+    if (!execution) throw new Error('Managed execution is unavailable');
+    res.status(202).json(execution.verify(String(req.params.id), text(req.body.requestId, 'request ID'),
+      text(req.body.command, 'test command')));
+  });
+
+  router.get('/tasks/:id/result', async (req, res) => {
+    if (!execution) throw new Error('Managed execution is unavailable');
+    res.json(await execution.result(String(req.params.id)));
   });
 
   router.post('/tasks/:id/runs', (req, res) => {
@@ -126,10 +142,30 @@ export function createWorkbenchRoutes(db: Database, ssh: SSHManager, execution?:
     res.json(store.events(String(req.params.id), Number(req.query.after ?? 0), Number(req.query.limit ?? 200)));
   });
 
+  router.get('/runs/:id/log', async (req, res) => {
+    const run = store.run(String(req.params.id));
+    if (!run) return res.status(404).json({ error: 'Run not found' });
+    res.type('application/x-ndjson').setHeader('Content-Disposition', `attachment; filename="gate-run-${run.id}.jsonl"`);
+    let cursor = 0;
+    while (!res.destroyed) {
+      const page = store.events(run.id, cursor, 100);
+      if (!page.length) break;
+      cursor = page.at(-1)!.seq;
+      if (!res.write(page.map((event) => JSON.stringify(event)).join('\n') + '\n')) {
+        await new Promise<void>((resolve) => {
+          const done = () => { res.off('drain', done); res.off('close', done); resolve(); };
+          res.once('drain', done); res.once('close', done);
+        });
+      }
+    }
+    res.end();
+  });
+
   const errors: ErrorRequestHandler = (error: Error, _req, res, _next) => {
     const message = error.message.includes('UNIQUE constraint failed: checkouts')
       ? 'This checkout already belongs to a project' : error.message;
-    res.status(message.includes('not found') ? 404 : message.includes('in use') ? 409 : 400).json({ error: message });
+    res.status(message.includes('not found') ? 404 : message.includes('in use') || message.startsWith('Conflict:') ? 409 : 400)
+      .json({ error: message });
   };
   router.use(errors);
   return router;

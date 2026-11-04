@@ -90,12 +90,24 @@ export function createAdapter(config, send, emit, finish) {
       send({ id, result: { decision: value.decision } });
     } else if (config.provider === 'codex' && kind === 'item/tool/requestUserInput') {
       if (!value.answers || typeof value.answers !== 'object') throw new Error('Answers are required');
-      send({ id, result: { answers: value.answers } });
+      send({ id, result: { answers: Object.fromEntries(Object.entries(value.answers).map(([key, answers]) =>
+        [key, { answers }])) } });
     } else if (config.provider === 'claude' && kind === 'can_use_tool') {
+      if (detail.tool_name === 'AskUserQuestion') {
+        const questions = detail.input?.questions ?? [];
+        if (!value.answers || questions.some((_, index) => !Array.isArray(value.answers[String(index)]))) {
+          throw new Error('Answer every question');
+        }
+        send({ type: 'control_response', response: { subtype: 'success', request_id: id, response: {
+          behavior: 'allow', updatedInput: { ...detail.input, answers: Object.fromEntries(questions.map((question, index) =>
+            [question.question, value.answers[String(index)].join(', ')])) },
+        } } });
+      } else {
       if (!['accept', 'decline'].includes(value.decision)) throw new Error('Choose accept or decline');
       send({ type: 'control_response', response: { subtype: 'success', request_id: id, response:
         value.decision === 'accept' ? { behavior: 'allow', updatedInput: detail.input } :
           { behavior: 'deny', message: value.message || 'Declined in Gate' } } });
+      }
     } else throw new Error('This provider request requires the native tool; stop this run before switching');
     pending.delete(String(id));
     emit({ type: 'attention-resolved', id: String(id) });

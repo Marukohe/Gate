@@ -14,8 +14,23 @@ ordered events independently of the Gate backend. Existing Sessions continue usi
 5. Read output or request a stop. A stop request remains pending during an outage; only a remote exit releases the lock.
    Successful execution moves the task to review. Marking the task done remains an explicit user action.
 
-One run executes one provider turn. Additional runs currently start fresh provider conversations. Approvals are
-reported as waiting events; persisted decision controls are the next P3 milestone. Stop the run if it cannot continue.
+One agent run executes one provider turn. Additional agent runs currently start fresh provider conversations.
+Questions, supported approvals, and failures appear at the top of the task and in the Overview attention section.
+Answers are saved before delivery and synchronized across browsers. A saved response stays pending until the remote
+worker reports forwarding it; it is not proof that the approved tool succeeded. Conflicting answers are rejected.
+Unknown requests remain visible with their capability limit. Provider cancellation or run exit expires stale prompts.
+
+## Results and verification
+
+Refresh changes to capture a repository snapshot and inspect the diff, including non-ignored untracked files.
+Run a test command from the task's result panel after the active agent has exited. Verification uses the same durable
+runtime and checkout lock, and records the exact command, directory, before/after Git HEAD and tree identities,
+start/end times, actual command exit code, signal, and output. Logs can be downloaded as complete NDJSON event records.
+
+Snapshots use a temporary index under Git metadata and do not alter staged changes or the current branch. Ignored
+files, installed dependencies, and external services are not part of the code snapshot. Runtime data must be outside
+the checkout. A changed checkout makes prior evidence stale; a command that changes source code is explicitly flagged.
+Passing verification and agent completion never mark a task done. Acceptance is a separate user action.
 
 ## Contracts
 
@@ -26,7 +41,9 @@ reported as waiting events; persisted decision controls are the next P3 mileston
 - Runtime ownership loss is `lost`, not confirmed exit. Its checkout remains locked; Gate does not signal recovered PIDs.
 - Output is journaled with complete provider messages, a 64 MiB per-run output limit, and indexed replay pages.
 - Runtime modules are included in the npm package. Versioned release directories keep worker paths stable.
-  Runtime upgrade/restart must be scheduled after its active runs finish; installing files does not replace a live daemon.
+  Each run pins both its worker and transport client to that release. New runs install current worker modules while
+  active runs keep their existing adapter. Replacing the supervisor itself still requires draining its active runs;
+  installing files does not replace a live daemon.
 - Claude uses streaming control requests. Codex uses app-server initialization, thread creation, and turn execution.
   Unknown requests remain pending; the adapter never invents an approval response.
 
@@ -38,13 +55,16 @@ Provider references: [Codex app-server](https://learn.chatgpt.com/docs/app-serve
 - Runtime tests: replay, input/start deduplication, Unicode, signal escalation, child process groups, shutdown drain,
   journal recovery, complete protocol framing, output limits, and malformed requests.
 - Provider adapter tests: initialization, tool approval shapes, response deduplication, unknown capabilities, and
-  provider failures that must not be mistaken for successful execution.
+  provider failures that must not be mistaken for successful execution; Claude and Codex question response schemas.
 - Backend tests: lost start acknowledgement, service restart, durable offline stop requests, retained locks,
-  semantic errors with exit zero, and unresolved ownership loss.
+  semantic errors with exit zero, unresolved ownership loss, concurrent decision conflicts, lost response acknowledgements,
+  P2 attention backfill without cursor rewind, and client release pinning across backend upgrades.
 - `node tools/runtime-probe/workbench-smoke.mjs`: real localhost SSH with isolated Git repositories and database;
   actual backend process restart, closed/reopened SSH transport, parallel worktrees, partial Git preparation recovery,
-  literal prompt transport, deduplicated starts/events, confirmed completion and stop.
-- Optional browser smoke: start a task, read output, stop it, and check controls at 320px, 390px, and 1365px.
+  literal prompt transport, deduplicated starts/events, confirmed completion and stop, decisions across restart,
+  actual test commands with exit 0 and 7, source-change detection, and complete event-log downloads.
+- Optional browser smoke: start/output/stop, two-browser decision synchronization, verification, explicit task acceptance,
+  and controls at 320px, 390px, and 1365px.
 - Installed Claude Code 2.1.126 and Codex 0.166.0 both accepted protocol initialization through the runtime using
   isolated configuration directories. No model prompts or account operations were performed.
 

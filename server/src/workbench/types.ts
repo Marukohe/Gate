@@ -69,9 +69,36 @@ export interface RunEvent {
   data: Record<string, unknown>;
 }
 
+export interface Question {
+  id: string; text: string; options: { label: string; description: string }[]; multiSelect: boolean; secret: boolean;
+}
+
+export interface Attention {
+  id: string; taskId: string; runId: string; requestId: string; method: string;
+  kind: 'approval' | 'question' | 'failure' | 'unsupported'; title: string;
+  detail: Record<string, unknown>; questions: Question[]; choices: string[];
+  state: 'pending' | 'sending' | 'resolved' | 'expired'; response: Record<string, unknown> | null;
+  createdAt: number; submittedAt: number | null; resolvedAt: number | null;
+}
+
+export interface CodeSnapshot { head: string; tree: string; dirty: boolean }
+
+export interface Verification {
+  id: string; taskId: string; runId: string; command: string; cwd: string;
+  state: 'queued' | 'running' | 'passed' | 'failed' | 'interrupted' | 'lost';
+  before: CodeSnapshot | null; after: CodeSnapshot | null;
+  startedAt: number | null; endedAt: number | null; exitCode: number | null; signal: string | null;
+}
+
+export interface TaskResult {
+  snapshot: CodeSnapshot; status: string; diff: string; truncated: boolean; capturedAt: number;
+}
+
 export interface WorkbenchSnapshot {
   projects: Project[];
   checkouts: Checkout[];
   tasks: Task[];
   runs: Run[];
+  attention: Attention[];
+  verifications: Verification[];
 }

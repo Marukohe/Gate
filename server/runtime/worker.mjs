@@ -15,8 +15,9 @@ const fail = (error) => {
   if (child) child.stdin.end(); else { input.close(); process.stdin.destroy(); process.exitCode = 1; }
 };
 input.on('line', (line) => {
+  let value;
   try {
-    const value = JSON.parse(line);
+    value = JSON.parse(line);
     if (adapter) { adapter.input(value); return; }
     if (!['claude', 'codex'].includes(value.provider)) throw new Error('Unsupported provider');
     const args = value.provider === 'codex' ? ['app-server', '--listen', 'stdio://'] :
@@ -44,6 +45,6 @@ input.on('line', (line) => {
     });
   } catch (error) {
     // Invalid user decisions do not end a provider that is still waiting for a valid answer.
-    if (adapter) emit({ type: 'input-error', message: error.message }); else fail(error);
+    if (adapter) emit({ type: 'decision-error', id: String(value?.id), message: error.message }); else fail(error);
   }
 });

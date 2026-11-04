@@ -95,10 +95,15 @@ Model turns and semantic decision controls are not claimed by these checks.
 
 ### P3: Attention and verification
 
-- [ ] Persist questions, supported approvals, and failures as attention items.
-- [ ] Add the attention-first overview and task result view.
-- [ ] Record test commands, directory, code version, timestamps, exit status, and logs.
-- [ ] Synchronize decisions across clients and keep task acceptance explicit.
+- [x] Persist questions, supported approvals, and failures as attention items.
+- [x] Add the attention-first overview and task result view.
+- [x] Record test commands, directory, code version, timestamps, exit status, and logs.
+- [x] Synchronize decisions across clients and keep task acceptance explicit.
+
+Evidence: attention/store/execution tests cover conflicting answers, restart, stale requests, multiple pending
+questions, P2 event backfill, and response acknowledgement loss. The localhost SSH check runs real test commands,
+compares code trees, downloads logs, and uses two browser pages to answer a provider fixture and accept a task explicitly.
+Actual model-generated requests remain part of final provider validation, not a claim of this fixture check.
 
 ### P4: Collaboration and external sessions
 

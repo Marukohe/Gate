@@ -6,9 +6,12 @@ import type { RemoteEvent, RemoteRuntime, RuntimeSettings } from '../workbench/r
 class RemoteFixture {
   offline = false;
   loseStartReply = false;
+  inputs = new Map<string, string>();
+  loseInputReply = false;
   starts = new Map<string, object>();
+  releases: (string | undefined)[] = [];
   events = new Map<string, RemoteEvent[]>();
-  async install() {}
+  async install(settings: RuntimeSettings) { return settings; }
   async disconnect() {}
   async prepare() { if (this.offline) throw new Error('SSH disconnected'); return 'abc123'; }
   launch(_settings: RuntimeSettings, _provider: string, cwd: string, prompt: string) {
@@ -19,8 +22,9 @@ class RemoteFixture {
     all.push({ runId, seq: all.length + 1, time: Date.now(), type, ...data });
     this.events.set(runId, all);
   }
-  async request(_settings: RuntimeSettings, input: { method: string; runId: string; after: number }) {
+  async request(_settings: RuntimeSettings, input: { method: string; runId: string; after: number; inputId: string; data: string }) {
     if (this.offline) throw new Error('SSH disconnected');
+    this.releases.push(_settings.release);
     if (input.method === 'start') {
       if (!this.starts.has(input.runId)) {
         this.starts.set(input.runId, input);
@@ -28,6 +32,14 @@ class RemoteFixture {
       } else expect(input).toEqual(this.starts.get(input.runId));
       if (this.loseStartReply) { this.loseStartReply = false; throw new Error('Acknowledgement lost'); }
       return {};
+    }
+    if (input.method === 'input') {
+      if (!this.inputs.has(input.inputId)) {
+        this.inputs.set(input.inputId, input.data);
+        this.push(input.runId, 'protocol', { data: { type: 'attention-resolved', id: JSON.parse(input.data).id } });
+      }
+      if (this.loseInputReply) { this.loseInputReply = false; throw new Error('Input reply lost'); }
+      return { accepted: true };
     }
     if (input.method === 'interrupt') {
       this.push(input.runId, 'stopping');
@@ -107,4 +119,37 @@ describe('Managed execution recovery', () => {
     expect(() => service.run(taskId, 'request-3', 'work')).toThrow(/in use/);
     await expect(service.stop(next.id)).rejects.toThrow(/ownership is lost/);
   });
+  it('replays a lost decision acknowledgement and keeps other requests waiting', async () => {
+    const run = service.run(taskId, 'request-decisions', 'work');
+    await service.reconcile(run.id);
+    for (const id of ['first', 'second']) remote.push(run.id, 'protocol', { data: {
+      type: 'attention', id, kind: 'item/commandExecution/requestApproval', detail: { command: 'npm test' },
+    } });
+    await service.reconcile(run.id);
+    const first = db.workbench.attentionItems(run.id).find((item) => item.requestId === 'first')!;
+    remote.offline = true;
+    service.decide(first.id, { decision: 'accept' });
+    await service.reconcile(run.id);
+    expect(db.workbench.attentionItem(first.id)?.state).toBe('sending');
+    remote.offline = false; remote.loseInputReply = true;
+    await service.reconcile(run.id);
+    expect(db.workbench.attentionItem(first.id)?.state).toBe('sending');
+    await service.close();
+    service = new ExecutionService(db, remote as unknown as RemoteRuntime);
+    await service.reconcile(run.id);
+    expect(db.workbench.attentionItem(first.id)?.state).toBe('resolved');
+    expect(remote.inputs.size).toBe(1);
+    expect(db.workbench.run(run.id)?.state).toBe('waiting');
+  });
+
+  it('pins requests for pre-upgrade runs to their persisted remote release', async () => {
+    const run = db.workbench.enqueue(taskId, 'old-run', 'work');
+    db.workbench.prepareRun(run.id, { command: '/node', args: ['/runtime/releases/older/worker.mjs'],
+      cwd: '/repo', initialInput: '{}', protocol: true }, 'old-head');
+    await service.reconcile(run.id);
+    expect(remote.releases.length).toBeGreaterThan(0);
+    expect(remote.releases.every((release) => release === '/runtime/releases/older')).toBe(true);
+    expect(db.workbench.execution(run.id)?.settings.release).toBe('/runtime/releases/older');
+  });
+
 });

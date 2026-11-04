@@ -55,3 +55,19 @@ test('unknown provider requests remain pending and never receive an invented app
   a.message({ method: 'serverRequest/resolved', params: { requestId: 2 } });
   assert.equal(a.events.at(-1).type, 'attention-resolved');
 });
+
+test('questions produce provider-specific answers without dropping original Claude tool input', () => {
+  const codex = adapter('codex');
+  codex.message({ id: 5, method: 'item/tool/requestUserInput', params: { questions: [{ id: 'target', question: 'Target?' }] } });
+  codex.input({ id: '5', answers: { target: ['Linux'] } });
+  assert.deepEqual(codex.sent.at(-1), { id: 5, result: { answers: { target: { answers: ['Linux'] } } } });
+  const claude = adapter('claude');
+  const questions = [{ question: 'Features?', multiSelect: true, options: [] }];
+  claude.message({ type: 'control_request', request_id: 'q', request: {
+    subtype: 'can_use_tool', tool_name: 'AskUserQuestion', input: { questions },
+  } });
+  claude.input({ id: 'q', answers: { '0': ['Replay', 'Approvals'] } });
+  assert.deepEqual(claude.sent.at(-1).response.response, { behavior: 'allow', updatedInput: {
+    questions, answers: { 'Features?': 'Replay, Approvals' },
+  } });
+});

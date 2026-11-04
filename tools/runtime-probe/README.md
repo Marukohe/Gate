@@ -6,7 +6,7 @@ The P0 entry points now import the production implementation; fixtures never use
 ## Run
 
 ```bash
-node --test tools/runtime-probe/runtime.test.mjs tools/runtime-probe/provider.test.mjs
+node --test tools/runtime-probe/*.test.mjs
 node tools/runtime-probe/ssh-smoke.mjs --host localhost
 ```
 
@@ -32,7 +32,9 @@ Provider checks run `--version` and initialize each CLI's bidirectional protocol
 attachment, and hooks are not exercised by this probe.
 
 The production workbench check additionally restarts the actual backend, disconnects its SSH transport, checks
-parallel worktrees and confirmed completion/stop, and exercises a deterministic Codex app-server fixture:
+parallel worktrees and confirmed completion/stop, persists decisions across restart, rejects conflicting answers,
+and runs real verification commands with code snapshots and downloaded logs. Provider decisions are exercised through
+a deterministic Codex app-server fixture:
 
 ```bash
 npm run build

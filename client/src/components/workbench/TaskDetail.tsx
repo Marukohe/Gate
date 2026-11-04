@@ -2,8 +2,10 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import type { Checkout, Run, Task, TaskStatus } from '../../../../server/src/workbench/types';
+import type { Attention, Verification, Checkout, Run, Task, TaskStatus } from '../../../../server/src/workbench/types';
 import type { WorkbenchActions } from './use-workbench';
+import { AttentionPanel } from './AttentionPanel';
+import { TaskResults } from './TaskResults';
 import { RunPanel } from './RunPanel';
 import { selectClass } from './ProjectForm';
 
@@ -11,8 +13,8 @@ export const taskLabels: Record<TaskStatus, string> = {
   backlog: 'Backlog', 'in-progress': 'In progress', paused: 'Paused', review: 'Ready for review', done: 'Done', canceled: 'Canceled',
 };
 
-export function TaskDetail({ task, checkout, runs, mutate, busy, onLegacySession }: WorkbenchActions & {
-  task: Task; checkout: Checkout; runs: Run[]; onLegacySession: (serverId: string, sessionId: string) => void;
+export function TaskDetail({ task, checkout, runs, attention, verifications, mutate, busy, onLegacySession }: WorkbenchActions & {
+  task: Task; checkout: Checkout; runs: Run[]; attention: Attention[]; verifications: Verification[]; onLegacySession: (serverId: string, sessionId: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
@@ -35,6 +37,7 @@ export function TaskDetail({ task, checkout, runs, mutate, busy, onLegacySession
       </select>
     </div>
     {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+    <AttentionPanel items={attention} mutate={mutate} busy={busy} />
     <section className="rounded-xl border bg-card p-5">
       {editing ? <form onSubmit={save} className="space-y-3">
         <label className="block text-sm">Title<Input name="title" defaultValue={task.title} required /></label>
@@ -51,6 +54,7 @@ export function TaskDetail({ task, checkout, runs, mutate, busy, onLegacySession
         <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{task.acceptance || 'No criteria added yet.'}</p>
       </>}
     </section>
+    <TaskResults task={task} runs={runs} verifications={verifications} mutate={mutate} busy={busy} />
     <RunPanel task={task} checkout={checkout} runs={runs} mutate={mutate} busy={busy} />
     {task.legacySessionId && <Button variant="outline"
       onClick={() => onLegacySession(checkout.serverId, task.legacySessionId!)}>Open previous conversation</Button>}

@@ -81,3 +81,30 @@ Keep this file concise; implementation progress belongs in [the refactor plan](d
 - Fix: preserve Refractor's aliases in `client/src/lib/code-languages.ts` before loading a grammar asynchronously.
 - Check: render JavaScript/Python aliases and an unknown language in a browser; confirm highlighting, unchanged
   source text, and plain-text fallback. Refresh the alias metadata when upgrading Refractor.
+
+## Pin the transport client as well as the remote worker
+
+- Found while adding new runtime modules: deriving a request client's path from the current backend bundle can strand
+  a run started with an older release, even when its worker path is persisted.
+- Fix: store the release path with each execution. Recover P2 client paths from their saved worker path, and install
+  new modules for new runs without replacing active workers or the running supervisor.
+- Check: `workbench-execution.test.ts` verifies pre-upgrade requests keep using their original remote release.
+
+## Backfill new projections from already-consumed events
+
+- Found during the P3 upgrade review: a P2 waiting run can already have advanced past its question's event sequence.
+- Fix: import attention records from existing events once, without rewinding execution cursors or replaying commands.
+- Check: `workbench-attention.test.ts` reopens a P2-style database, answers the imported request, and reopens it again.
+
+## Keep executable test fixtures in separate source files
+
+- Observed: adding a newline to an embedded JavaScript fixture produced invalid remote JavaScript after interpolation.
+- Fix: upload the standalone `workbench-fixture.mjs`, replacing only its Node.js shebang.
+- Prevention: run `node --check` on executable fixtures; avoid an extra string-escaping layer for source code.
+
+## Finish SQLite reads before writing migration projections
+
+- Observed: attention backfill failed with `This database connection is busy executing a query` when writing inside
+  a `better-sqlite3` iterator.
+- Fix: read bounded keyset pages with `.all()`, finish the read, then write each page's projections in the migration.
+- Check: the P2 attention migration regression covers opening, importing, answering, and reopening the database.

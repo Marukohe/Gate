@@ -63,31 +63,8 @@ async function stopBackend() {
   backend = null;
 }
 try {
-  const fake = `#!${process.execPath}
-import readline from 'node:readline';
-import fs from 'node:fs';
-const send = (value) => console.log(JSON.stringify(value));
-let timer;
-const input = readline.createInterface({ input: process.stdin });
-input.on('line', (line) => {
-  const msg = JSON.parse(line);
-  if (msg.method === 'initialize') send({ id: msg.id, result: {} });
-  if (msg.method === 'thread/start') send({ id: msg.id, result: { thread: { id: 'fixture-thread' } } });
-  if (msg.method === 'turn/start') {
-    fs.writeFileSync('received-prompt', msg.params.input[0].text);
-    send({ id: msg.id, result: { turn: { id: 'fixture-turn' } } });
-    let tick = 0;
-    timer = setInterval(() => {
-      send({ method: 'item/completed', params: { item: { type: 'agentMessage', text: 'tick ' + ++tick } } });
-      if (fs.existsSync('finish-fixture')) {
-        clearInterval(timer);
-        send({ method: 'turn/completed', params: { turn: { status: 'completed' } } });
-      }
-    }, 100);
-  }
-});
-input.on('close', () => { clearInterval(timer); process.exit(0); });
-`;
+  const fake = '#!' + process.execPath + '\n' + fs.readFileSync(
+    new URL('./workbench-fixture.mjs', import.meta.url), 'utf8').split('\n').slice(1).join('\n');
   ssh(`cat > ${quote(`${root}/fake-codex.mjs`)} && chmod 700 ${quote(`${root}/fake-codex.mjs`)}`, fake);
   ssh(`git init -q ${quote(`${root}/repo`)} && git -C ${quote(`${root}/repo`)} -c user.name=Gate -c user.email=gate@example.invalid commit -qm initial --allow-empty`);
   db = createDb(dbPath);
@@ -120,6 +97,56 @@ input.on('close', () => { clearInterval(timer); process.exit(0); });
   const firstPath = snapshot.checkouts.find((c) => c.id === snapshot.tasks.find((t) => t.id === first.id).checkoutId).path;
   const secondPath = snapshot.checkouts.find((c) => c.id === snapshot.tasks.find((t) => t.id === second.id).checkoutId).path;
   assert.notEqual(firstPath, secondPath);
+  const decisionTask = await api('/tasks', 'POST', { projectId: project.id, checkoutId: checkout.id,
+    title: 'Decisions', goal: 'approval-fixture', provider: 'codex' });
+  const decisionRun = await api(`/tasks/${decisionTask.id}/runs`, 'POST', { requestId: 'decision-request', prompt: 'approval-fixture' });
+  await until(async () => (await api('')).attention.filter((item) => item.runId === decisionRun.id).length === 2, 'two pending decisions');
+  await stopBackend(); await startBackend();
+  const decisions = (await api('')).attention.filter((item) => item.runId === decisionRun.id);
+  assert.equal(decisions.length, 2);
+  const approval = decisions.find((item) => item.kind === 'approval');
+  const responses = await Promise.all(['accept', 'decline'].map((decision) => fetch(
+    `${base}/api/workbench/attention/${approval.id}/respond`, { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision }) })));
+  assert.deepEqual(responses.map((response) => response.status).sort(), [200, 409]);
+  await until(async () => (await api('')).attention.find((item) => item.id === approval.id).state === 'resolved', 'approval delivery');
+  assert.equal((await api('')).runs.find((run) => run.id === decisionRun.id).state, 'waiting');
+  const question = decisions.find((item) => item.kind === 'question');
+  await api(`/attention/${question.id}/respond`, 'POST', { answers: { target: ['Linux'] } });
+  await until(async () => (await api('')).runs.find((run) => run.id === decisionRun.id).state === 'completed', 'question delivery');
+  const decisionSnapshot = await api('');
+  const decisionPath = decisionSnapshot.checkouts.find((item) => item.id === decisionSnapshot.tasks.find((item) => item.id === decisionTask.id).checkoutId).path;
+  const delivered = ssh(`cat ${quote(`${decisionPath}/decision-replies`)}`).trim().split('\n').map(JSON.parse);
+  assert.equal(delivered.length, 2);
+  assert.deepEqual(delivered.find((item) => item.id === 101).result.answers, { target: { answers: ['Linux'] } });
+
+  const verificationTask = await api('/tasks', 'POST', { projectId: project.id, checkoutId: checkout.id,
+    title: 'Verification', goal: 'verify evidence', provider: 'codex' });
+  const testRun = await api(`/tasks/${verificationTask.id}/verify`, 'POST', {
+    requestId: 'verify-pass', command: "printf 'verified 中文\\n'",
+  });
+  const evidence = await until(async () => (await api('')).verifications.find((item) => item.runId === testRun.id && item.state === 'passed'), 'passing verification');
+  assert.equal(evidence.exitCode, 0);
+  assert.equal(evidence.before.tree, evidence.after.tree);
+  const current = await api(`/tasks/${verificationTask.id}/result`);
+  assert.equal(current.snapshot.tree, evidence.before.tree);
+  ssh(`printf changed > ${quote(`${evidence.cwd}/new-code.txt`)}`);
+  const changed = await api(`/tasks/${verificationTask.id}/result`);
+  assert.notEqual(changed.snapshot.tree, evidence.before.tree);
+  assert.ok(changed.diff.includes('+changed'));
+  const failedRun = await api(`/tasks/${verificationTask.id}/verify`, 'POST', {
+    requestId: 'verify-fail', command: 'printf expected-failure >&2; exit 7',
+  });
+  const failed = await until(async () => (await api('')).verifications.find((item) => item.runId === failedRun.id && item.state === 'failed'), 'failing verification');
+  assert.equal(failed.exitCode, 7);
+  assert.notEqual((await api('')).tasks.find((item) => item.id === verificationTask.id).status, 'done');
+  const failure = (await api('')).attention.find((item) => item.runId === failedRun.id && item.kind === 'failure');
+  assert.ok(failure);
+  await api(`/attention/${failure.id}/respond`, 'POST', { decision: 'acknowledge' });
+  const downloaded = await (await fetch(`${base}/api/workbench/runs/${failedRun.id}/log`)).text();
+  assert.ok(downloaded.includes('expected-failure'));
+  assert.ok(downloaded.includes('verification-completed'));
+
   assert.equal(ssh(`cat ${quote(`${firstPath}/received-prompt`)}`), prompt);
   assert.equal(ssh(`test ! -e ${quote(`${firstPath}/injected`)} && test ! -e ${quote(`${firstPath}/injected2`)} && printf safe`).trim(), 'safe');
   if (process.env.GATE_TEST_PLAYWRIGHT) {
@@ -140,6 +167,31 @@ input.on('close', () => { clearInterval(timer); process.exit(0); });
       await page.getByText(/tick 1/).waitFor();
       await page.getByRole('button', { name: 'Stop run', exact: true }).click();
       await until(async () => (await api('')).runs.some((run) => run.taskId === third.id && run.state === 'interrupted'), 'browser stop');
+      const browserDecision = await api('/tasks', 'POST', { projectId: project.id, checkoutId: checkout.id,
+        title: 'Browser decisions', goal: 'approval-fixture', provider: 'codex' });
+      const browserRun = await api(`/tasks/${browserDecision.id}/runs`, 'POST', { requestId: 'browser-decisions', prompt: 'approval-fixture' });
+      const secondPage = await context.newPage();
+      await Promise.all([page.goto(`${base}/#task/${browserDecision.id}`), secondPage.goto(`${base}/#task/${browserDecision.id}`)]);
+      await page.getByRole('button', { name: 'Allow once' }).waitFor();
+      await secondPage.getByRole('button', { name: 'Allow once' }).waitFor();
+      await page.setViewportSize({ width: 390, height: 900 });
+      await page.screenshot({ path: '/tmp/gate-p3-attention.png', fullPage: true });
+      await page.getByRole('button', { name: 'Allow once' }).click();
+      await secondPage.getByRole('button', { name: 'Allow once' }).waitFor({ state: 'hidden' });
+      await secondPage.getByRole('radio', { name: /Linux/ }).check();
+      await secondPage.getByRole('button', { name: 'Send answer' }).click();
+      await until(async () => (await api('')).runs.find((item) => item.id === browserRun.id).state === 'completed', 'two-browser decisions');
+      await page.getByText('Decision history (2)').waitFor();
+      await secondPage.close();
+      await page.getByRole('textbox', { name: 'Test command', exact: true }).fill('printf browser-verification');
+      await page.getByRole('button', { name: 'Run verification', exact: true }).click();
+      await page.getByText('passed ·', { exact: false }).waitFor();
+      await page.getByRole('button', { name: 'Refresh changes', exact: true }).click();
+      await page.getByText('Matches the last captured checkout.', { exact: true }).waitFor();
+      await page.screenshot({ path: '/tmp/gate-p3-verification.png', fullPage: true });
+      assert.notEqual((await api('')).tasks.find((item) => item.id === browserDecision.id).status, 'done');
+      await page.getByRole('combobox', { name: 'Task status' }).selectOption('done');
+      await until(async () => (await api('')).tasks.find((item) => item.id === browserDecision.id).status === 'done', 'explicit task acceptance');
       await page.goto(`${base}/#task/${first.id}`);
       await page.getByText(/tick 1/).waitFor();
       for (const width of [320, 390, 1365]) {
@@ -151,7 +203,7 @@ input.on('close', () => { clearInterval(timer); process.exit(0); });
         await page.screenshot({ path: `/tmp/gate-p2-${width}.png`, fullPage: true });
       }
       assert.deepEqual(errors, []);
-      console.log('Browser start, output, stop, and 320/390/1365px layouts passed');
+      console.log('Browser execution, two-client decisions, verification, explicit acceptance, and 320/390/1365px layouts passed');
     } finally { await browser.close(); }
   }
   await stopBackend();
@@ -184,7 +236,8 @@ input.on('close', () => { clearInterval(timer); process.exit(0); });
   await until(async () => { await service.reconcile(two.id); return db.workbench.run(two.id).state === 'interrupted'; }, 'confirmed stop');
   assert.equal(db.workbench.run(one.id).exitCode, 0);
   const report = { backendRestart: 'passed', sshReconnect: 'passed', deduplicatedStart: 'passed', literalPrompt: 'passed',
-    parallelWorktrees: 'passed', confirmedCompletionAndStop: 'passed', provider: 'deterministic app-server fixture; no model call' };
+    parallelWorktrees: 'passed', confirmedCompletionAndStop: 'passed',
+    durableDecisions: 'passed', concurrentDecisionConflict: 'passed', verificationSnapshotsAndLogs: 'passed', provider: 'deterministic app-server fixture; no model call' };
   console.log(JSON.stringify(report, null, 2));
   await remote.request(settings, { method: 'shutdown' });
   await until(async () => { try { await remote.request(settings, { method: 'ping' }); return false; } catch { return true; } }, 'runtime drain');
