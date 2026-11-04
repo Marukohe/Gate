@@ -1,44 +1,9 @@
 # Gate
 
-任务工作台重构进度见[实施规划](docs/refactor-plan.md)，已完成检查和范围见[验收记录](docs/workbench-acceptance.md)。
-修改前请阅读 [LESSONS.md](LESSONS.md)，
-并记录已验证的问题、原因和预防方法。每个完成的重构步骤分别验证并提交。
-[Runtime 验证工具](tools/runtime-probe/README.md)用于验证独立运行和 SSH 事件恢复，
-使用隔离数据验证 `server/runtime/` 中的托管运行时；现有 Sessions 继续使用原来的后端连接方式。
-新的项目、工作副本、任务和执行记录与旧数据并存；迁移保留聊天历史，仅导入明确的任务目标，
-无法确认任务归属的会话继续保留在原有工作区中。
-全站统一使用 Tasks、Projects、Sessions、Machines 四个一级入口，不再显示树状侧栏或任务分区导航。
-Tasks 可直接新建任务；Sessions 平铺各机器会话并支持搜索；Machines 集中管理 SSH 连接。
-默认首页已切换为任务工作台：按交付状态查看任务，在 Projects 中管理仓库和不同机器上的工作副本，
-每个任务分别保存目标、验收条件和 agent 选择。原有聊天通过 Sessions 入口访问。
-任务页面现在支持安装远端 Runtime、启动执行、读取日志和请求停止。默认使用独立 worktree，
-后端重启或 SSH 重连后补齐事件，只有确认进程退出后才释放工作目录锁；执行成功仍需人工验收任务。
-P3 已加入待处理事项：审批、提问、失败和回答记录会跨页面同步，冲突回答会被拒绝。
-Codex 审批按实际能力显示允许、拒绝或取消回合；取消后记录为 Interrupted，并等待进程退出再释放目录。
-任务结果页面支持查看变更、执行测试、记录执行前后的代码快照与实际退出码，并下载完整日志。
-旧测试证据与当前代码不一致时会显示提示，测试通过不会自动验收任务。
-任务支持把目标、验收条件、上一轮结果和测试证据交接给另一个 agent。
-独立审查使用固定代码快照和单独的 worktree；任务可以继续修改，页面会提示审查版本是否过期。
-可按工作副本安装 Claude/Codex hook，查看外部会话的最近活动并关联任务，同目录占用会阻止 Gate 启动新任务。
-外部会话仍在原生终端中控制；Codex hook 需要在原生工具中审阅并信任，Gate 不会自动授权。
-任务内可启动持久化原生终端，在浏览器中输入、调整窗口、分离和重新连接；关闭页面不会结束远端执行。
-同一终端由一个浏览器控制输入，其他页面只读。远端终端要求 Linux 和支持 pidfd 的 Python 3.9+。
-Codex 原生终端要求支持 `--no-daemon`，避免任务交给独立后台 daemon 后脱离 Gate 的生命周期管理。
-项目设置可保存新任务的默认 agent、工作副本和隔离方式，已有任务保持原设置。
-任务内可预览并执行来自 `gate.json` 或项目覆盖项的 setup/run/test 脚本，保存命令、日志、代码快照和退出码。
-setup、run 记录会与测试证据明确区分；命令变更后必须重新查看，重复请求不会重新执行。
-任务交付可预览分支和代码版本，提交已查看的全部变更、向 origin 推送该提交，并创建或复用 GitHub 草稿 PR。
-每次操作都有独立执行记录和提交/PR 结果；旧预览会被拒绝，交付成功不会自动将任务标记为完成。
-桌面任务页并排显示执行和结果；手机使用连续滚动页面，最近记录优先显示，历史记录可展开。
-项目设置、Runtime 配置和 checkout hooks 使用独立弹窗。
-已完成或取消的任务需要重新打开后才能启动执行。
-配置步骤、已验证行为和限制见[托管执行说明](docs/managed-execution.md)。
-
 [English](README.md) | [中文](README_CN.md)
 
-**Gate** 为远程服务器上的 AI 编程 CLI（[Claude Code](https://docs.anthropic.com/en/docs/claude-code)、[OpenAI Codex](https://github.com/openai/codex)）打开一扇门 — 随时随地，任何设备上编程。
-
-排队、沙发上、地铁里 — 掏出手机，接上之前的工作。Gate 通过 SSH 将浏览器连接到远程 CLI 会话，你的编程环境触手可及。
+**Gate** 是一个监控多台服务器上 AI 编程 sessions 的面板。
+看清谁在运行、谁在等你、谁已经完成；需要处理时，直接打开对应 session。
 
 ```
 浏览器 (React) <--HTTP/WebSocket--> Node.js 后端 <--SSH--> 远程服务器
@@ -47,36 +12,18 @@ setup、run 记录会与测试证据明确区分；命令变更后必须重新�
                               Claude / Codex / ...
 ```
 
-## 示例
+## Session 面板
 
-<table align="center">
-  <tr>
-    <td align="center"><img src="assets/planning.png" alt="计划模式" width="240" /><br/><em>计划模式</em></td>
-    <td align="center"><img src="assets/plan_interact.png" alt="交互式提问" width="240" /><br/><em>交互式提问</em></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="assets/communication.png" alt="与 Claude 对话" width="240" /><br/><em>与 Claude 对话</em></td>
-    <td align="center"><img src="assets/command_invoke.png" alt="命令执行" width="240" /><br/><em>命令执行</em></td>
-  </tr>
-</table>
+![Session 监控面板](assets/session-monitor.png)
 
-## 核心特性
-
-- **随时随地编程** — 在电脑上开始，手机上继续。会话通过 SSH 和 CLI resume 跨设备持久化。
-- **恢复已有对话** — 查找 CLI 日志并恢复对话上下文。这会启动新进程，不会接管其他终端中正在运行的进程。
-- **清爽的聊天界面** — 终端输出解析为 Markdown 消息，可折叠的工具调用卡片，语法高亮代码块，可滚动表格。
-- **多服务器、多会话** — 管理多台远程服务器，每台多个会话。滑动或点击切换。
-- **Workspace Command Center** — 仓库是一级工作区，按 backlog、in-progress、review、done、canceled 分组管理，可置顶、归档、继续工作。
-- **简洁的 Workspace 总览** — 每个工作区展示聚焦的 Start composer、展开的 session 列表、server/branch/worktree 摘要、变更文件数量和按需工具入口。
-- **Workspace Start 流程** — 从一个目标 prompt 开始，选择 Claude 或 Codex，并在启动 CLI 前使用当前分支、切换分支、新建分支，或选择当前/新建/已有 worktree。
-- **Workspace Inspector** — 按需打开的右侧固定工具栏，以 workspace 为上下文查看变更、计划、仓库脚本、一次性终端命令和交付动作。
-- **仓库脚本与交付动作** — 可通过可选 `gate.json` 配置 `setup`、`run`、`test` 脚本并经 SSH 运行；Inspector 中可生成 commit message、commit and push、push、创建 PR、标记 review/done/canceled。
-- **实时计划追踪** — 从 Claude 输出中自动提取 checklist 到侧边面板。勾选步骤、编辑计划、发送执行。
-- **日志同步** — 通过同步远程 CLI 会话的日志，追上在 Gate 之外完成的工作。
-- **全平台响应式** — 桌面三栏布局，平板抽屉模式，手机底部弹出和滑动手势。支持刘海屏。
-- **多 CLI 支持** — 支持 Claude Code 和 OpenAI Codex CLI。会话内可切换 CLI 工具，自动同步上下文。切换回之前的工具时自动恢复原有对话，不会创建新会话。
-- **切换对话** — 在同一会话内新建 CLI 对话或恢复之前的对话。消息按 CLI 会话隔离，切换后展示干净的视图。
-- **持久化历史** — SQLite 存储聊天记录，断线重连和服务器重启都不会丢失。
+- **只有 Server 和 Sessions** — 同一页按服务器分组，支持搜索，不需要先建项目或任务。
+- **直接看进展** — 每条 session 显示状态、最近活动和更新时间；同一 server 中待处理和失败项排在前面。
+  断连、过期或没有运行证据时显示未知，不用聊天记录猜测进度。
+- **直接操作** — 添加 server、编辑 SSH 连接、创建 Codex/Claude session、打开对话都从面板完成。
+  托管 session 可直接打开日志、审批、停止操作或终端连接。
+- **观察原生会话** — 已配置的 checkout hooks 会报告外部 session；外部会话仍在原生终端中控制。
+  面板不会扫描任意远程进程，也不会为了监控而自动启动 CLI。
+- **手机和桌面一致** — 支持深浅色和持久化历史。已有托管任务、工作区数据和旧链接继续保留。
 
 ## 快速开始
 
@@ -106,9 +53,13 @@ gate --data-dir /my/data  # 自定义数据目录（默认 ~/.gate）
 
 ### 添加服务器
 
-打开 **Machines** → 点击 **Add machine** → 填入 SSH 凭据（密码或私钥）。可设置新会话的默认工作目录。
+点击 **Add server** → 填入 SSH 凭据（密码或私钥）。然后使用 server 旁的 **+ Session** 创建会话。
 
 ## 开发
+
+默认界面及状态定义见[Session 监控说明](docs/session-monitor.md)。修改前阅读 [LESSONS.md](LESSONS.md)，
+每个完成的步骤验证并提交。[旧规划](docs/refactor-plan.md)与[验收记录](docs/workbench-acceptance.md)
+保留 Runtime 和任务集成的历史，其导航方案已被 Session 面板替代。
 
 ### 设置
 
@@ -142,7 +93,7 @@ gate/
 │       ├── components/
 │       │   ├── chat/            # ChatView, SessionBar, MessageBubble, ToolActivityBlock,
 │       │   │                    # ChatInput, ProviderSwitcher, ResumeChatDialog, BranchSwitcher
-│       │   ├── layout/          # MainNavigation, AppShell
+│       │   ├── layout/          # AppHeader, AppShell
 │       │   ├── plan/            # PlanPanel, PlanStepItem
 │       │   ├── plan-mode/       # PlanModeOverlay, PlanModeQuestion, PlanModeThinking
 │       │   ├── server/          # ServerDialog
@@ -207,9 +158,10 @@ gate/
 
 | 断点 | 布局 |
 |------|------|
-| 桌面（≥1024px） | 全站共用一级导航；任务执行和结果并排；聊天 Inspector 按需打开 |
-| 平板（768–1023px） | 保留相同一级导航；任务内容纵向排列；聊天 Inspector 使用弹出层 |
-| 手机（<768px） | 四个一级入口始终可见；任务页连续滚动；配置使用弹窗 |
+| 桌面（≥1024px） | 按 server 分组，紧凑展示 session 进展和状态 |
+| 平板（768–1023px） | 相同面板，按需打开 session 详情 |
+| 手机（<768px） | 单列布局，保留 server 操作和 session 状态 |
+
 
 ## 为什么叫 "Gate"？
 

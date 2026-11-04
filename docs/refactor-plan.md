@@ -1,5 +1,10 @@
 # Gate task workbench refactor
 
+Current product direction: the default UI is a [server/session monitoring panel](session-monitor.md).
+The user superseded the task-first interface and four-destination navigation below. Those sections remain as
+implementation history; existing data and deep links remain compatible.
+
+
 Status: implementation and agreed workflow acceptance complete. See the [acceptance record](workbench-acceptance.md)
 for requirement coverage, repeatable checks, and remaining platform/provider limits.
 

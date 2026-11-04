@@ -126,16 +126,17 @@ input/output; they are local diagnostic data and must not be committed with cred
 Terminal raw input is excluded from journals, while visible/echoed output remains. The private runtime `input.key` is
 required to preserve redacted input deduplication across restart and must be backed up with the journals.
 
-## Flat navigation UI check
+## Session monitor UI check
 
-Build first, then run the frontend fixture with the same Playwright/Chromium paths used by the workbench smoke:
+Build first, then run the frontend fixture:
 
 ```bash
 GATE_TEST_PLAYWRIGHT=/path/to/playwright/index.mjs GATE_TEST_CHROMIUM=/path/to/chrome \
-  node tools/runtime-probe/navigation-smoke.mjs
+  node tools/runtime-probe/monitor-smoke.mjs
 ```
 
-This check uses fixture HTTP/WebSocket responses and never opens SSH or invokes a coding CLI. It checks session
-listing across machines without launch, explicit chat opening, the shared primary navigation inside chat, search,
-return navigation, machine editing, visible runtime errors, and 320/390/1365px light/dark rendering.
-Use `workbench-smoke.mjs` separately for actual backend/SSH and task/delivery workflows.
+This check uses fixture HTTP/WebSocket responses and never opens SSH or invokes a coding CLI. It checks the
+server-grouped panel without menus, session search/creation/opening, return navigation, server editing, external
+session details, polling/offline recovery, WebSocket reconnect without CLI resume, and 320/390/1365px light/dark rendering.
+`workbench-smoke.mjs` separately verifies actual localhost SSH/runtime sessions visible in the monitor and opens
+managed logs from the panel; its older workflow checks remain compatibility coverage.

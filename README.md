@@ -2,9 +2,8 @@
 
 [English](README.md) | [中文](README_CN.md)
 
-**Gate** opens a portal to AI coding CLIs ([Claude Code](https://docs.anthropic.com/en/docs/claude-code), [OpenAI Codex](https://github.com/openai/codex)) on remote servers — code from anywhere, on any device.
-
-Waiting in line, on the couch, on the train — pull out your phone and pick up right where you left off. Gate bridges your browser to CLI sessions over SSH, so your coding environment is always one tap away.
+**Gate** is a panel for monitoring AI coding sessions across your servers.
+See what is running, what needs you, and what finished. Open a session when you want to act.
 
 ```
 Browser (React) <--HTTP/WebSocket--> Node.js Backend <--SSH--> Remote Server
@@ -13,61 +12,19 @@ Browser (React) <--HTTP/WebSocket--> Node.js Backend <--SSH--> Remote Server
                               Claude / Codex / ...
 ```
 
-## Example
+## Session panel
 
-<table align="center">
-  <tr>
-    <td align="center"><img src="assets/planning.png" alt="Planning mode" width="240" /><br/><em>Planning mode</em></td>
-    <td align="center"><img src="assets/plan_interact.png" alt="Interactive questions" width="240" /><br/><em>Interactive questions</em></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="assets/communication.png" alt="Chat with Claude" width="240" /><br/><em>Chat with Claude</em></td>
-    <td align="center"><img src="assets/command_invoke.png" alt="Command execution" width="240" /><br/><em>Command execution</em></td>
-  </tr>
-</table>
+![Session monitoring panel](assets/session-monitor.png)
 
-## Key Features
-
-- **One-level navigation** — Tasks, Projects, Sessions, and Machines stay visible on every screen. Create tasks
-  directly from Tasks; search saved conversations across machines without opening nested sidebars.
-- **Task workbench** — The Tasks page groups independent tasks by delivery status. Projects can have working
-  copies on multiple machines; each task keeps its own goal, acceptance criteria, agent choice, and execution history.
-  The Sessions entry preserves access to existing workspace chats. Managed tasks run independently through a remote
-  runtime, with replay after backend/SSH reconnect, isolated worktrees, and confirmed stop status.
-- **Decisions and evidence** — Resolve agent questions and supported approvals from the attention-first Tasks page.
-  Codex approvals expose the offered Allow/Decline/Cancel choices; a canceled turn stays interrupted until confirmed exit.
-  Run test commands, inspect changes, and compare recorded evidence with the checkout's code snapshot.
-  Task acceptance stays explicit; test success does not automatically mark work done.
-- **Project defaults and scripts** — Choose the default agent, working copy, and isolation for new tasks.
-  Preview and run setup/run/test commands from `gate.json` or project overrides, with durable output and exit status.
-  Setup and run records stay separate from test evidence.
-- **Task delivery** — Preview the branch and code version, commit inspected changes, push that commit to origin,
-  and create or reuse a draft GitHub PR. Each operation has its own durable run and recorded commit/PR result.
-- **Handoff and independent review** — Continue with another agent using recorded context and test evidence.
-  Review a fixed snapshot in a separate checkout while task work continues, and see when that review becomes stale.
-- **External session awareness** — Install checkout-scoped Claude/Codex hooks to see native session activity and link it
-  to tasks. Shared-checkout conflicts stay visible; native sessions remain controlled in their original terminals.
-- **Persistent native terminals** — Open a shell or native coding CLI in a task, attach from the browser, resize it,
-  and reconnect after closing the page. One browser controls input at a time. Remote terminals require Linux and Python 3.9+.
-  Native Codex terminals require `--no-daemon` support so their execution stays owned by the terminal runtime.
-
-- **Code from anywhere** — Start on your desktop, pick up on your phone. Sessions persist across devices via SSH and CLI resume.
-- **Resume saved conversations** — Find a CLI transcript and resume its conversation. This starts a new process;
-  it does not attach to a process already running in another terminal.
-- **Clean chat UI** — Terminal output parsed into markdown messages, collapsible tool cards, syntax-highlighted code blocks, and scrollable tables.
-- **Multi-server, multi-session** — Manage several remote servers with multiple sessions each. Swipe or tap to switch.
-- **Workspace command center** — Repositories are first-class workspaces grouped by backlog, in-progress, review, done, or canceled status. Pin, archive, and continue work without opening every chat.
-- **Simple workspace overview** — Each workspace shows a focused start composer, visible session list, server/branch/worktree summary, changed-file count, and on-demand tools.
-- **Workspace start flow** — Start from a prompt, choose Claude or Codex, and use the current branch, switch branches, create a new branch, or choose a current/new/existing worktree before the CLI starts.
-- **Workspace inspector** — A fixed, on-demand right sidebar for changes, plans, repo scripts, one-shot terminal commands, and delivery actions.
-- **Repo scripts and delivery actions** — Optional `gate.json` scripts (`setup`, `run`, `test`) can run over SSH; generate commit messages, commit and push, push, create PR, and mark review/done/canceled from the workspace inspector.
-- **Live plan tracking** — Checklists auto-extracted from Claude's output into a side panel. Check off steps, edit plans, send them back for execution.
-- **Transcript sync** — Catch up on work done outside Gate by syncing the transcript from the remote CLI session.
-- **Responsive tasks** — Execution and results share two columns on desktop. Mobile uses a single scrolling task page; recent evidence stays visible with older records expandable.
-  Project settings, runtime configuration, and checkout hooks open in focused dialogs.
-- **Multi-CLI support** — Works with Claude Code and OpenAI Codex CLI. Switch between CLI tools within a session with automatic context sync. Provider sessions are preserved — switching back resumes your previous conversation, not a new one.
-- **Switch Chat** — Start a fresh CLI conversation or resume a previous one within the same session. Messages are scoped per CLI session so switching gives you a clean view.
-- **Persistent history** — SQLite-backed chat history survives reconnects and server restarts.
+- **Servers and sessions** — One page, grouped by server, with search. No project or task setup is required.
+- **Progress at a glance** — Each session shows its state, latest activity, and update time. Decisions and failures
+  appear first within each server. Unknown or stale activity is clearly distinguished from a running process.
+- **Direct actions** — Add a server, create a Codex/Claude session, edit SSH settings, or open a conversation directly.
+  Managed sessions open their logs, pending decisions, stop controls, or terminal attachment in a focused dialog.
+- **Native activity** — Existing checkout hooks report external sessions. They remain controlled in their original
+  terminals. The panel does not scan arbitrary remote processes or launch CLIs merely to monitor them.
+- **Responsive and persistent** — The same panel works on desktop and phone, with light/dark themes and saved history.
+  Old managed task/workspace data and deep links remain available for compatibility.
 
 ## Quick Start
 
@@ -97,20 +54,17 @@ gate --data-dir /my/data  # custom data directory (default: ~/.gate)
 
 ### Add a Server
 
-Open **Machines** → click **Add machine** → fill in your SSH credentials (password or private key). Set a default working directory for new sessions.
+Click **Add server** → fill in your SSH credentials (password or private key). Then use **+ Session** beside that server to create a conversation.
 
 ## Development
 
-The task workbench refactor is tracked in [the implementation plan](docs/refactor-plan.md), with completed checks
-and scope in the [acceptance record](docs/workbench-acceptance.md).
-Contributors should read [LESSONS.md](LESSONS.md) before making changes and record verified problems there.
-Each completed refactor step is validated and committed separately.
-The [runtime feasibility probe](tools/runtime-probe/README.md) checks independent execution and replay over SSH.
-It uses isolated fixtures against the runtime shipped in `server/runtime/`.
-See [managed execution](docs/managed-execution.md) for setup, guarantees, and validation limits.
-Existing Sessions continue using the legacy backend connection path.
-The new task model is stored alongside legacy workspaces and sessions. Migration preserves existing chat history
-and imports explicit workspace goals once; ambiguous sessions remain available in the legacy workspace views.
+The default view is the [session monitor](docs/session-monitor.md). Its read-only API polls saved messages,
+managed runtime state, and existing hook observations without establishing SSH or launching sessions.
+Contributors should read [LESSONS.md](LESSONS.md) and record verified problems there.
+Each completed change is validated and committed separately.
+The older [implementation plan](docs/refactor-plan.md) and [acceptance record](docs/workbench-acceptance.md)
+retain the runtime/task integration history; their navigation proposals are superseded by the monitor.
+See [managed execution](docs/managed-execution.md) for runtime setup and guarantees.
 
 ### Setup
 
@@ -144,7 +98,7 @@ gate/
 │       ├── components/
 │       │   ├── chat/            # ChatView, SessionBar, MessageBubble, ToolActivityBlock,
 │       │   │                    # ChatInput, ProviderSwitcher, ResumeChatDialog, BranchSwitcher
-│       │   ├── layout/          # MainNavigation, AppShell
+│       │   ├── layout/          # AppHeader, AppShell
 │       │   ├── plan/            # PlanPanel, PlanStepItem
 │       │   ├── plan-mode/       # PlanModeOverlay, PlanModeQuestion, PlanModeThinking
 │       │   ├── server/          # ServerDialog
@@ -209,9 +163,10 @@ Server → Client:
 
 | Breakpoint | Layout |
 |------------|--------|
-| Desktop (≥1024px) | Shared primary navigation; task execution/results side by side; on-demand chat inspector |
-| Tablet (768–1023px) | Same primary navigation; stacked task content; chat inspector as a sheet |
-| Mobile (<768px) | All four primary links visible; one scrolling task page; settings in dialogs |
+| Desktop (≥1024px) | Server groups with session activity and status in compact rows |
+| Tablet (768–1023px) | Same panel; session details open on demand |
+| Mobile (<768px) | Single column; server controls and session status stay visible |
+
 
 ## Why "Gate"?
 

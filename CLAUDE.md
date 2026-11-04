@@ -4,7 +4,10 @@ This file provides guidance to coding agents, including Claude Code, when workin
 
 ## Project Overview
 
-Gate is a responsive web app for "vibe coding" — chat with AI coding CLIs (Claude Code, OpenAI Codex) running on remote servers via SSH, from any device (phone, tablet, desktop). Internal network deployment only, no auth.
+Gate is a responsive monitoring panel for AI coding sessions on many SSH servers.
+The primary model is Server → Sessions: recent activity, trustworthy status, and direct entry to a session.
+Do not reintroduce project/task workflows or navigation menus as prerequisites for monitoring.
+Internal network deployment only, no auth.
 
 ## Architecture
 
@@ -75,6 +78,9 @@ Data is stored in `~/.gate/gate.db` by default.
 ## Key Modules
 
 **Server:**
+- `server/src/monitor.ts` / `monitor-types.ts` — Read-only server/session summary and shared response types
+- `GET /api/monitor` — Bounded message previews, owned-channel liveness, runtime health, and hook observations;
+  never connect SSH or start/resume processes while reading. Persist message subtypes for explicit result/error evidence.
 - `server/runtime/` — Packaged remote daemon, durable journals, socket CLI, provider worker, code snapshots, and test runner
 - `server/runtime/scripts.mjs` — Strict checkout script discovery; project overrides and preview checks live in execution.ts
 - `server/runtime/delivery.mjs` — Snapshot-checked commit, pinned non-force push, and explicit draft PR creation/reuse
@@ -108,10 +114,11 @@ Data is stored in `~/.gate/gate.db` by default.
 - `server/src/providers/codex/` — OpenAI Codex provider, parser, transcript support, tool utils, command building
 
 **Client:**
-- `client/src/components/workbench/` — Default overview, projects, task goals, runtime setup, managed execution,
+- `client/src/components/workbench/` — Compatibility views for overview, projects, task goals, runtime setup, managed execution,
   decisions, result snapshots, verification evidence, handoff, independent review, and replayed output
-- `client/src/components/layout/MainNavigation.tsx` — The only global navigation: Tasks, Projects, Sessions, Machines
-- `client/src/components/workbench/SessionsList.tsx` — Flat, searchable saved sessions across machines; listing never launches
+- `client/src/components/layout/AppHeader.tsx` — Brand, Add server, theme, and return-to-panel action; no menus
+- `client/src/components/monitor/SessionMonitor.tsx` — Default server-grouped panel, polling, search, and session creation
+- `client/src/components/monitor/SessionDetails.tsx` — Managed logs/decisions/terminal and read-only external details
 - `client/src/components/workbench/TaskDetail.tsx` — Desktop execution/results columns and one scrolling mobile page;
   verification/delivery panels show recent records before expandable history
 - `client/src/components/workbench/ExternalSessions.tsx` — Checkout hook settings, observed activity, task association,
@@ -123,7 +130,7 @@ Data is stored in `~/.gate/gate.db` by default.
 - `client/src/App.tsx` — Top-level route state for home, workspace overview, and chat sessions
 - `client/src/hooks/use-websocket.ts` — Singleton WebSocket connection with auto-reconnect and queued workspace actions
 - `client/src/stores/` — Zustand stores: server, session, chat, git, plan, plan-mode, workspace, ui
-- `client/src/components/layout/` — Shared primary navigation and AppShell with desktop inspector/mobile sheets;
+- `client/src/components/layout/` — Monitor header and AppShell with desktop inspector/mobile sheets;
   legacy Sidebar and TopBar are no longer mounted
 - `client/src/components/home/` — CommandCenter workspace board
 - `client/src/components/workspace/` — WorkspaceHome, WorkspaceStart, WorkspaceInspector, WorkspaceActionBar, AddWorkspaceDialog
@@ -162,10 +169,10 @@ the terminal and its owned process session, so it cannot provide the managed-ter
 
 ## Responsive Breakpoints
 
-- All sizes: one shared navigation row with Tasks, Projects, Sessions, and Machines; no nested navigation menus
-- Desktop (>=1024px): task execution/results columns and on-demand chat inspector
-- Tablet/mobile (<1024px): continuous task content, all primary links visible, chat inspector as a sheet
-- Keep task creation direct; use focused dialogs for configuration rather than secondary navigation or nested disclosures
+- All sizes: one server/session panel, search, server actions, status and latest activity; no global menu
+- Desktop: compact session rows within server groups; details open on demand
+- Tablet/mobile: the same groups in one column; do not clip server actions or status labels
+- Existing `#task`, `#project`, and `#overview` links retain compatibility views; they are not the default product flow
 
 ## Best Practices
 
@@ -180,7 +187,8 @@ the terminal and its owned process session, so it cannot provide the managed-ter
 
 Read `LESSONS.md` for relevant problems and prevention rules before investigating or changing code.
 The staged refactor and its acceptance criteria are tracked in `docs/refactor-plan.md`.
-Completed requirement coverage and validation limits are recorded in `docs/workbench-acceptance.md`.
+Current product scope and monitoring guarantees are in `docs/session-monitor.md`.
+Historical runtime/task coverage is recorded in `docs/workbench-acceptance.md`.
 
 1. Review recent history:
    ```bash

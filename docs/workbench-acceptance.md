@@ -1,5 +1,10 @@
 # Task workbench acceptance
 
+Current product direction: the default UI is a [server/session monitoring panel](session-monitor.md).
+The user superseded the task-first interface and four-destination navigation below. Those sections remain as
+implementation history; existing data and deep links remain compatible.
+
+
 This record maps the active [refactor plan](refactor-plan.md) to implementation and validation evidence.
 The checks use isolated repositories, databases, runtime directories, and localhost SSH. They do not publish a
 package, push this repository, or create a real GitHub PR.

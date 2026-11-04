@@ -195,11 +195,18 @@ Keep this file concise; implementation progress belongs in [the refactor plan](d
 - Terminal input uses keyed HMAC fingerprints for deduplication, not plain hashes that expose guessable individual keys.
   Keep `input.key` private and with its journals; missing or changed keys must stop recovery.
 
-## One navigation model across tasks and conversations
+## Start from the session-monitoring job, not a workflow hierarchy
 
-- Observed: the workbench used top navigation and mobile task tabs, while Sessions switched to a nested sidebar.
-  Creating a task also required navigating through Projects and a project detail page.
-- Fix: keep Tasks, Projects, Sessions, and Machines in one shared row; create tasks directly from Tasks; list saved
-  conversations across machines without opening or launching them. Configuration opens in focused dialogs.
-- Check: browser smoke visits every primary link at 320/390/1365px, verifies one navigation landmark and visible
-  link bounds, and creates a task from the top-level list. Inspect screenshots as well as overflow measurements.
+- Observed: simplifying the task workbench to four top-level destinations still required the user to navigate
+  projects/tasks instead of watching sessions. The user clarified the primary job: many servers, many sessions,
+  and their progress in one panel.
+- Fix: default to server-grouped sessions with direct actions. Keep old workflow data/deep links compatible without
+  putting them in the default navigation. Show latest activity and state rather than an invented completion percentage.
+- Check: `monitor-smoke.mjs` verifies the root panel has no navigation menu, session creation/opening, live updates,
+  loss/recovery of updates, external-session limits, and 320/390/1365px bounds.
+- Status evidence must survive refresh: save explicit result/error subtypes. History without live ownership remains
+  unknown. A native conversation resumed elsewhere must be observed, not opened as another Gate writer.
+  `monitor.test.ts` covers these cases, identity deduplication, stale hooks, and lost runtime contact.
+
+- Returning from a conversation clears its automatic reconnect target without stopping the owned process.
+  The browser check reconnects WebSocket from the panel and verifies no old CLI is relaunched.
