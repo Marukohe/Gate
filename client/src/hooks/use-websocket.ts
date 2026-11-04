@@ -407,6 +407,12 @@ export function useWebSocket() {
     };
   }, []);
 
+  const clearSessionTarget = useCallback(() => {
+    // Returning to the monitor must not resume an old CLI after a later WebSocket reconnect.
+    requestedTarget = null;
+    pendingConnect = null;
+  }, []);
+
   const connectToSession = useCallback((serverId: string, sessionId: string) => {
     requestedTarget = { serverId, sessionId };
     // Clear stale guard when switching servers
@@ -660,5 +666,5 @@ export function useWebSocket() {
     ws.send(JSON.stringify({ type: 'load-more', serverId, sessionId, beforeTimestamp }));
   }, []);
 
-  return { connectToSession, sendInput, interruptSession, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, execTerminalCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, resetConversation, resumeCliSession, loadMoreMessages, fetchGitStatus, fetchGitDiff, fetchPRInfo, gitCommit, gitCreatePR, revertToCheckpoint, listCheckpoints, listWorkspaces, createWorkspace, deleteWorkspace, updateWorkspace, setWorkspaceStatus, pinWorkspace, archiveWorkspace, restoreWorkspace, listWorkspaceBranches, fetchWorkspaceInspector, runWorkspaceScript, runWorkspaceAction, startWorkspaceTask };
+  return { connectToSession, clearSessionTarget, sendInput, interruptSession, disconnectSession, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, execTerminalCommand, syncTranscript, listCliSessions, listClaudeSessions, switchProvider, resetConversation, resumeCliSession, loadMoreMessages, fetchGitStatus, fetchGitDiff, fetchPRInfo, gitCommit, gitCreatePR, revertToCheckpoint, listCheckpoints, listWorkspaces, createWorkspace, deleteWorkspace, updateWorkspace, setWorkspaceStatus, pinWorkspace, archiveWorkspace, restoreWorkspace, listWorkspaceBranches, fetchWorkspaceInspector, runWorkspaceScript, runWorkspaceAction, startWorkspaceTask };
 }

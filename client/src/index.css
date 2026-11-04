@@ -335,3 +335,30 @@
 @media (prefers-reduced-motion: reduce) {
   .gate-navigation a, .work-row, .project-tile { transition: none; }
 }
+
+.server-group { border: 1px solid var(--border); border-radius: 0.9rem; background: var(--card); overflow: hidden; }
+.server-group-header { display: flex; align-items: center; gap: 0.8rem; padding: 1rem 1.25rem; }
+.monitor-session {
+  display: flex; width: 100%; align-items: center; gap: 1rem;
+  padding: 1rem 1.25rem; border-top: 1px solid var(--border); text-align: left;
+  transition: background 150ms;
+}
+.monitor-session:hover { background: var(--accent); }
+.monitor-session:focus-visible { outline: 2px solid var(--ring); outline-offset: -3px; }
+.monitor-dot { width: 0.5rem; height: 0.5rem; flex-shrink: 0; border-radius: 50%; background: currentColor; }
+.monitor-running { color: #437bc1; }
+.monitor-waiting { color: #a66c14; }
+.monitor-failed { color: #c64a4a; }
+.monitor-completed { color: #388163; }
+.monitor-unknown, .monitor-stopped, .monitor-idle { color: var(--muted-foreground); }
+.monitor-state { font-size: 0.75rem; font-weight: 500; }
+.monitor-empty { border: 1px dashed var(--border); border-radius: 0.9rem; padding: 4rem 1.5rem; text-align: center; }
+.dark .monitor-running { color: #81aae3; }
+.dark .monitor-waiting { color: #dbaf69; }
+.dark .monitor-failed { color: #ed8d8d; }
+.dark .monitor-completed { color: #7ac3a2; }
+@media (max-width: 639px) {
+  .server-group-header { padding: 0.85rem 1rem; gap: 0.6rem; }
+  .monitor-session { padding: 1rem; gap: 0.65rem; }
+}
+@media (prefers-reduced-motion: reduce) { .monitor-session { transition: none; } }

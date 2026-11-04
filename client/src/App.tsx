@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
 import { ServerDialog } from '@/components/server/ServerDialog';
 import { CreateSessionDialog } from '@/components/chat/CreateSessionDialog';
 import { CommandCenter } from '@/components/home/CommandCenter';
@@ -12,7 +12,8 @@ import { usePlanStore } from '@/stores/plan-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 import { useWebSocket } from '@/hooks/use-websocket';
-import { MainNavigation, type MainPage } from '@/components/layout/MainNavigation';
+import { AppHeader } from '@/components/layout/AppHeader';
+import { SessionMonitor } from '@/components/monitor/SessionMonitor';
 import { Workbench } from '@/components/workbench/Workbench';
 
 const AppShell = lazy(() => import('@/components/layout/AppShell').then((module) => ({ default: module.AppShell })));
@@ -39,18 +40,25 @@ function App() {
   const setSessions = useSessionStore((s) => s.setSessions);
   const setActiveSession = useSessionStore((s) => s.setActiveSession);
 
-  const { connectToSession, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, loadMoreMessages, listCheckpoints, listWorkspaces, startWorkspaceTask } = useWebSocket();
+  const { connectToSession, clearSessionTarget, sendInput, createSession, deleteSession, fetchGitInfo, listBranches, switchBranch, execCommand, syncTranscript, listCliSessions, listClaudeSessions, loadMoreMessages, listCheckpoints, listWorkspaces, startWorkspaceTask } = useWebSocket();
 
   const setActiveWorkspace = useWorkspaceStore((s) => s.setActiveWorkspace);
   const workspaces = useWorkspaceStore((s) => s.workspaces);
 
-  type Route = { kind: 'workbench' } | { kind: 'home' } | { kind: 'workspace'; id: string } | { kind: 'session'; serverId: string; sessionId: string };
-  const [route, setRoute] = useState<Route>({ kind: 'workbench' });
-  const navigateMain = useCallback((page: MainPage) => {
-    window.location.hash = page;
+  type Route = { kind: 'monitor' } | { kind: 'workbench' } | { kind: 'home' } | { kind: 'workspace'; id: string } | { kind: 'session'; serverId: string; sessionId: string };
+  const readMainRoute = (): Route => /^#(task|project|projects|overview)(\/|$)/.test(window.location.hash)
+    ? { kind: 'workbench' } : { kind: 'monitor' };
+  const [route, setRoute] = useState<Route>(readMainRoute);
+  useEffect(() => {
+    const change = () => setRoute(readMainRoute());
+    window.addEventListener('hashchange', change);
+    return () => window.removeEventListener('hashchange', change);
+  }, []);
+  const navigateMain = useCallback(() => {
+    window.location.hash = 'sessions';
     setActiveWorkspace(null);
     setRightPanelOpen(false);
-    setRoute({ kind: 'workbench' });
+    setRoute({ kind: 'monitor' });
   }, [setActiveWorkspace, setRightPanelOpen]);
   const enterWorkspace = useCallback((id: string) => setRoute({ kind: 'workspace', id }), []);
   const enterSession = useCallback(
@@ -80,11 +88,11 @@ function App() {
     if (route.kind === 'session') {
       const list = allSessions[route.serverId] ?? [];
       if (!list.find((s) => s.id === route.sessionId)) {
-        setRoute({ kind: 'home' });
+        setRoute({ kind: 'monitor' });
       }
     } else if (route.kind === 'workspace') {
       if (!allWorkspaces[route.id]) {
-        setRoute({ kind: 'home' });
+        setRoute({ kind: 'monitor' });
       }
     }
   }, [route, allSessions, allWorkspaces]);
@@ -170,20 +178,21 @@ function App() {
 
   // Connect when activeSessionId changes (onopen handles WS-not-ready case)
   useEffect(() => {
-    if (route.kind !== 'session' || !activeServerId || !activeSessionId) return;
+    if (route.kind !== 'session') { clearSessionTarget(); return; }
+    if (!activeServerId || !activeSessionId) return;
     connectToSession(activeServerId, activeSessionId);
     listCheckpoints(activeServerId, activeSessionId);
-  }, [route.kind, activeServerId, activeSessionId, connectToSession, listCheckpoints]);
+  }, [route.kind, activeServerId, activeSessionId, connectToSession, clearSessionTarget, listCheckpoints]);
 
-  // Fetch git info immediately and refresh periodically
+  // Fetch git details only for the conversation the user is viewing.
   useEffect(() => {
-    if (!activeServerId || !activeSessionId) return;
+    if (route.kind !== 'session' || !activeServerId || !activeSessionId) return;
     fetchGitInfo(activeServerId, activeSessionId);
     const interval = setInterval(() => {
       fetchGitInfo(activeServerId, activeSessionId);
     }, 30_000);
     return () => clearInterval(interval);
-  }, [activeServerId, activeSessionId, fetchGitInfo]);
+  }, [route.kind, activeServerId, activeSessionId, fetchGitInfo]);
 
   const addMessage = useChatStore((s) => s.addMessage);
 
@@ -258,6 +267,17 @@ function App() {
     connectToSession(serverId, sessionId);
     enterSession(serverId, sessionId);
   }, [setActiveServer, setActiveSession, setActiveWorkspace, connectToSession, enterSession]);
+
+  const handleMonitorOpen = useCallback(async (serverId: string, sessionId: string) => {
+    try {
+      const response = await fetch(`/api/servers/${serverId}/sessions`);
+      if (!response.ok) throw new Error('Could not load this session.');
+      const items = await response.json();
+      if (!items.some((item: { id: string }) => item.id === sessionId)) throw new Error('Session is no longer available.');
+      setSessions(serverId, items);
+      handleSidebarSelectSession(serverId, sessionId);
+    } catch (error) { toast.error((error as Error).message); }
+  }, [setSessions, handleSidebarSelectSession]);
 
   const handleNewSessionInWorkspace = useCallback((workspaceId: string) => {
     const ws = useWorkspaceStore.getState().workspaces[workspaceId];
@@ -335,10 +355,17 @@ function App() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <MainNavigation legacy={route.kind !== 'workbench'} onNavigate={navigateMain} />
+      <AppHeader home={route.kind === 'monitor'} onHome={navigateMain}
+        onAddServer={() => { setEditingServer(null); setServerDialogOpen(true); }} />
       <div className="min-h-0 flex-1">
         <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
-          {route.kind === 'workbench' ? <Workbench
+          {route.kind === 'monitor' ? <SessionMonitor onOpen={(serverId, sessionId) => void handleMonitorOpen(serverId, sessionId)}
+            onAddServer={() => { setEditingServer(null); setServerDialogOpen(true); }}
+            onEditServer={(id) => {
+              const server = useServerStore.getState().servers.find((item) => item.id === id);
+              if (server) { setEditingServer(server); setServerDialogOpen(true); }
+            }}
+          /> : route.kind === 'workbench' ? <Workbench
             onNewSession={(serverId) => { setActiveServer(serverId); setCreateCtx(null); setCreateOpen(true); }}
             onEditServer={(server) => { setEditingServer(server); setServerDialogOpen(true); }}
             onAddServer={() => { setEditingServer(null); setServerDialogOpen(true); }}

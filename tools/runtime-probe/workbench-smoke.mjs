@@ -309,38 +309,15 @@ try {
       const page = await context.newPage();
       const errors = [];
       page.on('pageerror', (error) => errors.push(error.message));
-      const navigation = page.getByRole('navigation', { name: 'Main navigation' });
-      await page.goto(`${base}/#overview`);
-      for (const width of [320, 390, 1365]) {
-        await page.setViewportSize({ width, height: 900 });
-        for (const label of ['Tasks', 'Projects', 'Sessions', 'Machines']) {
-          await navigation.getByRole('link', { name: label, exact: true }).click();
-          await page.getByRole('heading', { name: label, exact: true }).waitFor();
-          assert.equal(await page.getByRole('navigation').count(), 1);
-          assert.equal(await navigation.getByRole('link', { name: label, exact: true }).getAttribute('aria-current'), 'page');
-          assert.equal(await navigation.locator('a').evaluateAll((items) => items.some((item) => {
-            const rect = item.getBoundingClientRect(); return rect.left < 0 || rect.right > innerWidth;
-          })), false, `All primary links visible at ${width}px`);
-        }
-        await navigation.getByRole('link', { name: 'Tasks', exact: true }).click();
-        await page.getByRole('heading', { name: 'Tasks', exact: true }).waitFor();
-        await until(async () => await navigation.getByRole('link', { name: 'Tasks', exact: true }).getAttribute('aria-current') === 'page', 'active Tasks link');
-        await page.screenshot({ path: `/tmp/gate-simple-tasks-${width}.png` });
-      }
-      await page.getByRole('button', { name: 'New task', exact: true }).click();
-      await page.getByRole('textbox', { name: 'Task goal', exact: true }).fill('Created directly from Tasks');
-      await page.getByRole('textbox', { name: 'Task title', exact: true }).fill('Direct task');
-      await page.getByRole('button', { name: 'Create task', exact: true }).click();
-      await page.getByRole('heading', { name: 'Direct task', exact: true }).waitFor();
-      assert.equal(await navigation.getByRole('link', { name: 'Tasks', exact: true }).getAttribute('aria-current'), 'page');
-      await page.getByRole('button', { name: 'All tasks', exact: true }).click();
-      await page.getByRole('textbox', { name: 'Search tasks', exact: true }).fill('Direct task');
-      assert.equal(await page.locator('.work-row').count(), 1);
-      await page.getByRole('textbox', { name: 'Search tasks', exact: true }).fill('');
-      await page.getByRole('button', { name: 'Toggle theme', exact: true }).click();
-      await delay(250);
-      await page.screenshot({ path: '/tmp/gate-simple-dark.png' });
-      await page.getByRole('button', { name: 'Toggle theme', exact: true }).click();
+      await page.goto(base);
+      await page.getByRole('heading', { name: /^Isolated localhost/ }).waitFor();
+      assert.equal(await page.getByRole('navigation').count(), 0);
+      const monitored = await (await fetch(base + '/api/monitor')).json();
+      assert.ok(monitored.servers.some((server) => server.sessions.some((session) => session.runId === one.id)));
+      await page.getByRole('button', { name: /First/ }).click();
+      await page.getByRole('dialog').getByText(/tick 1/).waitFor();
+      await page.getByRole('dialog').getByRole('button', { name: 'Stop run', exact: true }).waitFor();
+      await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
       await page.goto(`${base}/#project/${project.id}`);
       await page.getByRole('button', { name: 'Project settings', exact: true }).click();
       await page.getByRole('textbox', { name: 'test script override', exact: true }).fill('printf browser-script');
@@ -390,7 +367,7 @@ try {
       assert.equal(columns[0].top, columns[1].top);
       await page.screenshot({ path: '/tmp/gate-final-desktop.png', fullPage: true });
       await page.setViewportSize({ width: 390, height: 900 });
-      assert.equal(await page.getByRole('navigation').count(), 1, 'Only the primary navigation is shown');
+      assert.equal(await page.getByRole('navigation').count(), 0, 'No secondary navigation is shown');
       await page.getByRole('button', { name: 'Start task', exact: true }).scrollIntoViewIfNeeded();
       await page.screenshot({ path: '/tmp/gate-final-mobile.png', fullPage: true });
       await page.getByRole('textbox', { name: 'Run instructions' }).fill('Started from the browser');

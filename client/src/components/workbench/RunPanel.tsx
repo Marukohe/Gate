@@ -109,7 +109,7 @@ export function RunPanel({ task, checkout, runs, checkoutBlocked, mutate, busy }
   </section>;
 }
 
-function RunOutput({ run, mutate, busy }: WorkbenchActions & { run: Run }) {
+export function RunOutput({ run, mutate, busy, expanded = false }: WorkbenchActions & { run: Run; expanded?: boolean }) {
   const [attached, setAttached] = useState(false);
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [connection, setConnection] = useState<{ connectionError?: string; stopRequested?: boolean }>({});
@@ -153,7 +153,7 @@ function RunOutput({ run, mutate, busy }: WorkbenchActions & { run: Run }) {
     if (data.type === 'attention') return [`Waiting for a decision: ${data.kind}`];
     return [];
   });
-  return <details className="rounded-md border p-3" open={active.includes(run.state)}>
+  return <details className="rounded-md border p-3" open={expanded || active.includes(run.state)}>
     <summary className="cursor-pointer text-sm">{run.kind} · {run.provider} · {run.state} · {new Date(run.createdAt).toLocaleString()}</summary>
     {run.kind === 'terminal' && (attached
       ? <Suspense fallback={<p className="mt-3 text-sm">Loading terminal…</p>}><TerminalView runId={run.id} onDetach={() => setAttached(false)} /></Suspense>
