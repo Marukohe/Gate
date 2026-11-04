@@ -3,6 +3,7 @@ import type { ClientChannel } from 'ssh2';
 import { EventEmitter } from 'events';
 import { readFileSync } from 'fs';
 import { parseRepoScripts, type RepoScripts } from './repo-scripts.js';
+import { CODEX_EXEC_COMMAND } from './providers/codex/command.js';
 
 export interface ServerConfig {
   id: string;
@@ -613,7 +614,7 @@ export class SSHManager extends EventEmitter {
     const result = await this.runCommand(
       serverId,
       workingDir,
-      `codex exec --full-auto ${shellQuote(prompt)}`,
+      `${CODEX_EXEC_COMMAND} ${shellQuote(prompt)}`,
       90_000,
     );
     if (result.exitCode !== 0) throw new Error(result.stderr || result.stdout || 'codex failed');

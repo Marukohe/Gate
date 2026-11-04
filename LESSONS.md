@@ -49,3 +49,5 @@ Keep this file concise; implementation progress belongs in [the refactor plan](d
 - Prevention: validate actual argument parsing in addition to command-string unit tests. Preserve sandbox intent
   when replacing removed options; do not substitute an unrestricted bypass flag.
 - Affected paths: `server/src/providers/codex/index.ts` and commit-message generation in `server/src/ssh-manager.ts`.
+- Fix: share explicit `--ask-for-approval on-request exec --sandbox workspace-write` arguments across launch,
+  resume, and commit-message generation. Run the optional real-CLI test with `GATE_CODEX_BIN` set to its executable.

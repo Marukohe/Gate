@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { CodexProvider } from '../../../providers/codex/index.js';
+import { CODEX_EXEC_ARGS } from '../../../providers/codex/command.js';
+import { spawnSync } from 'node:child_process';
 
 describe('CodexProvider', () => {
   const provider = new CodexProvider();
@@ -72,6 +74,20 @@ describe('CodexProvider', () => {
     for (const cmd of commands) {
       expect(cmd).toContain('$SHELL -lc');
       expect(cmd).not.toContain('$SHELL -ic');
+      expect(cmd).toContain('--ask-for-approval on-request exec --sandbox workspace-write');
+      expect(cmd).not.toContain('--full-auto');
+      expect(cmd).not.toContain('--dangerously-bypass');
+    }
+  });
+
+  it.skipIf(!process.env.GATE_CODEX_BIN)('accepts launch and resume flags in the installed Codex CLI', () => {
+    for (const suffix of [['--help'], ['--json', '--help'], ['--json', 'resume', '--help']]) {
+      const result = spawnSync(process.env.GATE_CODEX_BIN!, [...CODEX_EXEC_ARGS, ...suffix], {
+        encoding: 'utf8', timeout: 10_000,
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain('Usage:');
     }
   });
 

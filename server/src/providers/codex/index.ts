@@ -9,6 +9,7 @@ import type {
 import { CodexStreamParser } from './parser.js';
 import { parseCodexTranscript } from './transcript.js';
 import { normalizeCodexToolName } from './tool-utils.js';
+import { CODEX_EXEC_COMMAND } from './command.js';
 
 function shellCd(dir: string): string {
   if (dir === '~' || dir.startsWith('~/')) return `cd $HOME${dir.slice(1)}`;
@@ -39,12 +40,12 @@ export class CodexProvider implements CLIProvider {
     const prompt = opts.initialContext ? shellPrompt(opts.initialContext) : null;
 
     if (opts.resumeSessionId) {
-      return `$SHELL -lc "${prompt?.envPrefix ?? ''}${cdPrefix}codex exec --json resume '${opts.resumeSessionId}'${prompt?.arg ?? ''}"`;
+      return `$SHELL -lc "${prompt?.envPrefix ?? ''}${cdPrefix}${CODEX_EXEC_COMMAND} --json resume '${opts.resumeSessionId}'${prompt?.arg ?? ''}"`;
     }
     if (opts.initialContext) {
-      return `$SHELL -lc "${prompt!.envPrefix}${cdPrefix}codex exec --json --full-auto${prompt!.arg}"`;
+      return `$SHELL -lc "${prompt!.envPrefix}${cdPrefix}${CODEX_EXEC_COMMAND} --json${prompt!.arg}"`;
     }
-    return `$SHELL -lc "${cdPrefix}codex exec --json --full-auto \\"You are ready. Wait for instructions.\\""`;
+    return `$SHELL -lc "${cdPrefix}${CODEX_EXEC_COMMAND} --json \\"You are ready. Wait for instructions.\\""`;
   }
 
   formatInput(text: string): string {

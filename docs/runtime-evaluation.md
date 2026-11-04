@@ -53,7 +53,8 @@ The optional JSON report records executed checks and provider versions without p
 ## Problems found
 
 Non-interactive SSH did not include Node.js in PATH; the probe uses an explicit executable path.
-Codex 0.166.0 rejects Gate's existing `--full-auto` launch flag. This is a separately tracked compatibility fix.
+Codex 0.166.0 rejects Gate's previous `--full-auto` launch flag. Launch, resume, and commit-message generation
+now share explicit approval/sandbox arguments; an optional real-CLI test checks argument parsing without a model call.
 Shutdown must drain children before removing its control socket, otherwise test cleanup can race active journals.
 See [LESSONS.md](../LESSONS.md) for the corresponding prevention checks.
 
