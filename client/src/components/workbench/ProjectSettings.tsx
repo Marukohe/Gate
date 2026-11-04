@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { Checkout, Project } from '../../../../server/src/workbench/types';
@@ -26,8 +27,10 @@ export function ProjectSettings({ project, checkouts, mutate, busy }: WorkbenchA
   }
   return <section className="space-y-3">
     <Button variant="outline" size="sm" onClick={() => setOpen(!open)} aria-expanded={open}>Project settings</Button>
-    {open && <form onSubmit={save} className="space-y-4 rounded-xl border bg-card p-5">
-      <h2 className="font-medium">Defaults for new tasks</h2>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="max-h-[85dvh] overflow-y-auto rounded-2xl">
+        <DialogHeader><DialogTitle>Project settings</DialogTitle><DialogDescription>Defaults for new tasks and project scripts.</DialogDescription></DialogHeader>
+        <form onSubmit={save} className="space-y-4">
       <label className="block text-sm">Project name<Input name="name" defaultValue={project.name} required /></label>
       <label className="block text-sm">Default working copy
         <select name="checkout" className={`${selectClass} mt-1 w-full`} defaultValue={project.defaultCheckoutId ?? ''}>
@@ -54,6 +57,8 @@ export function ProjectSettings({ project, checkouts, mutate, busy }: WorkbenchA
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <div className="flex gap-2"><Button disabled={busy}>Save project settings</Button>
         <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button></div>
-    </form>}
+        </form>
+      </DialogContent>
+    </Dialog>
   </section>;
 }

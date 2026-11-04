@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,11 +24,6 @@ export function TaskDetail({ task, checkout, runs, attention, verifications, col
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
   const [current, setCurrent] = useState<CodeSnapshot | null>(null);
-  const executionPanel = useRef<HTMLDivElement>(null);
-  const resultsPanel = useRef<HTMLDivElement>(null);
-  const deliveryPanel = useRef<HTMLDivElement>(null);
-  const [executionFirst] = useState(() => !runs.length || runs.some((run) =>
-    ['queued', 'starting', 'running', 'waiting', 'stopping'].includes(run.state)));
   async function update(values: Partial<Task>) {
     setError('');
     try { await mutate(`/tasks/${task.id}`, 'PATCH', values); setEditing(false); }
@@ -40,23 +35,17 @@ export function TaskDetail({ task, checkout, runs, attention, verifications, col
   }
   return <div className="space-y-5">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0"><h1 className="break-words text-2xl font-semibold">{task.title}</h1>
+      <div className="min-w-0"><h1 className="break-words text-2xl font-semibold tracking-tight">{task.title}</h1>
         <p className="mt-1 break-all text-xs text-muted-foreground">{checkout.path} · {task.provider}</p></div>
       <select aria-label="Task status" className={selectClass} value={task.status} disabled={busy}
         onChange={(event) => void update({ status: event.target.value as TaskStatus })}>
         {Object.entries(taskLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select>
     </div>
-    <nav aria-label="Task sections" className="flex flex-wrap gap-2 lg:hidden">
-      {([['Execution', executionPanel], ['Results', resultsPanel], ['Delivery', deliveryPanel]] as const).map(([label, panel]) =>
-        <Button key={label} variant="outline" size="sm" onClick={() => {
-          panel.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-        }}>{label}</Button>)}
-    </nav>
     {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
     <AttentionPanel items={attention} mutate={mutate} busy={busy} />
     {checkoutBlocked && externalSessions}
-    <section className="rounded-xl border bg-card p-5">
+    <section className="rounded-xl border border-border/60 bg-card px-5 py-4">
       {editing ? <form onSubmit={save} className="space-y-3">
         <label className="block text-sm">Title<Input name="title" defaultValue={task.title} required /></label>
         <label className="block text-sm">Goal<Textarea aria-label="Goal" name="goal" defaultValue={task.goal} rows={4} required /></label>
@@ -68,20 +57,20 @@ export function TaskDetail({ task, checkout, runs, attention, verifications, col
         <div className="flex items-center justify-between"><h2 className="font-medium">Goal</h2>
           <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>Edit</Button></div>
         <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{task.goal}</p>
-        <h3 className="mt-5 text-sm font-medium">Acceptance criteria</h3>
-        <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{task.acceptance || 'No criteria added yet.'}</p>
+        {task.acceptance && <p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground">
+          <span className="font-medium">Acceptance · </span>{task.acceptance}</p>}
       </>}
     </section>
     <div className="grid items-start gap-5 lg:grid-cols-2">
-      <div ref={executionPanel} className={`${executionFirst ? 'order-1' : 'order-2'} min-w-0 scroll-mt-4 lg:order-1`} aria-label="Task execution">
+      <div className="min-w-0" aria-label="Task execution">
         <RunPanel task={task} checkout={checkout} runs={runs} checkoutBlocked={checkoutBlocked} mutate={mutate} busy={busy} />
       </div>
-      <div className={`${executionFirst ? 'order-2' : 'order-1'} min-w-0 space-y-5 lg:order-2`}>
-        <div ref={resultsPanel} className="scroll-mt-4" aria-label="Task results">
+      <div className="min-w-0 space-y-5">
+        <div aria-label="Task results">
           <TaskResults task={task} runs={runs} verifications={verifications} onSnapshot={setCurrent} mutate={mutate} busy={busy} />
         </div>
         <CollaborationPanel task={task} runs={runs} records={collaborations} current={current} mutate={mutate} busy={busy} />
-        <div ref={deliveryPanel} className="scroll-mt-4">
+        <div>
           <DeliveryPanel key={task.checkoutId} task={task} runs={runs} records={deliveries} defaultBranch={defaultBranch}
             checkoutBlocked={checkoutBlocked} mutate={mutate} busy={busy} />
         </div>

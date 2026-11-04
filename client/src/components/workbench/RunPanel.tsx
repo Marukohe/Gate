@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { Checkout, Run, RunEvent, Task } from '../../../../server/src/workbench/types';
@@ -13,6 +14,7 @@ export function RunPanel({ task, checkout, runs, checkoutBlocked, mutate, busy }
 }) {
   const [error, setError] = useState('');
   const [settings, setSettings] = useState<Record<string, string> | null>(null);
+  const [configOpen, setConfigOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [terminalProvider, setTerminalProvider] = useState('shell');
@@ -34,7 +36,7 @@ export function RunPanel({ task, checkout, runs, checkoutBlocked, mutate, busy }
     event.preventDefault();
     setError('');
     const values = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>;
-    try { setSettings(await mutate(`/machines/${checkout.serverId}/runtime`, 'PUT', values)); }
+    try { setSettings(await mutate(`/machines/${checkout.serverId}/runtime`, 'PUT', values)); setConfigOpen(false); }
     catch (err) { setError((err as Error).message); }
   }
   async function start() {
@@ -54,10 +56,15 @@ export function RunPanel({ task, checkout, runs, checkoutBlocked, mutate, busy }
     } catch (err) { setError((err as Error).message); }
   }
   return <section className="space-y-4 rounded-xl border bg-card p-5">
-    <h2 className="font-medium">Execution</h2>
+    <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-medium">Execution</h2>
+      {loaded && <Button variant="ghost" size="sm" onClick={() => setConfigOpen(true)}>
+        {settings ? 'Runtime settings' : 'Set up machine'}</Button>}
+    </div>
     {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}
-    {loaded && <details open={!settings}>
-      <summary className="cursor-pointer text-sm text-muted-foreground">{settings ? 'Machine runtime settings' : 'Set up this machine'}</summary>
+    <Dialog open={configOpen} onOpenChange={setConfigOpen}>
+      <DialogContent className="max-h-[85dvh] overflow-y-auto rounded-2xl">
+        <DialogHeader><DialogTitle>Machine runtime</DialogTitle>
+          <DialogDescription>Executable paths on the remote machine.</DialogDescription></DialogHeader>
       <form onSubmit={setup} className="mt-3 space-y-3">
         <p className="text-xs text-muted-foreground">Use absolute paths on the remote machine. Setup installs Gate’s runtime via SSH.</p>
         {[
@@ -66,19 +73,22 @@ export function RunPanel({ task, checkout, runs, checkoutBlocked, mutate, busy }
         ].map(([key, label, placeholder]) => <label className="block text-sm" key={key}>{label}
           <Input name={key} aria-label={label} defaultValue={settings?.[key] ?? ''} placeholder={placeholder} required />
         </label>)}
-        <details><summary className="cursor-pointer text-xs">Terminal paths (Linux)</summary>
+        <div>
           <label className="mt-2 block text-sm">Python 3.9+<Input name="pythonPath" defaultValue={settings?.pythonPath ?? '/usr/bin/python3'} /></label>
           <label className="mt-2 block text-sm">Interactive shell<Input name="shellPath" defaultValue={settings?.shellPath ?? '/bin/bash'} /></label>
-        </details>
-        <details><summary className="cursor-pointer text-xs">GitHub CLI path</summary>
+        </div>
+        <div>
           <label className="mt-2 block text-sm">GitHub CLI executable
             <Input name="ghPath" defaultValue={settings?.ghPath ?? ''} placeholder="Optional absolute path; otherwise gh from SSH PATH" /></label>
-        </details>
+        </div>
+        {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}
         <Button disabled={busy} variant="outline">Install / reconnect runtime</Button>
       </form>
-    </details>}
+      </DialogContent>
+    </Dialog>
+    {loaded && !settings && <p className="text-sm text-muted-foreground">Set up this machine to start your first run.</p>}
     {settings && !pending && <div className="space-y-3">
-      <Textarea aria-label="Run instructions" placeholder="Optional follow-up instructions. Leave empty to use the task goal and acceptance criteria."
+      <Textarea aria-label="Run instructions" placeholder="Add instructions, or start with the task goal…"
         value={prompt} onChange={(event) => { setPrompt(event.target.value); requestId.current = null; }} rows={3} />
       <p className="text-xs text-muted-foreground">{task.isolation === 'worktree'
         ? 'Runs use a task worktree created from the repository’s committed HEAD.'
