@@ -12,6 +12,7 @@ import { usePlanStore } from '@/stores/plan-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 import { useWebSocket } from '@/hooks/use-websocket';
+import { MainNavigation, type MainPage } from '@/components/layout/MainNavigation';
 import { Workbench } from '@/components/workbench/Workbench';
 
 const AppShell = lazy(() => import('@/components/layout/AppShell').then((module) => ({ default: module.AppShell })));
@@ -45,7 +46,8 @@ function App() {
 
   type Route = { kind: 'workbench' } | { kind: 'home' } | { kind: 'workspace'; id: string } | { kind: 'session'; serverId: string; sessionId: string };
   const [route, setRoute] = useState<Route>({ kind: 'workbench' });
-  const enterHome = useCallback(() => {
+  const navigateMain = useCallback((page: MainPage) => {
+    window.location.hash = page;
     setActiveWorkspace(null);
     setRightPanelOpen(false);
     setRoute({ kind: 'workbench' });
@@ -225,11 +227,6 @@ function App() {
     clearDeletedSessionState(sessionId);
   }, [activeServerId, deleteSession, clearDeletedSessionState]);
 
-  const handleDeleteSessionFromSidebar = useCallback((serverId: string, sessionId: string) => {
-    deleteSession(serverId, sessionId);
-    clearDeletedSessionState(sessionId);
-  }, [deleteSession, clearDeletedSessionState]);
-
   const handleSelectSession = useCallback((sessionId: string) => {
     if (!activeServerId) return;
     if (sessionId === activeSessionId) {
@@ -337,44 +334,44 @@ function App() {
       : null;
 
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
-      {route.kind === 'workbench' ? <Workbench
-        onLegacy={() => setRoute({ kind: 'home' })}
-        onAddServer={() => { setEditingServer(null); setServerDialogOpen(true); }}
-        onLegacySession={handleSidebarSelectSession}
-      /> : <AppShell
-        mainView={mainView}
-        onAddServer={() => { setEditingServer(null); setServerDialogOpen(true); }}
-        onEditServer={(server) => { setEditingServer(server); setServerDialogOpen(true); }}
-        onSendToChat={handleSend}
-        onOpenHome={enterHome}
-        onSelectSession={handleSidebarSelectSession}
-        onSelectWorkspace={handleSelectWorkspace}
-        onDeleteSession={handleDeleteSessionFromSidebar}
-        onAddWorkspace={() => setAddWorkspaceOpen(true)}
-        inspectorWorkspaceId={inspectorWorkspaceId}
-      />}
-      <ServerDialog
-        open={serverDialogOpen}
-        onOpenChange={(open) => { setServerDialogOpen(open); if (!open) setEditingServer(null); }}
-        editServer={editingServer}
-      />
-      <AddWorkspaceDialog open={addWorkspaceOpen} onOpenChange={setAddWorkspaceOpen} />
-      {activeServerId && (
-        <CreateSessionDialog
-          open={createOpen}
-          onOpenChange={(open) => { setCreateOpen(open); if (!open) setCreateCtx(null); }}
-          onSubmit={handleCreateSessionFromDialog}
-          defaultName="Default"
-          defaultWorkingDir={createCtx?.repoPath}
-          serverId={activeServerId}
-          workspaceContext={createCtx}
-          onListClaudeSessions={listClaudeSessions}
-          onListCliSessions={listCliSessions}
-        />
-      )}
-      <Toaster position="top-right" theme={darkMode ? 'dark' : 'light'} richColors />
-    </Suspense>
+    <div className="flex h-full min-h-0 flex-col">
+      <MainNavigation legacy={route.kind !== 'workbench'} onNavigate={navigateMain} />
+      <div className="min-h-0 flex-1">
+        <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+          {route.kind === 'workbench' ? <Workbench
+            onNewSession={(serverId) => { setActiveServer(serverId); setCreateCtx(null); setCreateOpen(true); }}
+            onEditServer={(server) => { setEditingServer(server); setServerDialogOpen(true); }}
+            onAddServer={() => { setEditingServer(null); setServerDialogOpen(true); }}
+            onLegacySession={handleSidebarSelectSession}
+          /> : <AppShell
+            mainView={mainView}
+            onSendToChat={handleSend}
+            onSelectSession={handleSidebarSelectSession}
+            inspectorWorkspaceId={inspectorWorkspaceId}
+          />}
+          <ServerDialog
+            open={serverDialogOpen}
+            onOpenChange={(open) => { setServerDialogOpen(open); if (!open) setEditingServer(null); }}
+            editServer={editingServer}
+          />
+          <AddWorkspaceDialog open={addWorkspaceOpen} onOpenChange={setAddWorkspaceOpen} />
+          {activeServerId && (
+            <CreateSessionDialog
+              open={createOpen}
+              onOpenChange={(open) => { setCreateOpen(open); if (!open) setCreateCtx(null); }}
+              onSubmit={handleCreateSessionFromDialog}
+              defaultName="Default"
+              defaultWorkingDir={createCtx?.repoPath}
+              serverId={activeServerId}
+              workspaceContext={createCtx}
+              onListClaudeSessions={listClaudeSessions}
+              onListCliSessions={listCliSessions}
+            />
+          )}
+          <Toaster position="top-right" theme={darkMode ? 'dark' : 'light'} richColors />
+        </Suspense>
+      </div>
+    </div>
   );
 }
 

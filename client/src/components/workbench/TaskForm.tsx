@@ -22,12 +22,9 @@ export function TaskForm({ project, checkouts, mutate, busy, onCreated }: Workbe
       onCreated(task);
     } catch (error) { setError((error as Error).message); }
   }
-  return <form onSubmit={submit} className="space-y-3 rounded-xl border bg-card p-5">
-    <h2 className="font-semibold">New task</h2>
+  return <form onSubmit={submit} className="space-y-4">
     <Textarea name="goal" required aria-label="Task goal" placeholder="What should this task accomplish?" rows={3} />
-    <details className="text-sm">
-      <summary className="cursor-pointer text-muted-foreground">Acceptance criteria and options</summary>
-      <div className="mt-3 space-y-3">
+    <div className="space-y-3 text-sm">
         <Input name="title" aria-label="Task title" placeholder="Short title (optional)" maxLength={120} />
         <Textarea name="acceptance" aria-label="Acceptance criteria" placeholder="How will you know the work is done?" />
         <label className="block">Working copy
@@ -44,8 +41,7 @@ export function TaskForm({ project, checkouts, mutate, busy, onCreated }: Workbe
             <option value="worktree">Isolated worktree</option><option value="shared">Shared working copy</option>
           </select></label>
         </div>
-      </div>
-    </details>
+    </div>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     <Button disabled={busy || !checkouts.length} type="submit">Create task</Button>
   </form>;

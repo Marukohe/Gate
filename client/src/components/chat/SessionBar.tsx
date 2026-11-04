@@ -156,26 +156,10 @@ export function SessionBar({ serverId, onCreateSession, onDeleteSession, onListB
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            className={cn(
-              'rounded-md px-2 py-0.5 text-xs font-medium transition-colors',
-              activeTab === 'chat' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
-            )}
-            onClick={() => setActiveTab('chat')}
-          >
-            Chat
-          </button>
-          <button
-            className={cn(
-              'rounded-md px-2 py-0.5 text-xs font-medium transition-colors',
-              activeTab === 'diff' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
-            )}
-            onClick={() => setActiveTab('diff')}
-          >
-            Diff
-          </button>
-        </div>
+        <Button variant="ghost" size="sm" className="h-7 shrink-0 text-xs"
+          onClick={() => setActiveTab(activeTab === 'chat' ? 'diff' : 'chat')}>
+          {activeTab === 'chat' ? 'View diff' : 'Back to chat'}
+        </Button>
 
         <Button
           variant="ghost"

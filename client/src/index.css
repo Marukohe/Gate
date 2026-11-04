@@ -240,3 +240,98 @@
   0%, 60%, 100% { opacity: 0.3; transform: scale(1); }
   30% { opacity: 1; transform: scale(1.4); }
 }
+/* Shared navigation stays visible across tasks and saved conversations. */
+.gate-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2rem;
+  padding: max(0.75rem, env(safe-area-inset-top)) max(1.5rem, env(safe-area-inset-right)) 0.75rem max(1.5rem, env(safe-area-inset-left));
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+.gate-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+}
+.gate-mark {
+  display: grid;
+  place-items: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 0.6rem;
+  background: var(--foreground);
+  color: var(--background);
+  font-size: 1.25rem;
+  line-height: 1;
+  padding-bottom: 0.2rem;
+}
+.gate-navigation {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.gate-navigation a {
+  padding: 0.5rem 0.85rem;
+  border-radius: 0.55rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition: background 150ms, color 150ms;
+}
+.gate-navigation a:hover, .gate-navigation a[aria-current='page'] {
+  background: var(--secondary);
+  color: var(--foreground);
+}
+.gate-navigation a:focus-visible, .gate-brand:focus-visible, .work-row:focus-visible, .project-tile:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.page-title { font-size: 1.65rem; font-weight: 600; letter-spacing: -0.04em; }
+.page-description { margin-top: 0.4rem; font-size: 0.875rem; color: var(--muted-foreground); }
+.work-list { overflow: hidden; border: 1px solid var(--border); border-radius: 0.85rem; background: var(--card); }
+.work-list:empty { display: none; }
+.work-row {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  width: 100%;
+  padding: 1.1rem 1.25rem;
+  text-align: left;
+  transition: background 150ms;
+}
+.work-row + .work-row { border-top: 1px solid var(--border); }
+.work-row:hover { background: var(--accent); }
+.task-dot { width: 0.5rem; height: 0.5rem; flex-shrink: 0; border-radius: 50%; background: var(--muted-foreground); }
+.task-dot-in-progress { background: #5685d4; box-shadow: 0 0 0 4px #5685d410; }
+.task-dot-review { background: #c28a31; }
+.task-dot-done { background: #4b977b; }
+.task-dot-backlog, .task-dot-canceled { background: var(--border); }
+.project-tile {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  padding: 1.5rem;
+  background: var(--card);
+  text-align: left;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+.project-tile:hover { border-color: var(--ring); box-shadow: 0 4px 16px #00000005; }
+@media (max-width: 639px) {
+  .gate-header { gap: 0.45rem; padding-inline: 0.65rem; }
+  .gate-navigation { justify-content: center; gap: 0; }
+  .gate-navigation a { padding: 0.6rem 0.4rem; font-size: 0.75rem; }
+  .gate-mark { width: 1.55rem; height: 1.55rem; font-size: 1.1rem; border-radius: 0.45rem; }
+  .work-row { padding: 1rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gate-navigation a, .work-row, .project-tile { transition: none; }
+}
