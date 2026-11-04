@@ -1,7 +1,7 @@
 import type { Database } from '../db.js';
 import { ACTIVE_RUN_STATES } from './store.js';
 import { RemoteRuntime, type RemoteEvent, type RuntimeSettings } from './remote.js';
-import type { CodeSnapshot, ObservedSession, RunEvent } from './types.js';
+import type { CodeSnapshot, ObservedSession, RunEvent, ScriptName, TaskScripts } from './types.js';
 import path from 'node:path';
 import { collaborationPacket } from './collaboration.js';
 import { supportsStructuredAnswers } from './attention.js';
@@ -88,6 +88,33 @@ export class ExecutionService {
 
   verify(taskId: string, requestId: string, command: string) {
     const run = this.db.workbench.enqueue(taskId, requestId, command, 'test');
+    void this.reconcile(run.id);
+    return run;
+  }
+
+  async scripts(taskId: string): Promise<TaskScripts> {
+    const store = this.db.workbench;
+    const task = store.task(taskId);
+    if (!task) throw new Error('Task not found');
+    const checkout = store.checkout(task.checkoutId)!;
+    const settings = store.runtimeSettings(checkout.serverId);
+    if (!settings) throw new Error('Set up the remote runtime first');
+    const result = await this.remote.scripts(settings, checkout.path);
+    for (const [name, command] of Object.entries(store.project(task.projectId)!.scripts)) {
+      result.scripts[name as ScriptName] = { command, source: 'project' };
+    }
+    return result;
+  }
+
+  async script(taskId: string, requestId: string, name: ScriptName, command: string) {
+    const store = this.db.workbench;
+    if (!['setup', 'run', 'test'].includes(name)) throw new Error('Choose setup, run, or test');
+    // A lost HTTP reply must recover the captured command even if project settings changed meanwhile.
+    if (!store.requestRun(requestId)) {
+      const current = (await this.scripts(taskId)).scripts[name];
+      if (!current || current.command !== command) throw new Error('Script changed; refresh scripts and inspect the command again');
+    }
+    const run = store.enqueue(taskId, requestId, command, { kind: 'script', provider: 'shell', scriptName: name });
     void this.reconcile(run.id);
     return run;
   }
@@ -179,7 +206,7 @@ export class ExecutionService {
         if (collaboration?.snapshot) codeRef = collaboration.snapshot.commit;
         // Persist the exact spawn bytes before sending start. A lost acknowledgement is retried with identical identity.
         execution.launch = run.kind === 'terminal' ? await this.remote.terminal(execution.settings, checkout.path, run.provider)
-          : run.kind === 'test' ? this.remote.verification(execution.settings, checkout.path, run.prompt)
+          : ['test', 'script'].includes(run.kind) ? this.remote.verification(execution.settings, checkout.path, run.prompt)
           : this.remote.launch(execution.settings, run.provider, checkout.path, collaboration?.packet ?? run.prompt,
             collaboration?.kind === 'review' ? collaboration.snapshot! : undefined);
         store.prepareRun(runId, execution.launch, codeRef);
@@ -309,7 +336,8 @@ export class ExecutionService {
           state: failed ? 'failed' : payload.interrupted ? 'interrupted' : 'completed',
           result: store.agentMessages(run.id).join('\n\n') || null });
         // A review finishing in its own checkout must not overwrite a concurrently running implementation's status.
-        if (!failed && !payload.interrupted && !['review', 'terminal'].includes(run.kind)) store.updateTask(run.taskId, { status: 'review' });
+        if (!failed && !payload.interrupted && !['review', 'terminal'].includes(run.kind) &&
+          (run.kind !== 'script' || verification?.purpose === 'test')) store.updateTask(run.taskId, { status: 'review' });
         break;
       }
     }

@@ -31,15 +31,16 @@ export function TaskForm({ project, checkouts, mutate, busy, onCreated }: Workbe
         <Input name="title" aria-label="Task title" placeholder="Short title (optional)" maxLength={120} />
         <Textarea name="acceptance" aria-label="Acceptance criteria" placeholder="How will you know the work is done?" />
         <label className="block">Working copy
-          <select className={`${selectClass} mt-1 w-full`} name="checkoutId" defaultValue={checkouts[0]?.id} required>
+          <select key={project.defaultCheckoutId} className={`${selectClass} mt-1 w-full`} name="checkoutId"
+            defaultValue={project.defaultCheckoutId ?? checkouts[0]?.id} required>
             {checkouts.map((checkout) => <option key={checkout.id} value={checkout.id}>{checkout.path}</option>)}
           </select>
         </label>
         <div className="flex flex-wrap gap-3">
-          <label>Agent <select name="provider" className={selectClass} defaultValue={project.defaultProvider}>
+          <label>Agent <select key={project.defaultProvider} name="provider" className={selectClass} defaultValue={project.defaultProvider}>
             <option value="claude">Claude</option><option value="codex">Codex</option>
           </select></label>
-          <label>Files <select name="isolation" className={selectClass} defaultValue="worktree">
+          <label>Files <select key={project.defaultIsolation} name="isolation" className={selectClass} defaultValue={project.defaultIsolation}>
             <option value="worktree">Isolated worktree</option><option value="shared">Shared working copy</option>
           </select></label>
         </div>

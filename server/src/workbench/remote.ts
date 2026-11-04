@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { FrozenSnapshot, TaskResult } from './types.js';
+import type { FrozenSnapshot, TaskResult, TaskScripts } from './types.js';
 import { fileURLToPath } from 'node:url';
 import { SSHManager } from '../ssh-manager.js';
 import type { Database } from '../db.js';
@@ -24,7 +24,7 @@ export interface RemoteEvent {
 }
 export const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 const bundle = ['runtime.mjs', 'cli.mjs', 'worker.mjs', 'provider.mjs', 'snapshot.mjs', 'verifier.mjs', 'collaboration.mjs',
-  'observations.mjs', 'hook.mjs', 'hook-install.mjs', 'terminal.py', 'terminal-bridge.mjs'].map((name) => ({ name,
+  'observations.mjs', 'hook.mjs', 'hook-install.mjs', 'terminal.py', 'terminal-bridge.mjs', 'scripts.mjs'].map((name) => ({ name,
   data: fs.readFileSync(fileURLToPath(new URL(`../../runtime/${name}`, import.meta.url))) }));
 const build = createHash('sha256').update(Buffer.concat(bundle.map((file) => file.data))).digest('hex').slice(0, 16);
 
@@ -205,7 +205,14 @@ export class RemoteRuntime {
 
   verification(settings: RuntimeSettings, cwd: string, command: string): LaunchSpec {
     return { command: settings.nodePath, args: [`${this.releaseDirectory(settings)}/verifier.mjs`], cwd, protocol: true,
-      initialInput: JSON.stringify({ command, cwd }) + '\n' };
+      initialInput: JSON.stringify({ command, cwd, nodeDirectory: path.posix.dirname(settings.nodePath) }) + '\n' };
+  }
+
+  async scripts(settings: RuntimeSettings, cwd: string): Promise<TaskScripts> {
+    const ready = await this.install(settings);
+    return JSON.parse(await this.shell(ready.serverId,
+      `${quote(ready.nodePath)} ${quote(`${this.releaseDirectory(ready)}/scripts.mjs`)}`,
+      JSON.stringify({ cwd })));
   }
 
   async result(settings: RuntimeSettings, cwd: string): Promise<TaskResult> {

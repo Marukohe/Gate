@@ -73,6 +73,19 @@ export function createWorkbenchRoutes(db: Database, ssh: SSHManager, execution?:
       text(req.body.command, 'test command')));
   });
 
+  router.get('/tasks/:id/scripts', async (req, res) => {
+    if (!execution) throw new Error('Managed execution is unavailable');
+    res.json(await execution.scripts(String(req.params.id)));
+  });
+
+  router.post('/tasks/:id/scripts', async (req, res) => {
+    if (!execution) throw new Error('Managed execution is unavailable');
+    if (!['setup', 'run', 'test'].includes(req.body.name)) throw new Error('Choose setup, run, or test');
+    text(req.body.command, 'script command');
+    res.status(202).json(await execution.script(String(req.params.id), text(req.body.requestId, 'request ID'),
+      req.body.name, req.body.command));
+  });
+
   router.post('/tasks/:id/terminal', (req, res) => {
     if (!execution) throw new Error('Managed execution is unavailable');
     const target = req.body.provider === 'shell' ? 'shell' : provider(req.body.provider);
@@ -131,6 +144,9 @@ export function createWorkbenchRoutes(db: Database, ssh: SSHManager, execution?:
       name: req.body.name === undefined ? undefined : text(req.body.name, 'name'),
       defaultBranch: req.body.defaultBranch === undefined ? undefined : text(req.body.defaultBranch, 'branch', true) || null,
       defaultProvider: req.body.defaultProvider === undefined ? undefined : provider(req.body.defaultProvider),
+      defaultIsolation: req.body.defaultIsolation,
+      defaultCheckoutId: req.body.defaultCheckoutId,
+      scripts: req.body.scripts,
       archivedAt: req.body.archived === undefined ? undefined : req.body.archived === true ? Date.now() : null,
     }));
   });
@@ -146,11 +162,12 @@ export function createWorkbenchRoutes(db: Database, ssh: SSHManager, execution?:
   });
 
   router.post('/tasks', (req, res) => {
-    const isolation = req.body.isolation ?? 'worktree';
-    if (isolation !== 'worktree' && isolation !== 'shared') throw new Error('Invalid checkout isolation');
+    const isolation = req.body.isolation;
+    if (isolation !== undefined && isolation !== 'worktree' && isolation !== 'shared') throw new Error('Invalid checkout isolation');
     const goal = text(req.body.goal, 'goal');
     res.status(201).json(store.createTask({ projectId: text(req.body.projectId, 'project'),
-      checkoutId: text(req.body.checkoutId, 'checkout'), title: text(req.body.title ?? goal.split('\n')[0], 'title'),
+      checkoutId: req.body.checkoutId === undefined ? undefined : text(req.body.checkoutId, 'checkout'),
+      title: text(req.body.title ?? goal.split('\n')[0], 'title'),
       goal, acceptance: text(req.body.acceptance, 'acceptance', true), isolation,
       provider: req.body.provider === undefined ? undefined : provider(req.body.provider),
     }));

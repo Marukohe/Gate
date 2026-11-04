@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { CodeSnapshot, Run, Task, TaskResult, Verification } from '../../../../server/src/workbench/types';
 import { workbenchRequest, type WorkbenchActions } from './use-workbench';
+import { TaskScripts } from './TaskScripts';
 
 export function TaskResults({ task, runs, verifications, onSnapshot, mutate, busy }: WorkbenchActions & {
   task: Task; runs: Run[]; verifications: Verification[]; onSnapshot: (value: CodeSnapshot) => void;
@@ -54,16 +55,17 @@ export function TaskResults({ task, runs, verifications, onSnapshot, mutate, bus
       <Button variant="outline" disabled={busy || active || ['done', 'canceled'].includes(task.status)}>Run verification</Button>
       {active && <p className="text-xs text-muted-foreground">Wait for the current run to exit before verifying this checkout.</p>}
     </form>
+    <TaskScripts key={task.checkoutId} task={task} active={active} mutate={mutate} busy={busy} />
     <div className="space-y-3">{verifications.map((item) => {
       const matches = result && item.before && result.snapshot.tree === item.before.tree && result.snapshot.head === item.before.head;
       const changed = item.before && item.after && (item.before.tree !== item.after.tree || item.before.head !== item.after.head);
       return <article key={item.id} className="space-y-1 rounded-lg border p-3 text-xs">
-        <p className="font-medium">{item.state} · <code className="break-all">{item.command}</code></p>
+        <p className="font-medium">{item.purpose ?? 'test'} · {item.state} · <code className="break-all">{item.command}</code></p>
         <p className="break-all text-muted-foreground">{item.cwd}</p>
         <p>{item.startedAt ? new Date(item.startedAt).toLocaleString() : 'Queued'}
           {item.endedAt ? ` → ${new Date(item.endedAt).toLocaleString()}` : ''}</p>
         <p>Exit: {item.exitCode ?? 'not confirmed'}{item.signal ? ` · ${item.signal}` : ''}</p>
-        {item.before && <p className="break-all text-muted-foreground">Tested tree: {item.before.tree}</p>}
+        {item.before && <p className="break-all text-muted-foreground">Code tree: {item.before.tree}</p>}
         {changed && <p className="text-amber-600">The checkout changed during verification.</p>}
         {item.before && <p className={matches ? 'text-emerald-600' : 'text-amber-600'}>{!result
           ? 'Refresh changes to compare this evidence with the current checkout.'

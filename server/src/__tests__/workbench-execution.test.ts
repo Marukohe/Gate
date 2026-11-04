@@ -18,6 +18,8 @@ class RemoteFixture {
     return { command: '/node', args: ['/worker'], cwd, protocol: true, initialInput: prompt };
   }
   async terminal(settings: RuntimeSettings, cwd: string, provider: string) { return this.launch(settings, provider, cwd, 'terminal'); }
+  verification(settings: RuntimeSettings, cwd: string, command: string) { return this.launch(settings, 'shell', cwd, command); }
+  async scripts() { return { scripts: { test: { command: 'npm test', source: 'gate.json' } }, warning: null }; }
   push(runId: string, type: string, data = {}) {
     const all = this.events.get(runId) ?? [];
     all.push({ runId, seq: all.length + 1, time: Date.now(), type, ...data });
@@ -171,6 +173,28 @@ describe('Managed execution recovery', () => {
     expect(db.workbench.run(run.id)?.state).toBe('completed');
     expect(db.workbench.task(taskId)?.status).toBe('in-progress');
     expect(() => service.run(otherTaskId, 'next', 'work')).not.toThrow();
+  });
+
+  it('captures project script commands, rejects stale previews, and distinguishes setup from tests', async () => {
+    const task = db.workbench.task(taskId)!;
+    db.workbench.updateProject(task.projectId, { scripts: { setup: 'npm ci', test: 'npm run check' } });
+    expect((await service.scripts(taskId)).scripts.test).toEqual({ command: 'npm run check', source: 'project' });
+    await expect(service.script(taskId, 'old-preview', 'test', 'npm test')).rejects.toThrow(/Script changed/);
+    const run = await service.script(taskId, 'setup-once', 'setup', 'npm ci');
+    await service.reconcile(run.id);
+    db.workbench.updateProject(task.projectId, { scripts: { setup: 'another command' } });
+    expect((await service.script(taskId, 'setup-once', 'setup', 'npm ci')).id).toBe(run.id);
+    await expect(service.script(taskId, 'setup-once', 'test', 'npm ci')).rejects.toThrow(/another request/);
+    remote.push(run.id, 'exited', { exitCode: 0 });
+    await service.reconcile(run.id);
+    expect(db.workbench.verification(run.id)).toMatchObject({ purpose: 'setup', command: 'npm ci', state: 'passed' });
+    expect(db.workbench.task(taskId)?.status).toBe('in-progress');
+    const test = await service.script(taskId, 'real-test', 'test', 'npm test');
+    await service.reconcile(test.id);
+    remote.push(test.id, 'exited', { exitCode: 0 });
+    await service.reconcile(test.id);
+    expect(db.workbench.verification(test.id)?.purpose).toBe('test');
+    expect(db.workbench.task(taskId)?.status).toBe('review');
   });
 
 });

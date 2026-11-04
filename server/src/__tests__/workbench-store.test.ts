@@ -31,6 +31,21 @@ describe('Workbench persistence', () => {
     return { ...setup, task };
   }
 
+  it('persists project defaults across restart without changing existing tasks', () => {
+    const { project: p, checkout, machine, task: first } = task();
+    const other = db.workbench.createCheckout({ projectId: p.id, serverId: machine.id, path: '/second' });
+    db.workbench.updateProject(p.id, { defaultProvider: 'codex', defaultIsolation: 'shared',
+      defaultCheckoutId: other.id, scripts: { setup: 'npm ci', test: 'npm test', run: ' ' } });
+    db.close(); db = createDb(file);
+    const next = db.workbench.createTask({ projectId: p.id, title: 'New', goal: 'New' });
+    expect(next).toMatchObject({ provider: 'codex', isolation: 'shared', checkoutId: other.id });
+    expect(db.workbench.task(first.id)).toMatchObject({ provider: 'claude', isolation: 'worktree', checkoutId: checkout.id });
+    expect(db.workbench.snapshot().projects[0].scripts).toEqual({ setup: 'npm ci', test: 'npm test' });
+    const foreign = project();
+    expect(() => db.workbench.updateProject(p.id, { defaultCheckoutId: foreign.checkout.id })).toThrow(/belong/);
+    expect(() => db.workbench.updateProject(p.id, { defaultIsolation: 'invalid' as 'shared' })).toThrow(/isolation/);
+  });
+
   it('imports explicit legacy goals once and preserves all session and message history', () => {
     const machine = server();
     const workspace = db.createWorkspace({ name: 'Legacy', serverId: machine.id, repoPath: '/legacy',

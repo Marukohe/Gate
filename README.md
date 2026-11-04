@@ -35,6 +35,9 @@ Browser (React) <--WebSocket--> Node.js Backend <--SSH--> Remote Server
 - **Decisions and evidence** — Resolve agent questions and supported approvals from the attention-first Overview.
   Run test commands, inspect changes, and compare recorded evidence with the checkout's code snapshot.
   Task acceptance stays explicit; test success does not automatically mark work done.
+- **Project defaults and scripts** — Choose the default agent, working copy, and isolation for new tasks.
+  Preview and run setup/run/test commands from `gate.json` or project overrides, with durable output and exit status.
+  Setup and run records stay separate from test evidence.
 - **Handoff and independent review** — Continue with another agent using recorded context and test evidence.
   Review a fixed snapshot in a separate checkout while task work continues, and see when that review becomes stale.
 - **External session awareness** — Install checkout-scoped Claude/Codex hooks to see native session activity and link it

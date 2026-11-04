@@ -1,7 +1,7 @@
 export type TaskStatus = 'backlog' | 'in-progress' | 'paused' | 'review' | 'done' | 'canceled';
 export type RunState = 'queued' | 'starting' | 'running' | 'waiting' | 'stopping' |
   'completed' | 'failed' | 'interrupted' | 'lost';
-export type RunKind = 'implementation' | 'retry' | 'handoff' | 'review' | 'terminal' | 'test' | 'external';
+export type RunKind = 'implementation' | 'retry' | 'handoff' | 'review' | 'terminal' | 'test' | 'script' | 'external';
 
 export interface Project {
   id: string;
@@ -9,6 +9,9 @@ export interface Project {
   remoteUrl: string | null;
   defaultBranch: string | null;
   defaultProvider: string;
+  defaultIsolation: 'worktree' | 'shared';
+  defaultCheckoutId: string | null;
+  scripts: Partial<Record<'setup' | 'run' | 'test', string>>;
   legacyWorkspaceId: string | null;
   archivedAt: number | null;
   createdAt: number;
@@ -83,7 +86,11 @@ export interface Attention {
 
 export interface CodeSnapshot { head: string; tree: string; dirty: boolean }
 
+export type ScriptName = 'setup' | 'run' | 'test';
+export interface TaskScripts { scripts: Partial<Record<ScriptName, { command: string; source: 'project' | 'gate.json' }>>; warning: string | null }
+
 export interface Verification {
+  purpose?: 'setup' | 'run' | 'test';
   id: string; taskId: string; runId: string; command: string; cwd: string;
   state: 'queued' | 'running' | 'passed' | 'failed' | 'interrupted' | 'lost';
   before: CodeSnapshot | null; after: CodeSnapshot | null;

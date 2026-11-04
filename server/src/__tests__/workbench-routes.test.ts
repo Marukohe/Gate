@@ -62,6 +62,18 @@ describe('Workbench API', () => {
     expect((await request('')).data.projects).toHaveLength(1);
   });
 
+  it('uses saved project defaults for omitted task options and preserves explicit overrides', async () => {
+    const { data } = await request('/projects', 'POST', { name: 'Project', serverId: machineId, path: '/repo' });
+    const saved = await request(`/projects/${data.project.id}`, 'PATCH', { defaultProvider: 'codex',
+      defaultCheckoutId: data.checkout.id, defaultIsolation: 'shared', scripts: { setup: 'npm ci' } });
+    expect(saved.status).toBe(200);
+    const task = await request('/tasks', 'POST', { projectId: data.project.id, goal: 'Use defaults' });
+    expect(task.data).toMatchObject({ checkoutId: data.checkout.id, provider: 'codex', isolation: 'shared' });
+    const explicit = await request('/tasks', 'POST', { projectId: data.project.id, goal: 'Override', provider: 'claude', isolation: 'worktree' });
+    expect(explicit.data).toMatchObject({ provider: 'claude', isolation: 'worktree' });
+    expect((await request(`/projects/${data.project.id}`, 'PATCH', { defaultCheckoutId: false })).status).toBe(400);
+  });
+
   it('validates input and status values and does not create runs by reading the board', async () => {
     expect((await request('/projects', 'POST', {})).status).toBe(400);
     expect((await request('/tasks', 'POST', { goal: 'Goal', isolation: 'unknown' })).status).toBe(400);

@@ -11,7 +11,9 @@ input.once('line', (line) => {
     const config = JSON.parse(line);
     const before = captureSnapshot(config.cwd);
     emit({ type: 'verification-started', command: config.command, cwd: config.cwd, before, startedAt: Date.now() });
-    const child = spawn('/bin/sh', ['-c', config.command], { cwd: config.cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn('/bin/sh', ['-c', config.command], { cwd: config.cwd, stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, GATE_MANAGED: '1',
+        PATH: config.nodeDirectory ? `${config.nodeDirectory}:${process.env.PATH ?? '/usr/bin:/bin'}` : process.env.PATH } });
     child.on('error', (error) => emit({ type: 'result', failed: true, message: error.message }));
     for (const stream of ['stdout', 'stderr']) {
       child[stream].setEncoding('utf8');
@@ -23,7 +25,7 @@ input.once('line', (line) => {
       try { after = captureSnapshot(config.cwd); } catch (error) { snapshotError = error.message; }
       emit({ type: 'verification-completed', after, exitCode, signal, endedAt: Date.now() });
       emit({ type: 'result', failed: exitCode !== 0 || !!snapshotError,
-        message: snapshotError ?? (exitCode !== 0 ? `Test command exited ${exitCode ?? signal}` : null) });
+        message: snapshotError ?? (exitCode !== 0 ? `Command exited ${exitCode ?? signal}` : null) });
       process.exitCode = exitCode === 0 && !snapshotError ? 0 : 1;
     });
   } catch (error) {

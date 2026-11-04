@@ -73,6 +73,7 @@ Data is stored in `~/.gate/gate.db` by default.
 
 **Server:**
 - `server/runtime/` — Packaged remote daemon, durable journals, socket CLI, provider worker, code snapshots, and test runner
+- `server/runtime/scripts.mjs` — Strict checkout script discovery; project overrides and preview checks live in execution.ts
 - `tools/runtime-probe/` — Isolated runtime/provider tests and real localhost SSH/backend restart checks
 - `server/src/db.ts` — SQLite layer for servers, sessions, messages, workspaces, and provider session maps
 - `server/src/workbench/` — Project, checkout, task, and run persistence; additive legacy import and event cursors
@@ -105,6 +106,8 @@ Data is stored in `~/.gate/gate.db` by default.
 - `client/src/components/workbench/ExternalSessions.tsx` — Checkout hook settings, observed activity, task association,
   and explicit clearing after native-process inspection
 - `client/src/components/workbench/TerminalView.tsx` — Lazy xterm.js view, output replay, resize, and controller input
+- `client/src/components/workbench/ProjectSettings.tsx` and `TaskScripts.tsx` — Project defaults, command previews,
+  and explicit setup/run/test execution with recorded purpose
 - `client/src/App.tsx` — Top-level route state for home, workspace overview, and chat sessions
 - `client/src/hooks/use-websocket.ts` — Singleton WebSocket connection with auto-reconnect and queued workspace actions
 - `client/src/stores/` — Zustand stores: server, session, chat, git, plan, plan-mode, workspace, ui

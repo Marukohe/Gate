@@ -174,6 +174,20 @@ try {
   assert.ok(downloaded.includes('expected-failure'));
   assert.ok(downloaded.includes('verification-completed'));
 
+  ssh(`cat > ${quote(`${evidence.cwd}/gate.json`)}`, JSON.stringify({ scripts: { test: 'exit 9', run: 'printf repository-run' } }));
+  await api(`/projects/${project.id}`, 'PATCH', { scripts: { setup: 'node -e "console.log(42)"', test: 'printf project-test' } });
+  const scripts = await api(`/tasks/${verificationTask.id}/scripts`);
+  assert.equal(scripts.scripts.run.source, 'gate.json');
+  assert.deepEqual(scripts.scripts.test, { command: 'printf project-test', source: 'project' });
+  await assert.rejects(api(`/tasks/${verificationTask.id}/scripts`, 'POST', { requestId: 'stale-script', name: 'test', command: 'exit 9' }), /Script changed/);
+  const setupRun = await api(`/tasks/${verificationTask.id}/scripts`, 'POST', {
+    requestId: 'setup-once', name: 'setup', command: scripts.scripts.setup.command });
+  await until(async () => (await api('')).verifications.find((item) => item.runId === setupRun.id && item.state === 'passed'), 'setup script');
+  assert.equal((await api('')).tasks.find((item) => item.id === verificationTask.id).status, 'in-progress');
+  await stopBackend(); await startBackend();
+  assert.equal((await api(`/tasks/${verificationTask.id}/scripts`, 'POST', {
+    requestId: 'setup-once', name: 'setup', command: scripts.scripts.setup.command })).id, setupRun.id);
+
   assert.equal(ssh(`cat ${quote(`${firstPath}/received-prompt`)}`), prompt);
   assert.equal(ssh(`test ! -e ${quote(`${firstPath}/injected`)} && test ! -e ${quote(`${firstPath}/injected2`)} && printf safe`).trim(), 'safe');
   const collaborationTask = await api('/tasks', 'POST', { projectId: project.id, checkoutId: checkout.id,
@@ -272,6 +286,25 @@ try {
       const page = await context.newPage();
       const errors = [];
       page.on('pageerror', (error) => errors.push(error.message));
+      await page.goto(`${base}/#project/${project.id}`);
+      await page.getByRole('button', { name: 'Project settings', exact: true }).click();
+      await page.getByRole('textbox', { name: 'test script override', exact: true }).fill('printf browser-script');
+      const settingsForm = page.locator('form').filter({ has: page.getByRole('button', { name: 'Save project settings', exact: true }) });
+      await settingsForm.locator('select[name=checkout]').selectOption((await api('')).tasks.find((item) => item.id === verificationTask.id).checkoutId);
+      for (const width of [320, 390, 1365]) {
+        await page.setViewportSize({ width, height: 900 });
+        assert.equal(await page.locator('button:visible, input:visible, textarea:visible, select:visible').evaluateAll((elements) =>
+          elements.filter((element) => { const box = element.getBoundingClientRect(); return box.left < 0 || box.right > innerWidth + 1; }).length), 0);
+      }
+      await page.getByRole('button', { name: 'Save project settings', exact: true }).click();
+      await until(async () => (await api('')).projects.find((item) => item.id === project.id).scripts.test === 'printf browser-script', 'project defaults in browser');
+      await page.getByText('Acceptance criteria and options', { exact: true }).click();
+      assert.equal(await page.locator('select[name=checkoutId]').inputValue(), (await api('')).tasks.find((item) => item.id === verificationTask.id).checkoutId);
+      await page.goto(`${base}/#task/${verificationTask.id}`);
+      await page.getByRole('button', { name: 'Refresh scripts', exact: true }).click();
+      await page.getByRole('button', { name: 'Run test script', exact: true }).click();
+      await until(async () => (await api('')).verifications.some((item) => item.taskId === verificationTask.id && item.command === 'printf browser-script' && item.state === 'passed'), 'browser script execution');
+      await page.screenshot({ path: '/tmp/gate-project-scripts.png', fullPage: true });
       const third = await api('/tasks', 'POST', { projectId: project.id, checkoutId: checkout.id,
         title: 'Browser task', goal: 'Browser run', provider: 'codex' });
       await page.goto(`${base}/#task/${third.id}`);

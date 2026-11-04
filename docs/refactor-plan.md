@@ -127,6 +127,7 @@ Hooks are advisory: unmanaged tools can still start or write without reporting t
 ### Final workflow acceptance
 
 - [ ] Verify project defaults/scripts and task delivery actions against the user surfaces above.
+  Project defaults and setup/run/test execution are implemented; task delivery actions remain next.
 - [x] Verify managed terminal input, resize, attachment, reconnect, and confirmed exit.
 - [ ] Validate real provider model/tool/decision flows and trusted Codex hook execution in isolated checkouts.
 - [ ] Audit the complete start → blockers → evidence → delivery workflow on desktop and mobile.

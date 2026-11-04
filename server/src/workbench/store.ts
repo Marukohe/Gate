@@ -13,7 +13,7 @@ export interface Execution {
 }
 
 const taskStatuses: TaskStatus[] = ['backlog', 'in-progress', 'paused', 'review', 'done', 'canceled'];
-const runKinds: RunKind[] = ['implementation', 'retry', 'handoff', 'review', 'terminal', 'test', 'external'];
+const runKinds: RunKind[] = ['implementation', 'retry', 'handoff', 'review', 'terminal', 'test', 'script', 'external'];
 const runStates: RunState[] = ['queued', 'starting', 'running', 'waiting', 'stopping',
   'completed', 'failed', 'interrupted', 'lost'];
 export const ACTIVE_RUN_STATES: RunState[] = ['queued', 'starting', 'running', 'waiting', 'stopping'];
@@ -89,6 +89,7 @@ export class WorkbenchStore {
         CREATE TABLE IF NOT EXISTS observed_sessions (
           id TEXT PRIMARY KEY, checkoutId TEXT NOT NULL REFERENCES checkouts(id), data TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS project_settings (projectId TEXT PRIMARY KEY REFERENCES projects(id), data TEXT NOT NULL);
       `);
       this.importLegacyWorkspaces();
       this.importAttentionEvents();
@@ -204,11 +205,12 @@ export class WorkbenchStore {
   }
 
   enqueue(taskId: string, requestId: string, prompt: string,
-    options: 'implementation' | 'test' | { kind: 'handoff' | 'review' | 'terminal'; provider: string; sourceRunId?: string } = 'implementation'): Run {
+    options: 'implementation' | 'test' | { kind: 'handoff' | 'review' | 'terminal' | 'script'; provider: string;
+      sourceRunId?: string; scriptName?: 'setup' | 'run' | 'test' } = 'implementation'): Run {
     const kind = typeof options === 'string' ? options : options.kind;
     const targetProvider = typeof options === 'string' ? undefined : options.provider;
     const sourceRunId = typeof options === 'string' ? undefined : options.sourceRunId;
-    if (targetProvider && !['claude', 'codex', ...(kind === 'terminal' ? ['shell'] : [])].includes(targetProvider)) {
+    if (targetProvider && !['claude', 'codex', ...(['terminal', 'script'].includes(kind) ? ['shell'] : [])].includes(targetProvider)) {
       throw new Error('Choose a supported provider');
     }
     return this.db.transaction(() => {
@@ -216,7 +218,8 @@ export class WorkbenchStore {
       if (existing) {
         if (existing.taskId !== taskId || existing.prompt !== prompt || existing.kind !== kind ||
           (targetProvider && existing.provider !== targetProvider) ||
-          (sourceRunId && this.collaboration(existing.id)?.sourceRunId !== sourceRunId)) {
+          (sourceRunId && this.collaboration(existing.id)?.sourceRunId !== sourceRunId) ||
+          (typeof options !== 'string' && options.scriptName !== undefined && this.verification(existing.id)?.purpose !== options.scriptName)) {
           throw new Error('Request ID belongs to another request');
         }
         return existing;
@@ -250,7 +253,8 @@ export class WorkbenchStore {
       this.acquireCheckout(run.id);
       this.saveExecution({ runId: run.id, settings, launch: null, source, branch,
         stopRequested: false, connectionError: null, lastSeenAt: null });
-      if (kind === 'test') this.saveVerification({ id: randomUUID(), taskId, runId: run.id, command: prompt,
+      if (kind === 'test' || kind === 'script') this.saveVerification({ id: randomUUID(), taskId, runId: run.id, command: prompt,
+        ...(typeof options !== 'string' && options.scriptName ? { purpose: options.scriptName } : {}),
         cwd: checkout.path, state: 'queued', before: null, after: null, startedAt: null, endedAt: null,
         exitCode: null, signal: null });
       if (kind === 'handoff' || kind === 'review') this.saveCollaboration({ id: randomUUID(), taskId, runId: run.id,
@@ -295,7 +299,8 @@ export class WorkbenchStore {
   snapshot(): WorkbenchSnapshot {
     this.importLegacyWorkspaces();
     return {
-      projects: this.db.prepare('SELECT * FROM projects ORDER BY updatedAt DESC, id').all() as Project[],
+      projects: (this.db.prepare('SELECT id FROM projects ORDER BY updatedAt DESC, id').all() as { id: string }[])
+        .map((row) => this.project(row.id)!),
       checkouts: this.db.prepare('SELECT * FROM checkouts ORDER BY createdAt, id').all() as Checkout[],
       tasks: this.db.prepare('SELECT * FROM tasks ORDER BY updatedAt DESC, id').all() as Task[],
       runs: this.db.prepare('SELECT * FROM runs ORDER BY createdAt DESC, id').all() as Run[],
@@ -435,8 +440,16 @@ export class WorkbenchStore {
   }
 
   project(id: string): Project | undefined {
-    return this.db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as Project | undefined;
+    const project = this.db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as Project | undefined;
+    if (!project) return;
+    const row = this.db.prepare('SELECT data FROM project_settings WHERE projectId = ?').get(id) as { data: string } | undefined;
+    return { ...project, defaultIsolation: 'worktree', defaultCheckoutId: null, scripts: {}, ...(row ? JSON.parse(row.data) : {}) };
   }
+
+  requestRun(requestId: string): Run | undefined {
+    return this.db.prepare('SELECT * FROM runs WHERE requestId = ?').get(requestId) as Run | undefined;
+  }
+
   checkout(id: string): Checkout | undefined {
     return this.db.prepare('SELECT * FROM checkouts WHERE id = ?').get(id) as Checkout | undefined;
   }
@@ -453,6 +466,7 @@ export class WorkbenchStore {
     const project: Project = { id: randomUUID(), name: required(input.name, 'Project name'),
       remoteUrl: input.remoteUrl ?? null, defaultBranch: input.defaultBranch ?? null,
       defaultProvider: input.defaultProvider ?? 'claude', legacyWorkspaceId: input.legacyWorkspaceId ?? null,
+      defaultIsolation: 'worktree', defaultCheckoutId: null, scripts: {},
       archivedAt: input.archivedAt ?? null, createdAt: now, updatedAt: now };
     this.db.prepare(`INSERT INTO projects VALUES
       (@id, @name, @remoteUrl, @defaultBranch, @defaultProvider, @legacyWorkspaceId, @archivedAt, @createdAt, @updatedAt)`)
@@ -468,15 +482,33 @@ export class WorkbenchStore {
     })();
   }
 
-  updateProject(id: string, input: Partial<Pick<Project, 'name' | 'defaultBranch' | 'defaultProvider' | 'archivedAt'>>): Project {
+  updateProject(id: string, input: Partial<Pick<Project, 'name' | 'defaultBranch' | 'defaultProvider' | 'archivedAt' |
+    'defaultIsolation' | 'defaultCheckoutId' | 'scripts'>>): Project {
     const project = this.project(id);
     if (!project) throw new Error('Project not found');
     const next = { ...project, name: input.name === undefined ? project.name : required(input.name, 'Project name'),
       defaultBranch: input.defaultBranch === undefined ? project.defaultBranch : input.defaultBranch,
       defaultProvider: input.defaultProvider ?? project.defaultProvider,
+      defaultIsolation: input.defaultIsolation ?? project.defaultIsolation,
+      defaultCheckoutId: input.defaultCheckoutId === undefined ? project.defaultCheckoutId : input.defaultCheckoutId,
+      scripts: input.scripts ?? project.scripts,
       archivedAt: input.archivedAt === undefined ? project.archivedAt : input.archivedAt, updatedAt: Date.now() };
-    this.db.prepare(`UPDATE projects SET name=@name, defaultBranch=@defaultBranch, defaultProvider=@defaultProvider,
-      archivedAt=@archivedAt, updatedAt=@updatedAt WHERE id=@id`).run(next);
+    if (!['worktree', 'shared'].includes(next.defaultIsolation)) throw new Error('Invalid default isolation');
+    if (next.defaultCheckoutId !== null && (typeof next.defaultCheckoutId !== 'string' ||
+      this.checkout(next.defaultCheckoutId)?.projectId !== id)) throw new Error('Default checkout must belong to the project');
+    if (!['claude', 'codex'].includes(next.defaultProvider)) throw new Error('Invalid default provider');
+    if (!next.scripts || typeof next.scripts !== 'object' || Array.isArray(next.scripts) || Object.entries(next.scripts).some(([key, command]) =>
+      !['setup', 'run', 'test'].includes(key) || typeof command !== 'string' || command.length > 100_000 || command.includes('\0'))) {
+      throw new Error('Invalid project scripts');
+    }
+    next.scripts = Object.fromEntries(Object.entries(next.scripts).filter(([, command]) => command.trim()));
+    this.db.transaction(() => {
+      this.db.prepare(`UPDATE projects SET name=@name, defaultBranch=@defaultBranch, defaultProvider=@defaultProvider,
+        archivedAt=@archivedAt, updatedAt=@updatedAt WHERE id=@id`).run(next);
+      this.db.prepare('INSERT OR REPLACE INTO project_settings VALUES (?, ?)').run(id, JSON.stringify({
+        defaultIsolation: next.defaultIsolation, defaultCheckoutId: next.defaultCheckoutId, scripts: next.scripts,
+      }));
+    })();
     return next;
   }
 
@@ -491,16 +523,18 @@ export class WorkbenchStore {
     return checkout;
   }
 
-  createTask(input: { projectId: string; checkoutId: string; title: string; goal: string; acceptance?: string;
+  createTask(input: { projectId: string; checkoutId?: string; title: string; goal: string; acceptance?: string;
     provider?: string; isolation?: Task['isolation']; legacySessionId?: string | null }): Task {
     const project = this.project(input.projectId);
-    const checkout = this.checkout(input.checkoutId);
+    const checkoutId = input.checkoutId ?? project?.defaultCheckoutId ??
+      (this.db.prepare('SELECT id FROM checkouts WHERE projectId = ? ORDER BY createdAt, id LIMIT 1').get(input.projectId) as { id: string } | undefined)?.id;
+    const checkout = checkoutId ? this.checkout(checkoutId) : undefined;
     if (!project || checkout?.projectId !== project.id) throw new Error('Checkout must belong to the project');
     const now = Date.now();
     const task: Task = { id: randomUUID(), projectId: project.id, checkoutId: checkout.id,
       title: required(input.title, 'Task title'), goal: required(input.goal, 'Task goal'),
       acceptance: input.acceptance ?? '', status: 'backlog', provider: input.provider ?? project.defaultProvider,
-      isolation: input.isolation ?? 'worktree', legacySessionId: input.legacySessionId ?? null,
+      isolation: input.isolation ?? project.defaultIsolation, legacySessionId: input.legacySessionId ?? null,
       prUrl: null, createdAt: now, updatedAt: now };
     this.db.prepare(`INSERT INTO tasks VALUES (@id,@projectId,@checkoutId,@title,@goal,@acceptance,@status,@provider,
       @isolation,@legacySessionId,@prUrl,@createdAt,@updatedAt)`).run(task);

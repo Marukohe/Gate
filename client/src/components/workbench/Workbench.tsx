@@ -9,6 +9,7 @@ import { ProjectForm, selectClass } from './ProjectForm';
 import { TaskForm } from './TaskForm';
 import { TaskDetail, taskLabels } from './TaskDetail';
 import { ExternalSessions } from './ExternalSessions';
+import { ProjectSettings } from './ProjectSettings';
 
 function readRoute() {
   const [kind, id] = window.location.hash.slice(1).split('/');
@@ -114,7 +115,9 @@ export function Workbench({ onLegacy, onAddServer, onLegacySession }: {
                   <span className="font-medium">{servers.find((s) => s.id === c.serverId)?.name ?? 'Machine'}</span>
                   <span className="ml-2 text-muted-foreground">{c.branch}</span><p className="mt-1 break-all text-muted-foreground">{c.path}</p>
                 </div>)}</div>
-              <TaskForm project={project} checkouts={snapshot.checkouts.filter((c) => c.projectId === project.id)}
+              <ProjectSettings key={`settings-${project.id}`} project={project} checkouts={snapshot.checkouts.filter((c) => c.projectId === project.id)}
+                mutate={mutate} busy={busy} />
+              <TaskForm key={`task-${project.id}`} project={project} checkouts={snapshot.checkouts.filter((c) => c.projectId === project.id)}
                 mutate={mutate} busy={busy} onCreated={(task) => navigate('task', task.id)} />
               <ExternalSessions checkouts={snapshot.checkouts.filter((c) => c.projectId === project.id)}
                 sessions={snapshot.observedSessions.filter((item) => snapshot.checkouts.some((c) => c.id === item.checkoutId && c.projectId === project.id))}

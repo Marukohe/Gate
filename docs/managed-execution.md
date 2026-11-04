@@ -172,6 +172,16 @@ and [Herdr integrations](https://acrogenesis.com/herdr/docs/integrations/).
 
 ## Remaining boundaries
 
+Project settings apply the default agent, checkout, and worktree/shared choice only to new tasks. The review base
+branch is separate from the selected checkout's HEAD, which remains the starting point for new task worktrees.
+Scripts are read from `gate.json` in the task checkout; nonempty project overrides take precedence. Refresh scripts,
+inspect the displayed command and source, then start it explicitly. A changed command rejects an old preview.
+The runtime captures the command once; retrying its request ID after a lost response returns the existing run.
+All scripts use the same checkout ownership and durable logs as other runs. Setup/run records carry their purpose
+and do not mark a task ready for review. Tests can mark it ready for review, but acceptance remains manual.
+Long-running scripts keep the checkout occupied until stopped and confirmed exited. If a task has not yet started,
+its first script creates its isolated worktree from committed HEAD; uncommitted source changes are not copied.
+
 The end-to-end lifecycle test uses a deterministic provider fixture. Real model/tool/approval execution still needs
 separate validation. Machine reboot, runtime-crash reattachment,
 disk-full recovery, automatic journal retention, and descendants escaping the owned process group are not guaranteed.

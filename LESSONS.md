@@ -32,6 +32,8 @@ Keep this file concise; implementation progress belongs in [the refactor plan](d
 - Cause: the non-interactive SSH environment did not include the version manager's Node.js directory.
 - Prevention: probe the exact SSH execution environment; use an explicit executable path for runtime bootstrap.
   Do not depend on an interactive shell startup file or install another Node.js merely to work around PATH.
+- Repository scripts also need the configured Node.js directory in PATH. The verifier adds it explicitly; the SSH
+  workbench check runs a bare `node` command to catch regressions in script execution.
 - Check: `tools/runtime-probe/ssh-smoke.mjs` accepts `--node` and uses `process.execPath` for localhost.
 
 ## A disappearing socket must not imply premature cleanup
@@ -66,6 +68,12 @@ Keep this file concise; implementation progress belongs in [the refactor plan](d
 - Fix: allow navigation wrapping and reduce its narrow-screen spacing.
 - Check: compare visible element bounds with the viewport at 320px and 390px, then inspect an actual screenshot.
   A `documentElement.scrollWidth` check alone can miss clipped controls.
+
+## Sibling component keys must identify the component as well as the record
+
+- Observed: polling the project page duplicated its settings controls when settings and task forms shared a project-ID key.
+- Fix: prefix each sibling key with its component role; keep task drafts stable during background polling.
+- Check: the localhost browser smoke opens project settings after polling, saves defaults, and checks the task form.
 
 ## Worktree creation can leave a branch after failure
 
