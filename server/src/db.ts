@@ -35,6 +35,7 @@ export interface Session {
 }
 
 export interface Message {
+  subType?: string;
   id: string;
   sessionId: string;
   type: 'assistant' | 'user' | 'tool_call' | 'tool_result' | 'system';
@@ -128,6 +129,7 @@ export interface Database {
   clearCliSessionId(id: string): void;
   updateChatStartedAt(id: string, timestamp: number): void;
   getMessagesAfter(sessionId: string, afterTimestamp: number, limit?: number): Message[];
+  getSessionActivity(sessionId: string, afterTimestamp: number): Message[];
   getMessageCountAfter(sessionId: string, afterTimestamp: number): number;
   saveMessage(input: CreateMessageInput): Message;
   saveMessages(inputs: CreateMessageInput[]): Message[];
@@ -241,6 +243,9 @@ export function createDb(dbPath: string): Database {
   try { db.exec("ALTER TABLE sessions ADD COLUMN provider TEXT DEFAULT 'claude'"); } catch { /* already exists */ }
   try { db.exec('ALTER TABLE sessions ADD COLUMN cliSessionId TEXT'); } catch { /* already exists */ }
   try { db.exec('ALTER TABLE messages ADD COLUMN provider TEXT'); } catch { /* already exists */ }
+  if (!(db.pragma('table_info(messages)') as { name: string }[]).some((column) => column.name === 'subType')) {
+    db.exec('ALTER TABLE messages ADD COLUMN subType TEXT');
+  }
   try { db.exec('ALTER TABLE sessions ADD COLUMN providerSessionMap TEXT'); } catch { /* already exists */ }
   try { db.exec('ALTER TABLE sessions ADD COLUMN chatStartedAt INTEGER'); } catch { /* already exists */ }
   try { db.exec('UPDATE sessions SET cliSessionId = claudeSessionId WHERE cliSessionId IS NULL AND claudeSessionId IS NOT NULL'); } catch { /* ignore */ }
@@ -428,12 +433,17 @@ export function createDb(dbPath: string): Database {
       db.prepare('UPDATE sessions SET chatStartedAt = ? WHERE id = ?').run(timestamp, id);
     },
 
+    getSessionActivity(sessionId, afterTimestamp) {
+      return (db.prepare(`
+        SELECT id, sessionId, type, substr(content, 1, 400) AS content, toolName, timestamp, provider, subType
+        FROM messages WHERE sessionId = ? AND timestamp >= ? ORDER BY timestamp DESC, rowid DESC LIMIT 30
+      `).all(sessionId, afterTimestamp) as Message[]).reverse();
+    },
+
     getMessagesAfter(sessionId, afterTimestamp, limit = 100) {
-      return db.prepare(`
-        SELECT * FROM (
-          SELECT * FROM messages WHERE sessionId = ? AND timestamp >= ? ORDER BY timestamp DESC LIMIT ?
-        ) ORDER BY timestamp ASC
-      `).all(sessionId, afterTimestamp, limit) as Message[];
+      return (db.prepare(`
+        SELECT * FROM messages WHERE sessionId = ? AND timestamp >= ? ORDER BY timestamp DESC, rowid DESC LIMIT ?
+      `).all(sessionId, afterTimestamp, limit) as Message[]).reverse();
     },
 
     getMessageCountAfter(sessionId, afterTimestamp) {
@@ -444,22 +454,22 @@ export function createDb(dbPath: string): Database {
     saveMessage(input) {
       const id = randomUUID();
       db.prepare(`
-        INSERT INTO messages (id, sessionId, type, content, toolName, toolDetail, timestamp, provider)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, input.sessionId, input.type, input.content, input.toolName ?? null, input.toolDetail ?? null, input.timestamp, input.provider ?? null);
+        INSERT INTO messages (id, sessionId, type, content, toolName, toolDetail, timestamp, provider, subType)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, input.sessionId, input.type, input.content, input.toolName ?? null, input.toolDetail ?? null, input.timestamp, input.provider ?? null, input.subType ?? null);
       return { id, ...input };
     },
 
     saveMessages(inputs) {
       const insert = db.prepare(`
-        INSERT INTO messages (id, sessionId, type, content, toolName, toolDetail, timestamp, provider)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (id, sessionId, type, content, toolName, toolDetail, timestamp, provider, subType)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const tx = db.transaction((items: CreateMessageInput[]) => {
         const results: Message[] = [];
         for (const input of items) {
           const id = randomUUID();
-          insert.run(id, input.sessionId, input.type, input.content, input.toolName ?? null, input.toolDetail ?? null, input.timestamp, input.provider ?? null);
+          insert.run(id, input.sessionId, input.type, input.content, input.toolName ?? null, input.toolDetail ?? null, input.timestamp, input.provider ?? null, input.subType ?? null);
           results.push({ id, ...input });
         }
         return results;

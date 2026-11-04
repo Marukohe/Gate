@@ -299,6 +299,32 @@ export class WorkbenchStore {
     })();
   }
 
+  // The monitor polls often: avoid loading prompts, review packets, tool payloads, or full conversations.
+  monitorRecords() {
+    return {
+      checkouts: this.db.prepare('SELECT id, serverId, path FROM checkouts').all() as Pick<Checkout, 'id' | 'serverId' | 'path'>[],
+      tasks: this.db.prepare('SELECT id, title FROM tasks').all() as Pick<Task, 'id' | 'title'>[],
+      runs: this.db.prepare(`SELECT r.id, r.taskId, r.checkoutId, r.provider, r.kind, r.state, r.nativeSessionId,
+        substr(r.error, 1, 400) AS error, r.createdAt, r.startedAt, r.endedAt,
+        json_extract(e.data, '$.connectionError') AS connectionError, json_extract(e.data, '$.lastSeenAt') AS lastSeenAt
+        FROM runs r LEFT JOIN run_execution e ON e.runId = r.id
+        WHERE r.kind IN ('implementation', 'retry', 'handoff', 'review', 'terminal') ORDER BY r.createdAt DESC, r.id`).all() as
+        (Pick<Run, 'id' | 'taskId' | 'checkoutId' | 'provider' | 'kind' | 'state' | 'nativeSessionId' | 'error' |
+          'createdAt' | 'startedAt' | 'endedAt'> & Pick<Execution, 'connectionError' | 'lastSeenAt'>)[],
+      attention: this.db.prepare(`SELECT runId, json_extract(data, '$.title') AS title FROM attention
+        WHERE json_extract(data, '$.state') IN ('pending', 'sending')`).all() as Pick<Attention, 'runId' | 'title'>[],
+      observedSessions: this.observedSessions(),
+      hookSettings: this.hookSettings(),
+    };
+  }
+
+  runActivity(runId: string): { time: number; type: string; text: string | null } | undefined {
+    return this.db.prepare(`SELECT time, json_extract(data, '$.data.type') AS type,
+      substr(json_extract(data, '$.data.text'), 1, 400) AS text FROM run_events WHERE runId = ? AND type = 'protocol'
+      AND json_extract(data, '$.data.type') IN ('message', 'tool', 'attention') ORDER BY seq DESC LIMIT 1`)
+      .get(runId) as { time: number; type: string; text: string | null } | undefined;
+  }
+
   snapshot(): WorkbenchSnapshot {
     this.importLegacyWorkspaces();
     return {

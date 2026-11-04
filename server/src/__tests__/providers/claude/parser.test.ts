@@ -9,6 +9,13 @@ function collect(parser: ClaudeStreamParser): ParsedMessage[] {
 }
 
 describe('ClaudeStreamParser', () => {
+  it('reports failed result events as errors rather than successful completion', () => {
+    const parser = new ClaudeStreamParser();
+    const messages = collect(parser);
+    parser.feed(JSON.stringify({ type: 'result', is_error: true, errors: ['Authentication failed'] }) + '\n');
+    expect(messages[0]).toMatchObject({ type: 'system', subType: 'error', content: 'Authentication failed' });
+  });
+
   it('parses system init event', () => {
     const parser = new ClaudeStreamParser();
     const msgs = collect(parser);

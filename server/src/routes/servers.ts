@@ -83,9 +83,12 @@ export function createServerRoutes(db: Database, sshManager?: SSHManager): Route
   router.post('/:id/sessions', (req, res) => {
     const server = db.getServer(req.params.id);
     if (!server) return res.status(404).json({ error: 'Server not found' });
-    const { name, workingDir } = req.body;
+    const { name, workingDir, provider } = req.body;
+    if (provider !== undefined && !['claude', 'codex'].includes(provider)) {
+      return res.status(400).json({ error: 'Unsupported provider' });
+    }
     if (!name) return res.status(400).json({ error: 'Missing name' });
-    const session = db.createSession(server.id, name, workingDir || null);
+    const session = db.createSession(server.id, name, workingDir || null, provider);
     res.status(201).json(session);
   });
 

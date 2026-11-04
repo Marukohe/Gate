@@ -75,8 +75,8 @@ export class ClaudeStreamParser extends OutputParser {
       if (obj.num_turns != null) parts.push(`Turns: ${obj.num_turns}`);
       this.emitMessage({
         type: 'system',
-        subType: 'result',
-        content: parts.join(' | ') || 'Task complete',
+        subType: obj.is_error ? 'error' : 'result',
+        content: obj.is_error ? (obj.errors?.join('; ') || obj.result || 'Turn failed') : parts.join(' | ') || 'Task complete',
         timestamp: Date.now(),
       });
       return;
