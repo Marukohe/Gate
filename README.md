@@ -28,11 +28,13 @@ Browser (React) <--HTTP/WebSocket--> Node.js Backend <--SSH--> Remote Server
 
 ## Key Features
 
-- **Task workbench** — The default Overview groups independent tasks by delivery status. Projects can have working
+- **One-level navigation** — Tasks, Projects, Sessions, and Machines stay visible on every screen. Create tasks
+  directly from Tasks; search saved conversations across machines without opening nested sidebars.
+- **Task workbench** — The Tasks page groups independent tasks by delivery status. Projects can have working
   copies on multiple machines; each task keeps its own goal, acceptance criteria, agent choice, and execution history.
   The Sessions entry preserves access to existing workspace chats. Managed tasks run independently through a remote
   runtime, with replay after backend/SSH reconnect, isolated worktrees, and confirmed stop status.
-- **Decisions and evidence** — Resolve agent questions and supported approvals from the attention-first Overview.
+- **Decisions and evidence** — Resolve agent questions and supported approvals from the attention-first Tasks page.
   Codex approvals expose the offered Allow/Decline/Cancel choices; a canceled turn stays interrupted until confirmed exit.
   Run test commands, inspect changes, and compare recorded evidence with the checkout's code snapshot.
   Task acceptance stays explicit; test success does not automatically mark work done.
@@ -61,9 +63,8 @@ Browser (React) <--HTTP/WebSocket--> Node.js Backend <--SSH--> Remote Server
 - **Repo scripts and delivery actions** — Optional `gate.json` scripts (`setup`, `run`, `test`) can run over SSH; generate commit messages, commit and push, push, create PR, and mark review/done/canceled from the workspace inspector.
 - **Live plan tracking** — Checklists auto-extracted from Claude's output into a side panel. Check off steps, edit plans, send them back for execution.
 - **Transcript sync** — Catch up on work done outside Gate by syncing the transcript from the remote CLI session.
-- **Responsive tasks** — Execution and results share two columns on desktop. Mobile section controls reach execution,
-  results, and delivery directly; recent evidence stays visible with older records expandable.
-  Existing chat views retain their drawers, bottom sheets, and swipe gestures.
+- **Responsive tasks** — Execution and results share two columns on desktop. Mobile uses a single scrolling task page; recent evidence stays visible with older records expandable.
+  Project settings, runtime configuration, and checkout hooks open in focused dialogs.
 - **Multi-CLI support** — Works with Claude Code and OpenAI Codex CLI. Switch between CLI tools within a session with automatic context sync. Provider sessions are preserved — switching back resumes your previous conversation, not a new one.
 - **Switch Chat** — Start a fresh CLI conversation or resume a previous one within the same session. Messages are scoped per CLI session so switching gives you a clean view.
 - **Persistent history** — SQLite-backed chat history survives reconnects and server restarts.
@@ -96,7 +97,7 @@ gate --data-dir /my/data  # custom data directory (default: ~/.gate)
 
 ### Add a Server
 
-Open the app → click **Add Server** → fill in your SSH credentials (password or private key). Set a default working directory for new sessions.
+Open **Machines** → click **Add machine** → fill in your SSH credentials (password or private key). Set a default working directory for new sessions.
 
 ## Development
 
@@ -143,7 +144,7 @@ gate/
 │       ├── components/
 │       │   ├── chat/            # ChatView, SessionBar, MessageBubble, ToolActivityBlock,
 │       │   │                    # ChatInput, ProviderSwitcher, ResumeChatDialog, BranchSwitcher
-│       │   ├── layout/          # AppShell, Sidebar, TopBar
+│       │   ├── layout/          # MainNavigation, AppShell
 │       │   ├── plan/            # PlanPanel, PlanStepItem
 │       │   ├── plan-mode/       # PlanModeOverlay, PlanModeQuestion, PlanModeThinking
 │       │   ├── server/          # ServerDialog
@@ -208,9 +209,9 @@ Server → Client:
 
 | Breakpoint | Layout |
 |------------|--------|
-| Desktop (≥1024px) | Tasks: execution and results side by side. Sessions: sidebar + chat + on-demand inspector |
-| Tablet (768–1023px) | Tasks: stacked sections with direct navigation. Sessions: sidebar/inspector as drawers |
-| Mobile (<768px) | Tasks: stacked sections, current evidence before history. Sessions: fullscreen chat and bottom sheets |
+| Desktop (≥1024px) | Shared primary navigation; task execution/results side by side; on-demand chat inspector |
+| Tablet (768–1023px) | Same primary navigation; stacked task content; chat inspector as a sheet |
+| Mobile (<768px) | All four primary links visible; one scrolling task page; settings in dialogs |
 
 ## Why "Gate"?
 

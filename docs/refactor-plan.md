@@ -132,8 +132,8 @@ Hooks are advisory: unmanaged tools can still start or write without reporting t
 - [x] Validate real provider model/tool/decision flows and trusted Codex hook execution in isolated checkouts.
 - [x] Audit the complete start → blockers → evidence → delivery workflow on desktop and mobile.
 
-Final browser acceptance covers the full workflow at 320/390/1365px, desktop execution/results columns, mobile
-section navigation, recorded decisions including native cancellation, and explicit acceptance with launch disabled
+Final browser acceptance covers the full workflow at 320/390/1365px, desktop execution/results columns, the then-current mobile
+section navigation (superseded by the navigation refinement below), recorded decisions including native cancellation, and explicit acceptance with launch disabled
 for closed tasks. Recent verification/delivery records stay visible while older records remain expandable.
 The final build passes; server tests pass 179 with one optional test skipped, and runtime tests pass all 30,
 including installed-provider initialization and the installed Codex PTY lifecycle check.
@@ -168,3 +168,11 @@ Distinguish browser closure, backend restart, SSH failure, runtime crash, and ma
 
 Keep README.md, README_CN.md, and AGENTS.md/CLAUDE.md aligned with shipped behavior.
 Update LESSONS.md when a verified issue yields a useful prevention rule.
+
+## Navigation refinement
+
+The user requested a simpler interface with only one navigation level. Tasks, Projects, Sessions, and Machines
+now share one persistent navigation row, including inside saved conversations. Tasks can be created directly
+from the task list. Session discovery is flat and searchable; opening a conversation remains an explicit action.
+Task section navigation and the legacy sidebar are removed. Project/runtime/hook configuration uses dialogs.
+Desktop keeps execution and results together; mobile uses continuous content without a second navigation row.

@@ -110,7 +110,9 @@ Data is stored in `~/.gate/gate.db` by default.
 **Client:**
 - `client/src/components/workbench/` — Default overview, projects, task goals, runtime setup, managed execution,
   decisions, result snapshots, verification evidence, handoff, independent review, and replayed output
-- `client/src/components/workbench/TaskDetail.tsx` — Desktop execution/results columns and mobile section navigation;
+- `client/src/components/layout/MainNavigation.tsx` — The only global navigation: Tasks, Projects, Sessions, Machines
+- `client/src/components/workbench/SessionsList.tsx` — Flat, searchable saved sessions across machines; listing never launches
+- `client/src/components/workbench/TaskDetail.tsx` — Desktop execution/results columns and one scrolling mobile page;
   verification/delivery panels show recent records before expandable history
 - `client/src/components/workbench/ExternalSessions.tsx` — Checkout hook settings, observed activity, task association,
   and explicit clearing after native-process inspection
@@ -121,7 +123,8 @@ Data is stored in `~/.gate/gate.db` by default.
 - `client/src/App.tsx` — Top-level route state for home, workspace overview, and chat sessions
 - `client/src/hooks/use-websocket.ts` — Singleton WebSocket connection with auto-reconnect and queued workspace actions
 - `client/src/stores/` — Zustand stores: server, session, chat, git, plan, plan-mode, workspace, ui
-- `client/src/components/layout/` — AppShell, Sidebar, TopBar; handles desktop fixed panels and mobile sheets
+- `client/src/components/layout/` — Shared primary navigation and AppShell with desktop inspector/mobile sheets;
+  legacy Sidebar and TopBar are no longer mounted
 - `client/src/components/home/` — CommandCenter workspace board
 - `client/src/components/workspace/` — WorkspaceHome, WorkspaceStart, WorkspaceInspector, WorkspaceActionBar, AddWorkspaceDialog
 - `client/src/components/changes/` — ChangesPanel, FileItem, CreatePRDialog
@@ -159,9 +162,10 @@ the terminal and its owned process session, so it cannot provide the managed-ter
 
 ## Responsive Breakpoints
 
-- Desktop (>=1024px): task execution/results columns; legacy sidebar + workspace/chat + on-demand inspector
-- Tablet (768-1023px): stacked task sections with direct navigation; legacy sidebar/inspector as drawers
-- Mobile (<768px): stacked task sections with recent evidence first; legacy chat and bottom sheets
+- All sizes: one shared navigation row with Tasks, Projects, Sessions, and Machines; no nested navigation menus
+- Desktop (>=1024px): task execution/results columns and on-demand chat inspector
+- Tablet/mobile (<1024px): continuous task content, all primary links visible, chat inspector as a sheet
+- Keep task creation direct; use focused dialogs for configuration rather than secondary navigation or nested disclosures
 
 ## Best Practices
 

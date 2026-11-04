@@ -7,6 +7,8 @@
 使用隔离数据验证 `server/runtime/` 中的托管运行时；现有 Sessions 继续使用原来的后端连接方式。
 新的项目、工作副本、任务和执行记录与旧数据并存；迁移保留聊天历史，仅导入明确的任务目标，
 无法确认任务归属的会话继续保留在原有工作区中。
+全站统一使用 Tasks、Projects、Sessions、Machines 四个一级入口，不再显示树状侧栏或任务分区导航。
+Tasks 可直接新建任务；Sessions 平铺各机器会话并支持搜索；Machines 集中管理 SSH 连接。
 默认首页已切换为任务工作台：按交付状态查看任务，在 Projects 中管理仓库和不同机器上的工作副本，
 每个任务分别保存目标、验收条件和 agent 选择。原有聊天通过 Sessions 入口访问。
 任务页面现在支持安装远端 Runtime、启动执行、读取日志和请求停止。默认使用独立 worktree，
@@ -27,7 +29,8 @@ Codex 原生终端要求支持 `--no-daemon`，避免任务交给独立后台 da
 setup、run 记录会与测试证据明确区分；命令变更后必须重新查看，重复请求不会重新执行。
 任务交付可预览分支和代码版本，提交已查看的全部变更、向 origin 推送该提交，并创建或复用 GitHub 草稿 PR。
 每次操作都有独立执行记录和提交/PR 结果；旧预览会被拒绝，交付成功不会自动将任务标记为完成。
-桌面任务页并排显示执行和结果；手机可直接跳转执行、结果、交付区，最近记录优先显示，历史记录可展开。
+桌面任务页并排显示执行和结果；手机使用连续滚动页面，最近记录优先显示，历史记录可展开。
+项目设置、Runtime 配置和 checkout hooks 使用独立弹窗。
 已完成或取消的任务需要重新打开后才能启动执行。
 配置步骤、已验证行为和限制见[托管执行说明](docs/managed-execution.md)。
 
@@ -103,7 +106,7 @@ gate --data-dir /my/data  # 自定义数据目录（默认 ~/.gate）
 
 ### 添加服务器
 
-打开应用 → 点击 **Add Server** → 填入 SSH 凭据（密码或私钥）。可设置新会话的默认工作目录。
+打开 **Machines** → 点击 **Add machine** → 填入 SSH 凭据（密码或私钥）。可设置新会话的默认工作目录。
 
 ## 开发
 
@@ -139,7 +142,7 @@ gate/
 │       ├── components/
 │       │   ├── chat/            # ChatView, SessionBar, MessageBubble, ToolActivityBlock,
 │       │   │                    # ChatInput, ProviderSwitcher, ResumeChatDialog, BranchSwitcher
-│       │   ├── layout/          # AppShell, Sidebar, TopBar
+│       │   ├── layout/          # MainNavigation, AppShell
 │       │   ├── plan/            # PlanPanel, PlanStepItem
 │       │   ├── plan-mode/       # PlanModeOverlay, PlanModeQuestion, PlanModeThinking
 │       │   ├── server/          # ServerDialog
@@ -204,9 +207,9 @@ gate/
 
 | 断点 | 布局 |
 |------|------|
-| 桌面（≥1024px） | 任务页并排显示执行和结果；Sessions 保留 sidebar、chat 和按需打开的 Inspector |
-| 平板（768–1023px） | 任务页分区纵向排列并提供直接导航；Sessions 使用抽屉 |
-| 手机（<768px） | 任务页优先显示当前证据，历史记录可展开；Sessions 保留全屏聊天和底部弹出 |
+| 桌面（≥1024px） | 全站共用一级导航；任务执行和结果并排；聊天 Inspector 按需打开 |
+| 平板（768–1023px） | 保留相同一级导航；任务内容纵向排列；聊天 Inspector 使用弹出层 |
+| 手机（<768px） | 四个一级入口始终可见；任务页连续滚动；配置使用弹窗 |
 
 ## 为什么叫 "Gate"？
 

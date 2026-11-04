@@ -19,7 +19,7 @@ package, push this repository, or create a real GitHub PR.
 | Persistent native terminals | PTY and browser checks cover keyboard input, UTF-8, resize, Ctrl-C, control transfer, disconnect/reconnect, and confirmed foreground/background exit. Installed Codex is tested with `--no-daemon` to retain lifecycle ownership. |
 | Project defaults and scripts | Project settings apply to new tasks only. Script previews resolve overrides and `gate.json`; stale commands are rejected. Actual SSH scripts verify Node PATH and purpose-specific setup/run/test records. |
 | Explicit delivery and acceptance | Real Git commits/pushes use inspected snapshots and a temporary bare origin. Tests reject changed code/origin, preserve hooks, and deduplicate restart. PR title/body/base and reuse use a CLI fixture. Done is explicit. |
-| Responsive task workflow | Desktop execution/results share two columns. Mobile has direct section controls and current evidence before expandable history; closed tasks cannot launch. The browser smoke checks start, decisions, verification, delivery, and acceptance at 320/390/1365px. |
+| Responsive task workflow | Desktop execution/results share two columns. Mobile uses continuous content with one global navigation row and expandable evidence history; closed tasks cannot launch. The browser smoke checks start, decisions, verification, delivery, and acceptance at 320/390/1365px. |
 | Incremental commits and lessons | Each completed step has a Conventional Commit. `LESSONS.md` records verified failures and checks; `AGENTS.md` remains a symlink to `CLAUDE.md`, which requires reading/updating lessons. |
 
 ## Validation commands
@@ -50,3 +50,11 @@ checkout inspection. Machine reboot/daemon-crash reattachment, disk-full recover
 automatic retention, team authorization, model account routing, and automatic agent orchestration are outside this plan.
 Independent review tests prove context/snapshot isolation, not model review quality. No public npm deployment or
 real GitHub publication is part of acceptance.
+
+## Navigation refinement checks
+
+The browser smoke additionally checks all four primary destinations at 320/390/1365px, one navigation landmark,
+active-page indication, direct task creation, task search, and light/dark appearance. Project/runtime/hook forms
+remain available through dialogs. The historical mobile section shortcuts were removed at the user's request.
+The frontend-only `navigation-smoke.mjs` verifies flat cross-machine session discovery without launch, explicit
+chat opening, primary navigation inside chat, machine editing, and visible runtime-configuration failures.

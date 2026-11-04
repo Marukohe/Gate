@@ -194,3 +194,12 @@ Keep this file concise; implementation progress belongs in [the refactor plan](d
 - Check: the localhost workbench smoke verifies command execution and cursor replay across backend restart.
 - Terminal input uses keyed HMAC fingerprints for deduplication, not plain hashes that expose guessable individual keys.
   Keep `input.key` private and with its journals; missing or changed keys must stop recovery.
+
+## One navigation model across tasks and conversations
+
+- Observed: the workbench used top navigation and mobile task tabs, while Sessions switched to a nested sidebar.
+  Creating a task also required navigating through Projects and a project detail page.
+- Fix: keep Tasks, Projects, Sessions, and Machines in one shared row; create tasks directly from Tasks; list saved
+  conversations across machines without opening or launching them. Configuration opens in focused dialogs.
+- Check: browser smoke visits every primary link at 320/390/1365px, verifies one navigation landmark and visible
+  link bounds, and creates a task from the top-level list. Inspect screenshots as well as overflow measurements.
