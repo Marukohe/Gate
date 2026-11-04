@@ -129,6 +129,9 @@ Server sends:
 
 ## Before Starting Work
 
+Read `LESSONS.md` for relevant problems and prevention rules before investigating or changing code.
+The staged refactor and its acceptance criteria are tracked in `docs/refactor-plan.md`.
+
 1. Review recent history:
    ```bash
    git log --oneline --stat
@@ -147,3 +150,13 @@ Always:
 3. Verify the project builds (`npm run build`) for broad frontend/server changes
 4. Check changes with `git status`
 5. Commit completed changes with a small, reviewable Conventional Commit
+
+## Lessons and Progress
+
+- Record verified failures, root causes, fixes, and prevention checks in `LESSONS.md` as they occur.
+- Update an existing entry when learning more about the same issue; avoid duplicate notes and speculative rules.
+- Include a regression test, command, or source reference that makes each lesson actionable.
+- Keep credentials, personal connection details, and raw private transcripts out of lessons and documentation.
+- Update `docs/refactor-plan.md` when a milestone or validation result changes; distinguish prototypes from shipped features.
+- Commit each completed step separately. Explain its behavior, relevant validation, and remaining limits in the commit body.
+- `AGENTS.md` is a symlink to this file. Preserve the link so both entry points stay synchronized.

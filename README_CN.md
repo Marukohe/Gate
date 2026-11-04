@@ -1,5 +1,8 @@
 # Gate
 
+任务工作台重构进度见[实施规划](docs/refactor-plan.md)。修改前请阅读 [LESSONS.md](LESSONS.md)，
+并记录已验证的问题、原因和预防方法。每个完成的重构步骤分别验证并提交。
+
 [English](README.md) | [中文](README_CN.md)
 
 **Gate** 为远程服务器上的 AI 编程 CLI（[Claude Code](https://docs.anthropic.com/en/docs/claude-code)、[OpenAI Codex](https://github.com/openai/codex)）打开一扇门 — 随时随地，任何设备上编程。

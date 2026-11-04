@@ -1,0 +1,106 @@
+# Gate task workbench refactor
+
+Status: implementation started. This document tracks proposed behavior, completed steps, and evidence separately.
+
+## Product goal
+
+Manage multiple repositories, tasks, and coding agents from one place. The primary workflow is:
+start work, let agents run, resolve blockers, inspect evidence, and deliver a change.
+
+An overview should make the tasks that need a decision visible without opening every conversation.
+Keep the current personal, internal-network deployment model. Team permissions, model account routing,
+and automatic agent orchestration are outside the initial scope.
+
+## Domain model
+
+| Object | Responsibility |
+| --- | --- |
+| Project | Repository identity, defaults, and scripts |
+| Checkout | A project's working copy on a specific machine, including branch/worktree |
+| Task | Goal, acceptance criteria, checkout, delivery status, and PR |
+| Run | One agent execution, provider session identity, lifecycle, and events |
+| Attention item | A question, approval, or failure requiring a recorded response |
+| Artifact | Changes, test evidence, review results, previews, and commits |
+
+Projects can have multiple checkouts and tasks. Tasks can have implementation, retry, and review runs.
+Run completion does not automatically complete a task. Review and test evidence must identify the code version.
+
+## User surfaces
+
+- Overview: needs attention, ready for review, running, and queued/paused tasks; project and machine filters.
+- Projects: repositories, checkouts, task lists, defaults, and scripts.
+- Task: goal, execution history, pending decisions, changes, verification, and delivery actions.
+- Desktop: execution and results together. Mobile: decisions and concise results first.
+- Keep branch, worktree, and provider defaults available with advanced choices on demand.
+
+## Runtime direction
+
+```text
+Browser <--WebSocket--> Gate backend <--SSH--> Remote runtime
+                                               |-- Provider adapter <--> Managed agent
+                                               |-- PTY <--> Interactive terminal
+                                               |-- Local socket <-- Hooks/plugins
+                                               `-- Durable run events
+```
+
+SSH remains the transport. The remote runtime owns execution independently of a backend connection.
+Provider adapters supply structured interaction; hooks supply only the identity/events supported by each tool.
+External sessions start as observed sessions. History, resume, live input, interrupt, and terminal attachment
+must be separate capabilities. Preserve existing provider parsers where applicable.
+
+Evaluate a small Node.js runtime and mature runtime integrations before freezing the implementation choice.
+Herdr-core is a candidate, not a required dependency. PTY support and semantic approval support need explicit
+validation; neither follows automatically from process supervision or hooks.
+
+## Milestones
+
+### P0: Runtime feasibility
+
+- [x] Add the refactor tracker and lessons workflow.
+- [ ] Define the minimal runtime protocol and capability boundaries.
+- [ ] Build an isolated prototype with durable events and idempotent start requests.
+- [ ] Validate execution across SSH disconnects and client restarts using localhost SSH first.
+- [ ] Validate input, output, exit status, interruption, and duplicate-request behavior.
+- [ ] Audit the installed providers and document live-agent validation limits.
+- [ ] Record the runtime decision and evidence before production integration.
+
+Acceptance: repeatable commands prove which lifecycle guarantees hold; no existing sessions or database
+are modified by the prototype. A deterministic fixture tests transport independently of model access.
+
+### P1: Task model and navigation
+
+- [ ] Add Project, Checkout, Task, and Run persistence with additive, tested migrations.
+- [ ] Preserve old workspace/session history; avoid guessing ambiguous task relationships.
+- [ ] Add task creation, project/task lists, and independent goals and delivery status.
+- [ ] Verify two tasks in the same repository do not overwrite each other's state.
+
+### P2: Persistent managed execution
+
+- [ ] Integrate the validated runtime with SSH and provider adapters.
+- [ ] Replay events after reconnect, deduplicate requests/events, and reconcile run state.
+- [ ] Confirm stop results and distinguish connection loss from process failure.
+- [ ] Test backend restart and SSH failure against real remote execution.
+
+### P3: Attention and verification
+
+- [ ] Persist questions, supported approvals, and failures as attention items.
+- [ ] Add the attention-first overview and task result view.
+- [ ] Record test commands, directory, code version, timestamps, exit status, and logs.
+- [ ] Synchronize decisions across clients and keep task acceptance explicit.
+
+### P4: Collaboration and external sessions
+
+- [ ] Discover external sessions through scoped hooks/plugins without claiming unsupported control.
+- [ ] Add a managed terminal launch entry point and explicit attachment capabilities.
+- [ ] Add agent handoff and independent review tied to a fixed code snapshot.
+- [ ] Isolate concurrent writers with worktrees and surface shared-checkout conflicts.
+
+## Validation and delivery
+
+Each completed step gets a Conventional Commit describing behavior, verification, and remaining limits.
+Run relevant tests and type checks; run `npm run build` for broad client/server changes.
+Use temporary runtime directories and repositories for lifecycle checks. Never stop a process from a stale PID.
+Distinguish browser closure, backend restart, SSH failure, runtime crash, and machine reboot in results.
+
+Keep README.md, README_CN.md, and AGENTS.md/CLAUDE.md aligned with shipped behavior.
+Update LESSONS.md when a verified issue yields a useful prevention rule.
