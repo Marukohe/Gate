@@ -57,6 +57,7 @@ export function createWorkbenchRoutes(db: Database, ssh: SSHManager, execution?:
       claudePath: text(req.body.claudePath, 'Claude path'), codexPath: text(req.body.codexPath, 'Codex path'),
       directory: text(req.body.directory, 'runtime directory'),
       ...(req.body.pythonPath ? { pythonPath: text(req.body.pythonPath, 'Python path') } : {}),
+      ...(req.body.ghPath ? { ghPath: text(req.body.ghPath, 'GitHub CLI path') } : {}),
       ...(req.body.shellPath ? { shellPath: text(req.body.shellPath, 'shell path') } : {}) };
     await execution.configure(settings);
     res.json(store.runtimeSettings(settings.serverId));
@@ -84,6 +85,16 @@ export function createWorkbenchRoutes(db: Database, ssh: SSHManager, execution?:
     text(req.body.command, 'script command');
     res.status(202).json(await execution.script(String(req.params.id), text(req.body.requestId, 'request ID'),
       req.body.name, req.body.command));
+  });
+
+  router.get('/tasks/:id/delivery', async (req, res) => {
+    if (!execution) throw new Error('Managed execution is unavailable');
+    res.json(await execution.deliveryInfo(String(req.params.id)));
+  });
+
+  router.post('/tasks/:id/delivery', (req, res) => {
+    if (!execution) throw new Error('Managed execution is unavailable');
+    res.status(202).json(execution.deliver(String(req.params.id), text(req.body.requestId, 'request ID'), req.body.request));
   });
 
   router.post('/tasks/:id/terminal', (req, res) => {

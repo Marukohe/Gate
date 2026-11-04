@@ -5,6 +5,7 @@ import type { Attention, Verification, CollaborationRecord, FrozenSnapshot, Chec
 import { describeAttention, supportsStructuredAnswers, validateDecision } from './attention.js';
 import type { LaunchSpec, RuntimeSettings } from './remote.js';
 import type { HookSettings, ObservedSession } from './types.js';
+import type { Delivery, DeliveryRequest } from './types.js';
 
 export interface Execution {
   runId: string; settings: RuntimeSettings; launch: LaunchSpec | null; source: string | null; branch: string | null;
@@ -13,7 +14,7 @@ export interface Execution {
 }
 
 const taskStatuses: TaskStatus[] = ['backlog', 'in-progress', 'paused', 'review', 'done', 'canceled'];
-const runKinds: RunKind[] = ['implementation', 'retry', 'handoff', 'review', 'terminal', 'test', 'script', 'external'];
+const runKinds: RunKind[] = ['implementation', 'retry', 'handoff', 'review', 'terminal', 'test', 'script', 'delivery', 'external'];
 const runStates: RunState[] = ['queued', 'starting', 'running', 'waiting', 'stopping',
   'completed', 'failed', 'interrupted', 'lost'];
 export const ACTIVE_RUN_STATES: RunState[] = ['queued', 'starting', 'running', 'waiting', 'stopping'];
@@ -90,6 +91,7 @@ export class WorkbenchStore {
           id TEXT PRIMARY KEY, checkoutId TEXT NOT NULL REFERENCES checkouts(id), data TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS project_settings (projectId TEXT PRIMARY KEY REFERENCES projects(id), data TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS deliveries (id TEXT PRIMARY KEY, runId TEXT UNIQUE NOT NULL REFERENCES runs(id), data TEXT NOT NULL);
       `);
       this.importLegacyWorkspaces();
       this.importAttentionEvents();
@@ -205,12 +207,12 @@ export class WorkbenchStore {
   }
 
   enqueue(taskId: string, requestId: string, prompt: string,
-    options: 'implementation' | 'test' | { kind: 'handoff' | 'review' | 'terminal' | 'script'; provider: string;
+    options: 'implementation' | 'test' | { kind: 'handoff' | 'review' | 'terminal' | 'script' | 'delivery'; provider: string;
       sourceRunId?: string; scriptName?: 'setup' | 'run' | 'test' } = 'implementation'): Run {
     const kind = typeof options === 'string' ? options : options.kind;
     const targetProvider = typeof options === 'string' ? undefined : options.provider;
     const sourceRunId = typeof options === 'string' ? undefined : options.sourceRunId;
-    if (targetProvider && !['claude', 'codex', ...(['terminal', 'script'].includes(kind) ? ['shell'] : [])].includes(targetProvider)) {
+    if (targetProvider && !['claude', 'codex', ...(['terminal', 'script', 'delivery'].includes(kind) ? ['shell'] : [])].includes(targetProvider)) {
       throw new Error('Choose a supported provider');
     }
     return this.db.transaction(() => {
@@ -242,7 +244,7 @@ export class WorkbenchStore {
       if (!settings) throw new Error('Set up the remote runtime on this machine first');
       let source: string | null = null;
       let branch: string | null = null;
-      if (kind !== 'review' && task.isolation === 'worktree' && checkout.kind !== 'worktree') {
+      if (!['review', 'delivery'].includes(kind) && task.isolation === 'worktree' && checkout.kind !== 'worktree') {
         source = checkout.path;
         branch = `gate/${task.id}`;
         checkout = this.createCheckout({ projectId: task.projectId, serverId: checkout.serverId,
@@ -261,7 +263,7 @@ export class WorkbenchStore {
         kind, sourceRunId: sourceRunId ?? null, sourceCheckoutId: checkout.id, sourceProvider: sourceRun?.provider ?? null,
         targetProvider: run.provider, goal: task.goal, acceptance: task.acceptance, instructions: prompt, createdAt: Date.now(),
         snapshot: null, packet: null, result: null, state: 'preparing' });
-      if (kind !== 'review') this.updateTask(taskId, { status: 'in-progress', ...(kind === 'handoff' ? { provider: run.provider } : {}) });
+      if (!['review', 'delivery'].includes(kind)) this.updateTask(taskId, { status: 'in-progress', ...(kind === 'handoff' ? { provider: run.provider } : {}) });
       return run;
     })();
   }
@@ -309,6 +311,7 @@ export class WorkbenchStore {
       collaborations: this.collaborations(),
       observedSessions: this.observedSessions(),
       hookSettings: this.hookSettings(),
+      deliveries: this.deliveries(),
     };
   }
 
@@ -448,6 +451,29 @@ export class WorkbenchStore {
 
   requestRun(requestId: string): Run | undefined {
     return this.db.prepare('SELECT * FROM runs WHERE requestId = ?').get(requestId) as Run | undefined;
+  }
+
+  deliveries(): Delivery[] {
+    return (this.db.prepare('SELECT data FROM deliveries').all() as { data: string }[]).map((row) => JSON.parse(row.data));
+  }
+  delivery(runId: string): Delivery | undefined {
+    const row = this.db.prepare('SELECT data FROM deliveries WHERE runId = ?').get(runId) as { data: string } | undefined;
+    return row ? JSON.parse(row.data) : undefined;
+  }
+  saveDelivery(item: Delivery): void {
+    this.db.prepare('INSERT INTO deliveries VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET data=excluded.data')
+      .run(item.id, item.runId, JSON.stringify(item));
+  }
+  enqueueDelivery(taskId: string, requestId: string, request: DeliveryRequest): Run {
+    return this.db.transaction(() => {
+      if (!this.requestRun(requestId) && this.task(taskId)?.checkoutId !== request.checkoutId) {
+        throw new Error('Task checkout changed; refresh the delivery preview');
+      }
+      const run = this.enqueue(taskId, requestId, JSON.stringify(request), { kind: 'delivery', provider: 'shell' });
+      if (!this.delivery(run.id)) this.saveDelivery({ id: randomUUID(), taskId, runId: run.id, request,
+        state: 'queued', startedAt: null, endedAt: null, result: null });
+      return run;
+    })();
   }
 
   checkout(id: string): Checkout | undefined {

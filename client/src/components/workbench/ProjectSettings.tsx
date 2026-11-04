@@ -43,7 +43,7 @@ export function ProjectSettings({ project, checkouts, mutate, busy }: WorkbenchA
           <option value="worktree">Isolated worktree</option><option value="shared">Shared working copy</option>
         </select></label>
       </div>
-      <label className="block text-sm">Review base branch
+      <label className="block text-sm">Review and PR base branch
         <Input name="branch" defaultValue={project.defaultBranch ?? ''} placeholder="main" /></label>
       <p className="text-xs text-muted-foreground">Existing tasks keep their agent and working copy. New isolated worktrees start from the selected working copy’s committed HEAD.</p>
       <h3 className="text-sm font-medium">Script overrides</h3>

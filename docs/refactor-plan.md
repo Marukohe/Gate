@@ -126,8 +126,7 @@ Hooks are advisory: unmanaged tools can still start or write without reporting t
 
 ### Final workflow acceptance
 
-- [ ] Verify project defaults/scripts and task delivery actions against the user surfaces above.
-  Project defaults and setup/run/test execution are implemented; task delivery actions remain next.
+- [x] Verify project defaults/scripts and task delivery actions against the user surfaces above.
 - [x] Verify managed terminal input, resize, attachment, reconnect, and confirmed exit.
 - [ ] Validate real provider model/tool/decision flows and trusted Codex hook execution in isolated checkouts.
 - [ ] Audit the complete start → blockers → evidence → delivery workflow on desktop and mobile.
@@ -137,6 +136,13 @@ and journal recovery. The actual localhost SSH/backend/browser check covers a sh
 cursor replay, read-only second attachment, browser keyboard input, control transfer, mobile resizing, and confirmed exit.
 Native Claude/Codex model turns remain in final provider validation. Terminal support currently requires Linux and Python 3.9+
 with pidfd APIs; descendants that create a different OS session are outside the cleanup guarantee.
+
+Project/delivery evidence: restart tests preserve project defaults without changing existing tasks. Localhost SSH
+and browser tests resolve script overrides, execute bare Node.js with the configured PATH, reject stale commands,
+and keep setup/run purpose distinct from test evidence. Real Git checks reject stale checkout/remote previews,
+preserve normal commit hooks, retain actual artifacts if hooks change the tree, commit inspected changes, and push
+the pinned commit to a temporary bare origin. Backend restart returns the existing delivery instead of repeating it.
+GitHub PR argument transport, push-destination checks, and reuse use a deterministic CLI fixture; no real PR is published.
 
 ## Validation and delivery
 

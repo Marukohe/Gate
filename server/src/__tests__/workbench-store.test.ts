@@ -46,6 +46,19 @@ describe('Workbench persistence', () => {
     expect(() => db.workbench.updateProject(p.id, { defaultIsolation: 'invalid' as 'shared' })).toThrow(/isolation/);
   });
 
+  it('delivers from the previewed checkout without creating a different worktree', () => {
+    const { task: current, checkout, machine } = task();
+    db.workbench.saveRuntimeSettings({ serverId: machine.id, nodePath: '/node', claudePath: '/claude', codexPath: '/codex', directory: '/runtime' });
+    const request = { checkoutId: checkout.id, branch: 'main', remote: null, action: 'commit' as const,
+      snapshot: { head: 'a'.repeat(40), tree: 'b'.repeat(40), dirty: true }, message: 'commit inspected code' };
+    const run = db.workbench.enqueueDelivery(current.id, 'delivery', request);
+    expect(run.checkoutId).toBe(checkout.id);
+    expect(db.workbench.snapshot().checkouts).toHaveLength(1);
+    db.close(); db = createDb(file);
+    expect(db.workbench.delivery(run.id)?.request).toEqual(request);
+    expect(db.workbench.enqueueDelivery(current.id, 'delivery', request).id).toBe(run.id);
+  });
+
   it('imports explicit legacy goals once and preserves all session and message history', () => {
     const machine = server();
     const workspace = db.createWorkspace({ name: 'Legacy', serverId: machine.id, repoPath: '/legacy',

@@ -170,7 +170,7 @@ and [Herdr integrations](https://acrogenesis.com/herdr/docs/integrations/).
 - The workbench SSH/browser check also validates backend restart during a terminal command, native output replay,
   non-echoed input absent from logs, concurrent attachment roles, keyboard input, control transfer, detach, and exit.
 
-## Remaining boundaries
+## Project settings and scripts
 
 Project settings apply the default agent, checkout, and worktree/shared choice only to new tasks. The review base
 branch is separate from the selected checkout's HEAD, which remains the starting point for new task worktrees.
@@ -181,6 +181,32 @@ All scripts use the same checkout ownership and durable logs as other runs. Setu
 and do not mark a task ready for review. Tests can mark it ready for review, but acceptance remains manual.
 Long-running scripts keep the checkout occupied until stopped and confirmed exited. If a task has not yet started,
 its first script creates its isolated worktree from committed HEAD; uncommitted source changes are not copied.
+
+## Delivery
+
+Refresh the task's delivery preview after inspecting changes. The preview identifies its checkout, branch, HEAD,
+code tree, and origin. Commit includes all tracked/non-ignored untracked changes, verifies the staged tree against
+the preview, and runs normal Git hooks. If a hook changes the committed tree, the run fails with the actual commit
+still recorded; no commit or staging rollback is attempted. Commit failures can leave staged changes.
+
+Push requires a clean checkout and an unchanged origin fingerprint. It pushes the inspected commit SHA to that
+branch in origin with no force, tag following, or submodule pushes. Create draft PR requires that exact commit
+already on origin, a github.com repository, and an authenticated `gh` on the remote machine. An optional absolute
+GitHub CLI path is available in runtime settings. The user supplies title, body, and base; an existing matching
+open PR is reused. Gate never implicitly pushes from the PR action. See the upstream
+[Git push options](https://git-scm.com/docs/git-push) and [GitHub PR command](https://cli.github.com/manual/gh_pr_create).
+
+Each delivery owns the previewed checkout and records its request before launching. It does not switch to a new
+worktree or change task acceptance. Backend/SSH reconnect replays the original run instead of repeating a Git
+mutation. If ownership is lost or an operation is interrupted, inspect repository/remote state before starting a
+new operation: a command may have taken effect before its result was recorded. Hooks report external activity
+but cannot lock out tools launched outside Gate. Preview checks do not provide atomicity against such writers.
+
+Validation uses actual commits and pushes to a temporary local bare repository through localhost SSH and browser
+controls, including stale preview rejection and backend restart. PR argument transport/reuse is covered with a
+deterministic GitHub CLI fixture; no real GitHub PR is published by the acceptance tests.
+
+## Remaining boundaries
 
 The end-to-end lifecycle test uses a deterministic provider fixture. Real model/tool/approval execution still needs
 separate validation. Machine reboot, runtime-crash reattachment,

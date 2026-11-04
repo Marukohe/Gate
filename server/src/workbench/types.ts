@@ -1,7 +1,7 @@
 export type TaskStatus = 'backlog' | 'in-progress' | 'paused' | 'review' | 'done' | 'canceled';
 export type RunState = 'queued' | 'starting' | 'running' | 'waiting' | 'stopping' |
   'completed' | 'failed' | 'interrupted' | 'lost';
-export type RunKind = 'implementation' | 'retry' | 'handoff' | 'review' | 'terminal' | 'test' | 'script' | 'external';
+export type RunKind = 'implementation' | 'retry' | 'handoff' | 'review' | 'terminal' | 'test' | 'script' | 'delivery' | 'external';
 
 export interface Project {
   id: string;
@@ -99,6 +99,21 @@ export interface Verification {
 
 export interface FrozenSnapshot extends CodeSnapshot { commit: string; ref: string; base: string; patchPath: string }
 
+export interface DeliveryInfo {
+  checkoutId: string;
+  snapshot: CodeSnapshot; branch: string;
+  remote: { name: string; display: string; fingerprint: string } | null;
+}
+export interface DeliveryRequest extends DeliveryInfo {
+  action: 'commit' | 'push' | 'create-pr'; message?: string; title?: string; body?: string; base?: string;
+}
+export interface Delivery {
+  id: string; taskId: string; runId: string; request: DeliveryRequest;
+  state: 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'lost';
+  startedAt: number | null; endedAt: number | null;
+  result: { commit: string; tree: string; url?: string; pushed?: boolean; reused?: boolean } | null;
+}
+
 export interface ObservedSession {
   id: string; scopeId: string; provider: string; sessionId: string; cwd: string; event: string;
   state: 'busy' | 'idle' | 'waiting' | 'ended'; revision: number; firstSeenAt: number; lastSeenAt: number;
@@ -131,4 +146,5 @@ export interface WorkbenchSnapshot {
   collaborations: CollaborationRecord[];
   observedSessions: ObservedSession[];
   hookSettings: HookSettings[];
+  deliveries: Delivery[];
 }

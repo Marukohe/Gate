@@ -5,6 +5,7 @@ import type { CodeSnapshot, ObservedSession, RunEvent, ScriptName, TaskScripts }
 import path from 'node:path';
 import { collaborationPacket } from './collaboration.js';
 import { supportsStructuredAnswers } from './attention.js';
+import { deliveryRequest } from './delivery.js';
 
 export class ExecutionService {
   private timer?: ReturnType<typeof setTimeout>;
@@ -32,7 +33,7 @@ export class ExecutionService {
         throw new Error(`${key} must be an absolute remote path`);
       }
     }
-    for (const key of ['pythonPath', 'shellPath'] as const) {
+    for (const key of ['pythonPath', 'shellPath', 'ghPath'] as const) {
       if (settings[key] !== undefined && (!settings[key]!.startsWith('/') || settings[key]!.includes('\0'))) {
         throw new Error(`${key} must be an absolute remote path`);
       }
@@ -119,6 +120,22 @@ export class ExecutionService {
     return run;
   }
 
+  async deliveryInfo(taskId: string) {
+    const store = this.db.workbench;
+    const task = store.task(taskId);
+    if (!task) throw new Error('Task not found');
+    const checkout = store.checkout(task.checkoutId)!;
+    const settings = store.runtimeSettings(checkout.serverId);
+    if (!settings) throw new Error('Set up the remote runtime first');
+    return { ...await this.remote.deliveryInfo(settings, checkout.path), checkoutId: checkout.id };
+  }
+
+  deliver(taskId: string, requestId: string, input: unknown) {
+    const run = this.db.workbench.enqueueDelivery(taskId, requestId, deliveryRequest(input));
+    void this.reconcile(run.id);
+    return run;
+  }
+
   collaborate(taskId: string, requestId: string, kind: 'handoff' | 'review', provider: string,
     instructions: string, sourceRunId?: string) {
     const run = this.db.workbench.enqueue(taskId, requestId, instructions, { kind, provider, sourceRunId });
@@ -182,6 +199,8 @@ export class ExecutionService {
           if (verification) store.saveVerification({ ...verification, state: 'interrupted', endedAt: Date.now() });
           const collaboration = store.collaboration(runId);
           if (collaboration) store.saveCollaboration({ ...collaboration, state: 'interrupted' });
+          const delivery = store.delivery(runId);
+          if (delivery) store.saveDelivery({ ...delivery, state: 'interrupted', endedAt: Date.now() });
           store.releaseCheckout(runId);
           return;
         }
@@ -207,6 +226,7 @@ export class ExecutionService {
         // Persist the exact spawn bytes before sending start. A lost acknowledgement is retried with identical identity.
         execution.launch = run.kind === 'terminal' ? await this.remote.terminal(execution.settings, checkout.path, run.provider)
           : ['test', 'script'].includes(run.kind) ? this.remote.verification(execution.settings, checkout.path, run.prompt)
+          : run.kind === 'delivery' ? this.remote.delivery(execution.settings, checkout.path, store.delivery(runId)!.request)
           : this.remote.launch(execution.settings, run.provider, checkout.path, collaboration?.packet ?? run.prompt,
             collaboration?.kind === 'review' ? collaboration.snapshot! : undefined);
         store.prepareRun(runId, execution.launch, codeRef);
@@ -261,6 +281,8 @@ export class ExecutionService {
         store.updateRun(run.id, { state: 'running', startedAt: event.time });
         const collaboration = store.collaboration(run.id);
         if (collaboration) store.saveCollaboration({ ...collaboration, state: 'running' });
+        const delivery = store.delivery(run.id);
+        if (delivery) store.saveDelivery({ ...delivery, state: 'running', startedAt: event.time });
         break;
       }
       case 'stopping': store.updateRun(run.id, { state: 'stopping' }); break;
@@ -273,6 +295,8 @@ export class ExecutionService {
         if (verification) store.saveVerification({ ...verification, state: 'lost' });
         const collaboration = store.collaboration(run.id);
         if (collaboration) store.saveCollaboration({ ...collaboration, state: 'lost' });
+        const delivery = store.delivery(run.id);
+        if (delivery) store.saveDelivery({ ...delivery, state: 'lost' });
         break;
       }
       case 'protocol': {
@@ -300,6 +324,14 @@ export class ExecutionService {
           store.updateRun(run.id, { state: waiting || message.type === 'decision-error' ? 'waiting' : 'running' });
         }
         const verification = store.verification(run.id);
+        const delivery = store.delivery(run.id);
+        if (delivery && message.type === 'delivery-completed') {
+          const result = { commit: String(message.commit), tree: String(message.tree),
+            ...(typeof message.url === 'string' ? { url: message.url } : {}),
+            ...(message.pushed === true ? { pushed: true } : {}), ...(message.reused === true ? { reused: true } : {}) };
+          store.saveDelivery({ ...delivery, result });
+          if (result.url) store.updateTask(run.taskId, { prUrl: result.url });
+        }
         if (verification && message.type === 'verification-started') store.saveVerification({ ...verification,
           state: 'running', before: message.before as unknown as CodeSnapshot, startedAt: Number(message.startedAt) });
         if (verification && message.type === 'verification-completed') store.saveVerification({ ...verification,
@@ -316,15 +348,20 @@ export class ExecutionService {
           store.addAttention(run.id, 'ownership-loss', 'failure', { message: error }, event.time);
           break;
         }
-        const failed = run.error || (!payload.interrupted && payload.exitCode !== 0);
+        const missingDelivery = run.kind === 'delivery' && !store.delivery(run.id)?.result && !payload.interrupted;
+        const failed = run.error || missingDelivery || (!payload.interrupted && payload.exitCode !== 0);
+        const failureMessage = run.error ?? (missingDelivery
+          ? 'Delivery exited without a confirmed result; inspect the repository before retrying'
+          : `Process exited ${payload.exitCode ?? payload.signal}`);
         const outcome = run.kind === 'terminal' ? store.execution(run.id)!.terminalExit! : payload;
         store.updateRun(run.id, { state: failed ? 'failed' : payload.interrupted ? 'interrupted' : 'completed',
+          ...(missingDelivery && !run.error ? { error: failureMessage } : {}),
           exitCode: typeof outcome.exitCode === 'number' ? outcome.exitCode : null,
           signal: typeof outcome.signal === 'string' ? outcome.signal : null, endedAt: event.time });
         store.releaseCheckout(run.id);
         store.expireAttention(run.id, event.time);
         if (failed) store.addAttention(run.id, 'run-failure', 'failure',
-          { message: run.error ?? `Process exited ${payload.exitCode ?? payload.signal}`, exitCode: payload.exitCode }, event.time);
+          { message: failureMessage, exitCode: payload.exitCode }, event.time);
         const verification = store.verification(run.id);
         if (verification) store.saveVerification({ ...verification,
           state: failed ? 'failed' : payload.interrupted ? 'interrupted' : 'passed',
@@ -335,8 +372,11 @@ export class ExecutionService {
         if (collaboration) store.saveCollaboration({ ...collaboration,
           state: failed ? 'failed' : payload.interrupted ? 'interrupted' : 'completed',
           result: store.agentMessages(run.id).join('\n\n') || null });
+        const delivery = store.delivery(run.id);
+        if (delivery) store.saveDelivery({ ...delivery, state: failed ? 'failed' : payload.interrupted ? 'interrupted' : 'completed',
+          endedAt: event.time });
         // A review finishing in its own checkout must not overwrite a concurrently running implementation's status.
-        if (!failed && !payload.interrupted && !['review', 'terminal'].includes(run.kind) &&
+        if (!failed && !payload.interrupted && !['review', 'terminal', 'delivery'].includes(run.kind) &&
           (run.kind !== 'script' || verification?.purpose === 'test')) store.updateTask(run.taskId, { status: 'review' });
         break;
       }

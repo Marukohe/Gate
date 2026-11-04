@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { FrozenSnapshot, TaskResult, TaskScripts } from './types.js';
+import type { DeliveryInfo, DeliveryRequest, FrozenSnapshot, TaskResult, TaskScripts } from './types.js';
 import { fileURLToPath } from 'node:url';
 import { SSHManager } from '../ssh-manager.js';
 import type { Database } from '../db.js';
@@ -14,6 +14,7 @@ export interface RuntimeSettings {
   directory: string;
   pythonPath?: string;
   shellPath?: string;
+  ghPath?: string;
   release?: string;
 }
 export interface LaunchSpec {
@@ -24,7 +25,7 @@ export interface RemoteEvent {
 }
 export const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 const bundle = ['runtime.mjs', 'cli.mjs', 'worker.mjs', 'provider.mjs', 'snapshot.mjs', 'verifier.mjs', 'collaboration.mjs',
-  'observations.mjs', 'hook.mjs', 'hook-install.mjs', 'terminal.py', 'terminal-bridge.mjs', 'scripts.mjs'].map((name) => ({ name,
+  'observations.mjs', 'hook.mjs', 'hook-install.mjs', 'terminal.py', 'terminal-bridge.mjs', 'scripts.mjs', 'delivery.mjs'].map((name) => ({ name,
   data: fs.readFileSync(fileURLToPath(new URL(`../../runtime/${name}`, import.meta.url))) }));
 const build = createHash('sha256').update(Buffer.concat(bundle.map((file) => file.data))).digest('hex').slice(0, 16);
 
@@ -213,6 +214,18 @@ export class RemoteRuntime {
     return JSON.parse(await this.shell(ready.serverId,
       `${quote(ready.nodePath)} ${quote(`${this.releaseDirectory(ready)}/scripts.mjs`)}`,
       JSON.stringify({ cwd })));
+  }
+
+  delivery(settings: RuntimeSettings, cwd: string, request: DeliveryRequest): LaunchSpec {
+    return { command: settings.nodePath, args: [`${this.releaseDirectory(settings)}/delivery.mjs`], cwd, protocol: true,
+      initialInput: JSON.stringify({ cwd, request, ghPath: settings.ghPath }) + '\n' };
+  }
+
+  async deliveryInfo(settings: RuntimeSettings, cwd: string): Promise<Omit<DeliveryInfo, 'checkoutId'>> {
+    const ready = await this.install(settings);
+    return JSON.parse(await this.shell(ready.serverId,
+      `${quote(ready.nodePath)} ${quote(`${this.releaseDirectory(ready)}/delivery.mjs`)}`,
+      JSON.stringify({ method: 'inspect', cwd }) + '\n'));
   }
 
   async result(settings: RuntimeSettings, cwd: string): Promise<TaskResult> {

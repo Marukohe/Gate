@@ -20,6 +20,7 @@ class RemoteFixture {
   async terminal(settings: RuntimeSettings, cwd: string, provider: string) { return this.launch(settings, provider, cwd, 'terminal'); }
   verification(settings: RuntimeSettings, cwd: string, command: string) { return this.launch(settings, 'shell', cwd, command); }
   async scripts() { return { scripts: { test: { command: 'npm test', source: 'gate.json' } }, warning: null }; }
+  delivery(settings: RuntimeSettings, cwd: string, request: unknown) { return this.launch(settings, 'shell', cwd, JSON.stringify(request)); }
   push(runId: string, type: string, data = {}) {
     const all = this.events.get(runId) ?? [];
     all.push({ runId, seq: all.length + 1, time: Date.now(), type, ...data });
@@ -195,6 +196,38 @@ describe('Managed execution recovery', () => {
     await service.reconcile(test.id);
     expect(db.workbench.verification(test.id)?.purpose).toBe('test');
     expect(db.workbench.task(taskId)?.status).toBe('review');
+  });
+
+  it('records delivery artifacts across restart without accepting the task or repeating its mutation', async () => {
+    const task = db.workbench.task(taskId)!;
+    const request = { checkoutId: task.checkoutId, branch: 'main', remote: null,
+      snapshot: { head: 'a'.repeat(40), tree: 'b'.repeat(40), dirty: true }, action: 'commit', message: 'fix: delivery' };
+    remote.loseStartReply = true;
+    const run = service.deliver(taskId, 'commit-once', request);
+    await service.reconcile(run.id);
+    expect(() => service.run(otherTaskId, 'conflict', 'work')).toThrow(/in use/);
+    await service.close(); service = new ExecutionService(db, remote as unknown as RemoteRuntime);
+    remote.push(run.id, 'protocol', { data: { type: 'delivery-completed', commit: 'c'.repeat(40), tree: 'b'.repeat(40) } });
+    remote.push(run.id, 'exited', { exitCode: 0 });
+    await service.reconcile(run.id);
+    expect(service.deliver(taskId, 'commit-once', request).id).toBe(run.id);
+    expect(remote.starts.size).toBe(1);
+    expect(db.workbench.delivery(run.id)).toMatchObject({ state: 'completed', result: { commit: 'c'.repeat(40) } });
+    expect(db.workbench.task(taskId)?.status).toBe('backlog');
+    expect(() => service.deliver(taskId, 'commit-once', { ...request, message: 'changed' })).toThrow(/another request/);
+    expect(() => service.deliver(taskId, 'wrong-checkout', { ...request, checkoutId: 'wrong' })).toThrow(/checkout changed/);
+  });
+
+  it('does not claim delivery success when the worker exits without an artifact', async () => {
+    const request = { checkoutId: db.workbench.task(taskId)!.checkoutId, branch: 'main', remote: null,
+      snapshot: { head: 'a'.repeat(40), tree: 'b'.repeat(40), dirty: true }, action: 'commit', message: 'fix: delivery' };
+    const run = service.deliver(taskId, 'no-result', request);
+    await service.reconcile(run.id);
+    remote.push(run.id, 'exited', { exitCode: 0 });
+    await service.reconcile(run.id);
+    expect(db.workbench.delivery(run.id)).toMatchObject({ state: 'failed', result: null });
+    expect(db.workbench.run(run.id)?.error).toContain('without a confirmed result');
+    expect(db.workbench.attentionItems(run.id)[0].detail.message).toContain('without a confirmed result');
   });
 
 });

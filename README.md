@@ -38,6 +38,8 @@ Browser (React) <--WebSocket--> Node.js Backend <--SSH--> Remote Server
 - **Project defaults and scripts** — Choose the default agent, working copy, and isolation for new tasks.
   Preview and run setup/run/test commands from `gate.json` or project overrides, with durable output and exit status.
   Setup and run records stay separate from test evidence.
+- **Task delivery** — Preview the branch and code version, commit inspected changes, push that commit to origin,
+  and create or reuse a draft GitHub PR. Each operation has its own durable run and recorded commit/PR result.
 - **Handoff and independent review** — Continue with another agent using recorded context and test evidence.
   Review a fixed snapshot in a separate checkout while task work continues, and see when that review becomes stale.
 - **External session awareness** — Install checkout-scoped Claude/Codex hooks to see native session activity and link it

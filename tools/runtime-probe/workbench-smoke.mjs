@@ -188,6 +188,29 @@ try {
   assert.equal((await api(`/tasks/${verificationTask.id}/scripts`, 'POST', {
     requestId: 'setup-once', name: 'setup', command: scripts.scripts.setup.command })).id, setupRun.id);
 
+  const git = (args) => execFileSync('git', ['-C', evidence.cwd, ...args], { encoding: 'utf8' }).trim();
+  fs.mkdirSync(`${root}/empty-hooks`);
+  git(['config', 'user.name', 'Gate']); git(['config', 'user.email', 'gate@example.invalid']);
+  git(['config', 'commit.gpgsign', 'false']); git(['config', 'core.hooksPath', `${root}/empty-hooks`]);
+  execFileSync('git', ['init', '-q', '--bare', `${root}/origin.git`]);
+  git(['remote', 'add', 'origin', `${root}/origin.git`]);
+  const deliveryPreview = await api(`/tasks/${verificationTask.id}/delivery`);
+  fs.writeFileSync(`${evidence.cwd}/stale-preview.txt`, 'Changed after preview');
+  const staleDelivery = await api(`/tasks/${verificationTask.id}/delivery`, 'POST', { requestId: 'stale-delivery',
+    request: { ...deliveryPreview, action: 'commit', message: 'Do not commit stale code' } });
+  await until(async () => (await api('')).deliveries.find((item) => item.runId === staleDelivery.id && item.state === 'failed'), 'stale delivery rejection');
+  assert.equal(git(['rev-parse', 'HEAD']), deliveryPreview.snapshot.head);
+  const delivery = { ...await api(`/tasks/${verificationTask.id}/delivery`), action: 'commit', message: 'fix: inspected SSH delivery\n\nLiteral $(no-execution)' };
+  const commitRun = await api(`/tasks/${verificationTask.id}/delivery`, 'POST', { requestId: 'commit-once', request: delivery });
+  const committed = await until(async () => (await api('')).deliveries.find((item) => item.runId === commitRun.id && item.state === 'completed'), 'SSH commit');
+  assert.equal(committed.result.tree, delivery.snapshot.tree);
+  await stopBackend(); await startBackend();
+  assert.equal((await api(`/tasks/${verificationTask.id}/delivery`, 'POST', { requestId: 'commit-once', request: delivery })).id, commitRun.id);
+  const pushRun = await api(`/tasks/${verificationTask.id}/delivery`, 'POST', { requestId: 'push-once',
+    request: { ...await api(`/tasks/${verificationTask.id}/delivery`), action: 'push' } });
+  await until(async () => (await api('')).deliveries.find((item) => item.runId === pushRun.id && item.state === 'completed'), 'SSH push');
+  assert.equal(execFileSync('git', ['--git-dir', `${root}/origin.git`, 'rev-parse', `refs/heads/${delivery.branch}`], { encoding: 'utf8' }).trim(), committed.result.commit);
+
   assert.equal(ssh(`cat ${quote(`${firstPath}/received-prompt`)}`), prompt);
   assert.equal(ssh(`test ! -e ${quote(`${firstPath}/injected`)} && test ! -e ${quote(`${firstPath}/injected2`)} && printf safe`).trim(), 'safe');
   const collaborationTask = await api('/tasks', 'POST', { projectId: project.id, checkoutId: checkout.id,
@@ -305,6 +328,25 @@ try {
       await page.getByRole('button', { name: 'Run test script', exact: true }).click();
       await until(async () => (await api('')).verifications.some((item) => item.taskId === verificationTask.id && item.command === 'printf browser-script' && item.state === 'passed'), 'browser script execution');
       await page.screenshot({ path: '/tmp/gate-project-scripts.png', fullPage: true });
+      fs.writeFileSync(`${evidence.cwd}/browser-delivery.txt`, 'Browser delivery');
+      await page.getByRole('button', { name: 'Refresh delivery preview', exact: true }).click();
+      await page.getByRole('textbox', { name: 'Commit message', exact: true }).fill('feat: browser delivery');
+      await page.getByRole('button', { name: 'Commit inspected changes', exact: true }).click();
+      await until(async () => (await api('')).deliveries.some((item) => item.request.message === 'feat: browser delivery' && item.state === 'completed'), 'browser commit');
+      await page.getByRole('button', { name: 'Refresh delivery preview', exact: true }).click();
+      await page.getByRole('button', { name: 'Push inspected commit', exact: true }).click();
+      await until(async () => (await api('')).deliveries.some((item) => item.request.action === 'push' && item.result?.commit === git(['rev-parse', 'HEAD']) && item.state === 'completed'), 'browser push');
+      await page.getByRole('button', { name: 'Refresh delivery preview', exact: true }).click();
+      await page.getByText('Create draft pull request', { exact: true }).click();
+      for (const width of [320, 390, 1365]) {
+        await page.setViewportSize({ width, height: 900 });
+        assert.equal(await page.locator('button:visible, input:visible, textarea:visible, select:visible').evaluateAll((elements) =>
+          elements.filter((element) => { const box = element.getBoundingClientRect(); return box.left < 0 || box.right > innerWidth + 1; }).length), 0);
+        if (width === 390) {
+          await page.getByRole('heading', { name: 'Delivery', exact: true }).evaluate((element) => element.scrollIntoView({ block: 'start' }));
+          await page.screenshot({ path: '/tmp/gate-task-delivery.png', fullPage: true });
+        }
+      }
       const third = await api('/tasks', 'POST', { projectId: project.id, checkoutId: checkout.id,
         title: 'Browser task', goal: 'Browser run', provider: 'codex' });
       await page.goto(`${base}/#task/${third.id}`);
@@ -451,6 +493,7 @@ try {
     parallelWorktrees: 'passed', confirmedCompletionAndStop: 'passed',
     durableDecisions: 'passed', concurrentDecisionConflict: 'passed', verificationSnapshotsAndLogs: 'passed', handoff: 'passed', fixedReviewWithConcurrentWriter: 'passed',
     modifiedReviewRejected: 'passed', scopedHooksAndExternalConflicts: 'passed', managedTerminal: 'passed',
+    projectDefaultsAndScripts: 'passed', inspectedCommitAndPush: 'passed',
     provider: 'deterministic app-server fixture and hook payloads; no model call' };
   console.log(JSON.stringify(report, null, 2));
   await remote.request(settings, { method: 'shutdown' });

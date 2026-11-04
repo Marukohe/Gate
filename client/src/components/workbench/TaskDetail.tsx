@@ -2,11 +2,12 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import type { CodeSnapshot, CollaborationRecord, Attention, Verification, Checkout, Run, Task, TaskStatus } from '../../../../server/src/workbench/types';
+import type { Delivery, CodeSnapshot, CollaborationRecord, Attention, Verification, Checkout, Run, Task, TaskStatus } from '../../../../server/src/workbench/types';
 import type { WorkbenchActions } from './use-workbench';
 import { AttentionPanel } from './AttentionPanel';
 import { CollaborationPanel } from './CollaborationPanel';
 import { TaskResults } from './TaskResults';
+import { DeliveryPanel } from './DeliveryPanel';
 import { RunPanel } from './RunPanel';
 import { selectClass } from './ProjectForm';
 
@@ -14,9 +15,10 @@ export const taskLabels: Record<TaskStatus, string> = {
   backlog: 'Backlog', 'in-progress': 'In progress', paused: 'Paused', review: 'Ready for review', done: 'Done', canceled: 'Canceled',
 };
 
-export function TaskDetail({ task, checkout, runs, attention, verifications, collaborations, externalSessions, checkoutBlocked,
+export function TaskDetail({ task, checkout, runs, attention, verifications, collaborations, deliveries, defaultBranch, externalSessions, checkoutBlocked,
   mutate, busy, onLegacySession }: WorkbenchActions & {
   externalSessions: ReactNode; checkoutBlocked: boolean;
+  deliveries: Delivery[]; defaultBranch: string | null;
   task: Task; checkout: Checkout; runs: Run[]; attention: Attention[]; verifications: Verification[]; collaborations: CollaborationRecord[]; onLegacySession: (serverId: string, sessionId: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -61,6 +63,8 @@ export function TaskDetail({ task, checkout, runs, attention, verifications, col
     </section>
     <TaskResults task={task} runs={runs} verifications={verifications} onSnapshot={setCurrent} mutate={mutate} busy={busy} />
     <CollaborationPanel task={task} runs={runs} records={collaborations} current={current} mutate={mutate} busy={busy} />
+    <DeliveryPanel key={task.checkoutId} task={task} runs={runs} records={deliveries} defaultBranch={defaultBranch}
+      checkoutBlocked={checkoutBlocked} mutate={mutate} busy={busy} />
     <RunPanel task={task} checkout={checkout} runs={runs} checkoutBlocked={checkoutBlocked} mutate={mutate} busy={busy} />
     {!checkoutBlocked && externalSessions}
     {task.legacySessionId && <Button variant="outline"

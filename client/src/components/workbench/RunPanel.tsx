@@ -69,6 +69,10 @@ export function RunPanel({ task, checkout, runs, checkoutBlocked, mutate, busy }
           <label className="mt-2 block text-sm">Python 3.9+<Input name="pythonPath" defaultValue={settings?.pythonPath ?? '/usr/bin/python3'} /></label>
           <label className="mt-2 block text-sm">Interactive shell<Input name="shellPath" defaultValue={settings?.shellPath ?? '/bin/bash'} /></label>
         </details>
+        <details><summary className="cursor-pointer text-xs">GitHub CLI path</summary>
+          <label className="mt-2 block text-sm">GitHub CLI executable
+            <Input name="ghPath" defaultValue={settings?.ghPath ?? ''} placeholder="Optional absolute path; otherwise gh from SSH PATH" /></label>
+        </details>
         <Button disabled={busy} variant="outline">Install / reconnect runtime</Button>
       </form>
     </details>}
@@ -131,14 +135,14 @@ function RunOutput({ run, mutate, busy }: WorkbenchActions & { run: Run }) {
     if (event.type === 'stderr') return [String(event.data.data)];
     if (event.type !== 'protocol') return [];
     const data = event.data.data as Record<string, unknown>;
-    if (data.type === 'test-output') return [`[${data.stream}] ${data.text}`];
+    if (data.type === 'test-output' || data.type === 'delivery-output') return [`[${data.stream}] ${data.text}`];
     if (data.type === 'message') return [String(data.text)];
     if (data.type === 'tool') return [JSON.stringify(data.item, null, 2)];
     if (data.type === 'attention') return [`Waiting for a decision: ${data.kind}`];
     return [];
   });
   return <details className="rounded-md border p-3" open={active.includes(run.state)}>
-    <summary className="cursor-pointer text-sm">{run.kind === 'terminal' ? 'Terminal · ' : ''}{run.provider} · {run.state} · {new Date(run.createdAt).toLocaleString()}</summary>
+    <summary className="cursor-pointer text-sm">{run.kind} · {run.provider} · {run.state} · {new Date(run.createdAt).toLocaleString()}</summary>
     {run.kind === 'terminal' && (attached
       ? <Suspense fallback={<p className="mt-3 text-sm">Loading terminal…</p>}><TerminalView runId={run.id} onDetach={() => setAttached(false)} /></Suspense>
       : <Button className="mt-3" size="sm" variant="outline" onClick={() => setAttached(true)}>Attach terminal</Button>)}

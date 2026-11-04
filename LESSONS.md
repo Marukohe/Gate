@@ -134,6 +134,13 @@ Keep this file concise; implementation progress belongs in [the refactor plan](d
 - Check: the localhost workbench smoke runs source verification during review, checks that review does not overwrite
   `in-progress`, detects stale evidence, and rejects a review whose own checkout changed.
 
+## Verify the push destination when checking delivery state
+
+- Found during delivery implementation: Git can use different fetch and push URLs for `origin`.
+- Fix: preview/fingerprint the push URL and query that same destination when confirming a PR's published commit.
+  An origin fetch query is not evidence that the intended push destination contains the commit.
+- Check: `delivery.test.mjs` configures distinct fetch/push URLs and checks the exact PR verification destination.
+
 ## Hook installation and hook execution are different evidence
 
 - Verified: Claude initialization emits SessionStart from a checkout observer; Codex lists new definitions as untrusted.

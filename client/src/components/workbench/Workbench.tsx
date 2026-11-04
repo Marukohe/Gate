@@ -95,6 +95,8 @@ export function Workbench({ onLegacy, onAddServer, onLegacySession }: {
               <TaskDetail key={task.id} task={task} checkout={checkout} runs={snapshot.runs.filter((r) => r.taskId === task.id)}
                 attention={snapshot.attention.filter((item) => item.taskId === task.id)}
                 collaborations={snapshot.collaborations.filter((item) => item.taskId === task.id)}
+                deliveries={snapshot.deliveries.filter((item) => item.taskId === task.id)}
+                defaultBranch={snapshot.projects.find((item) => item.id === task.projectId)?.defaultBranch ?? null}
                 verifications={snapshot.verifications.filter((item) => item.taskId === task.id)}
                 checkoutBlocked={snapshot.observedSessions.some((item) => item.checkoutId === checkout.id &&
                   item.state !== 'ended' && item.dismissedRevision !== item.revision)}
