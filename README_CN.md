@@ -2,6 +2,8 @@
 
 任务工作台重构进度见[实施规划](docs/refactor-plan.md)。修改前请阅读 [LESSONS.md](LESSONS.md)，
 并记录已验证的问题、原因和预防方法。每个完成的重构步骤分别验证并提交。
+[Runtime 验证工具](tools/runtime-probe/README.md)用于验证独立运行和 SSH 事件恢复，
+目前作为隔离实验，现有 Gate 会话继续使用原来的后端连接方式。
 
 [English](README.md) | [中文](README_CN.md)
 

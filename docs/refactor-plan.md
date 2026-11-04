@@ -57,15 +57,17 @@ validation; neither follows automatically from process supervision or hooks.
 ### P0: Runtime feasibility
 
 - [x] Add the refactor tracker and lessons workflow.
-- [ ] Define the minimal runtime protocol and capability boundaries.
-- [ ] Build an isolated prototype with durable events and idempotent start requests.
-- [ ] Validate execution across SSH disconnects and client restarts using localhost SSH first.
-- [ ] Validate input, output, exit status, interruption, and duplicate-request behavior.
-- [ ] Audit the installed providers and document live-agent validation limits.
-- [ ] Record the runtime decision and evidence before production integration.
+- [x] Define the minimal runtime protocol and capability boundaries.
+- [x] Build an isolated prototype with durable events and idempotent start requests.
+- [x] Validate execution across SSH disconnects and client restarts using localhost SSH first.
+- [x] Validate input, output, exit status, interruption, and duplicate-request behavior.
+- [x] Audit the installed providers and document live-agent validation limits.
+- [x] Record the runtime decision and evidence before production integration.
 
 Acceptance: repeatable commands prove which lifecycle guarantees hold; no existing sessions or database
 are modified by the prototype. A deterministic fixture tests transport independently of model access.
+
+Evidence and limits: [P0 runtime evaluation](runtime-evaluation.md).
 
 ### P1: Task model and navigation
 

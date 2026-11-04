@@ -25,3 +25,27 @@ Keep this file concise; implementation progress belongs in [the refactor plan](d
 - Prevention: distinguish history access, conversation resume, process attachment, and input capabilities.
   Do not launch a second writer merely because a transcript was discovered.
 - Reference: `server/src/providers/types.ts` and `server/src/ssh-manager.ts`.
+
+## Non-interactive SSH has a different PATH
+
+- Observed: localhost SSH could run `tmux` but returned `node: command not found`, although local Node.js worked.
+- Cause: the non-interactive SSH environment did not include the version manager's Node.js directory.
+- Prevention: probe the exact SSH execution environment; use an explicit executable path for runtime bootstrap.
+  Do not depend on an interactive shell startup file or install another Node.js merely to work around PATH.
+- Check: `tools/runtime-probe/ssh-smoke.mjs` accepts `--node` and uses `process.execPath` for localhost.
+
+## A disappearing socket must not imply premature cleanup
+
+- Found during runtime review: closing the listener before stopping children made a shutdown probe report success
+  while processes could still be writing journals.
+- Fix: keep the ping endpoint reachable with `closing: true` until owned children have exited; then close the socket.
+- Check: the runtime test `shutdown keeps its socket alive until owned children exit` uses a TERM-resistant process.
+- Prevention: distinguish shutdown acknowledgement from confirmed cleanup before deleting runtime state.
+
+## Check installed CLI flags before reusing launch commands
+
+- Observed: Codex 0.166.0 rejects the existing `codex exec --full-auto` invocation before starting a session.
+- Check: `codex exec --full-auto --help` reports `unexpected argument`; inspect `codex exec --help` on the target.
+- Prevention: validate actual argument parsing in addition to command-string unit tests. Preserve sandbox intent
+  when replacing removed options; do not substitute an unrestricted bypass flag.
+- Affected paths: `server/src/providers/codex/index.ts` and commit-message generation in `server/src/ssh-manager.ts`.

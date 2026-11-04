@@ -79,6 +79,8 @@ Open the app → click **Add Server** → fill in your SSH credentials (password
 The task workbench refactor is tracked in [the implementation plan](docs/refactor-plan.md).
 Contributors should read [LESSONS.md](LESSONS.md) before making changes and record verified problems there.
 Each completed refactor step is validated and committed separately.
+The [runtime feasibility probe](tools/runtime-probe/README.md) checks independent execution and replay over SSH.
+It is an isolated experiment; existing Gate sessions continue using the current backend.
 
 ### Setup
 
