@@ -3,6 +3,7 @@ import { ACTIVE_RUN_STATES } from './store.js';
 import { RemoteRuntime, type RemoteEvent, type RuntimeSettings } from './remote.js';
 import type { CodeSnapshot, RunEvent } from './types.js';
 import path from 'node:path';
+import { collaborationPacket } from './collaboration.js';
 import { supportsStructuredAnswers } from './attention.js';
 
 export class ExecutionService {
@@ -39,6 +40,13 @@ export class ExecutionService {
 
   verify(taskId: string, requestId: string, command: string) {
     const run = this.db.workbench.enqueue(taskId, requestId, command, 'test');
+    void this.reconcile(run.id);
+    return run;
+  }
+
+  collaborate(taskId: string, requestId: string, kind: 'handoff' | 'review', provider: string,
+    instructions: string, sourceRunId?: string) {
+    const run = this.db.workbench.enqueue(taskId, requestId, instructions, { kind, provider, sourceRunId });
     void this.reconcile(run.id);
     return run;
   }
@@ -82,24 +90,41 @@ export class ExecutionService {
     const store = this.db.workbench;
     const execution = store.execution(runId);
     if (!execution) return;
-    const run = store.run(runId)!;
+    let run = store.run(runId)!;
     if (!ACTIVE_RUN_STATES.includes(run.state)) return;
     try {
-      const checkout = store.checkout(run.checkoutId)!;
+      let checkout = store.checkout(run.checkoutId)!;
       if (!execution.launch) {
         if (execution.stopRequested) {
           store.updateRun(runId, { state: 'interrupted', endedAt: Date.now() });
           const verification = store.verification(runId);
           if (verification) store.saveVerification({ ...verification, state: 'interrupted', endedAt: Date.now() });
+          const collaboration = store.collaboration(runId);
+          if (collaboration) store.saveCollaboration({ ...collaboration, state: 'interrupted' });
           store.releaseCheckout(runId);
           return;
         }
         execution.settings = await this.remote.install(execution.settings);
         store.saveExecution({ ...store.execution(runId)!, settings: execution.settings });
-        const codeRef = await this.remote.prepare(execution.settings, checkout.path, execution.source, execution.branch);
+        let codeRef = await this.remote.prepare(execution.settings, checkout.path, execution.source, execution.branch);
+        let collaboration = store.collaboration(runId);
+        if (collaboration && !collaboration.snapshot) {
+          const reviewPath = collaboration.kind === 'review' ? `${checkout.path}.gate-reviews/${runId}` : undefined;
+          const snapshot = await this.remote.freeze(execution.settings, checkout.path, runId, collaboration.kind, reviewPath,
+            store.project(store.task(run.taskId)!.projectId)?.defaultBranch);
+          const messages = collaboration.sourceRunId ? store.agentMessages(collaboration.sourceRunId) : [];
+          const evidence = store.verifications().filter((item) => item.taskId === run.taskId).slice(-10);
+          const packet = collaborationPacket(collaboration, snapshot, messages, evidence);
+          store.prepareCollaboration(runId, snapshot, packet, reviewPath);
+          collaboration = store.collaboration(runId)!;
+          run = store.run(runId)!;
+          checkout = store.checkout(run.checkoutId)!;
+        }
+        if (collaboration?.snapshot) codeRef = collaboration.snapshot.commit;
         // Persist the exact spawn bytes before sending start. A lost acknowledgement is retried with identical identity.
         execution.launch = run.kind === 'test' ? this.remote.verification(execution.settings, checkout.path, run.prompt)
-          : this.remote.launch(execution.settings, run.provider, checkout.path, run.prompt);
+          : this.remote.launch(execution.settings, run.provider, checkout.path, collaboration?.packet ?? run.prompt,
+            collaboration?.kind === 'review' ? collaboration.snapshot! : undefined);
         store.prepareRun(runId, execution.launch, codeRef);
       }
       // P2 executions predate release pinning; recover their client from the already persisted worker path.
@@ -148,7 +173,12 @@ export class ExecutionService {
     const run = store.run(event.runId)!;
     const payload = event.data;
     switch (event.type) {
-      case 'started': store.updateRun(run.id, { state: 'running', startedAt: event.time }); break;
+      case 'started': {
+        store.updateRun(run.id, { state: 'running', startedAt: event.time });
+        const collaboration = store.collaboration(run.id);
+        if (collaboration) store.saveCollaboration({ ...collaboration, state: 'running' });
+        break;
+      }
       case 'stopping': store.updateRun(run.id, { state: 'stopping' }); break;
       case 'error': store.updateRun(run.id, { error: String(payload.message) }); break;
       case 'lost': {
@@ -157,6 +187,8 @@ export class ExecutionService {
         store.addAttention(run.id, 'ownership-loss', 'failure', { message: payload.reason }, event.time);
         const verification = store.verification(run.id);
         if (verification) store.saveVerification({ ...verification, state: 'lost' });
+        const collaboration = store.collaboration(run.id);
+        if (collaboration) store.saveCollaboration({ ...collaboration, state: 'lost' });
         break;
       }
       case 'protocol': {
@@ -203,8 +235,12 @@ export class ExecutionService {
           endedAt: verification.endedAt ?? event.time,
           exitCode: verification.endedAt ? verification.exitCode : typeof payload.exitCode === 'number' ? payload.exitCode : null,
           signal: verification.signal ?? (typeof payload.signal === 'string' ? payload.signal : null) });
-        // Execution completion offers a review; accepting the task remains an explicit user action.
-        if (!failed && !payload.interrupted) store.updateTask(run.taskId, { status: 'review' });
+        const collaboration = store.collaboration(run.id);
+        if (collaboration) store.saveCollaboration({ ...collaboration,
+          state: failed ? 'failed' : payload.interrupted ? 'interrupted' : 'completed',
+          result: store.agentMessages(run.id).join('\n\n') || null });
+        // A review finishing in its own checkout must not overwrite a concurrently running implementation's status.
+        if (!failed && !payload.interrupted && run.kind !== 'review') store.updateTask(run.taskId, { status: 'review' });
         break;
       }
     }

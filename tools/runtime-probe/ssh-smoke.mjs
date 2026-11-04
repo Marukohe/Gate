@@ -142,7 +142,8 @@ try {
     // Isolate configuration and avoid loading the user's MCP servers, hooks, or conversations.
     await remote(`mkdir ${quote(`${root}/codex-home`)}`);
     await start('codex-protocol', '/usr/bin/env', [
-      `CODEX_HOME=${root}/codex-home`, values.codex, 'app-server', '--listen', 'stdio://',
+      `CODEX_HOME=${root}/codex-home`, values.codex, '--disable', 'hooks', '--disable', 'apps',
+      'app-server', '--listen', 'stdio://',
     ]);
     await until(async () => (await rpc({ method: 'get', runId: 'codex-protocol' })).state === 'running');
     const initialize = { id: 1, method: 'initialize', params: {
@@ -154,15 +155,26 @@ try {
     }));
     await rpc({ method: 'input', runId: 'codex-protocol', inputId: 'initialized',
       data: JSON.stringify({ method: 'initialized' }) + '\n' });
+    await rpc({ method: 'input', runId: 'codex-protocol', inputId: 'read-config',
+      data: JSON.stringify({ id: 2, method: 'config/read', params: { includeLayers: false, cwd: root } }) + '\n' });
+    await until(async () => (await stdout('codex-protocol')).split('\n').some((line) => {
+      try {
+        const message = JSON.parse(line);
+        return message.id === 2 && message.result?.config?.features?.hooks === false &&
+          message.result?.config?.features?.apps === false;
+      } catch { return false; }
+    }));
     await rpc({ method: 'interrupt', runId: 'codex-protocol' });
     await exited('codex-protocol');
-    report.providers.codex.initialize = 'passed; no model turn or account access';
+    report.providers.codex.initialize = 'passed, including review configuration read and disabled hooks/apps; no model turn or account access';
   }
   if (values.claude) {
     await remote(`mkdir ${quote(`${root}/claude-home`)}`);
     await start('claude-protocol', '/usr/bin/env', [
       `CLAUDE_CONFIG_DIR=${root}/claude-home`, values.claude, '-p', '--verbose',
       '--input-format', 'stream-json', '--output-format', 'stream-json', '--permission-prompt-tool', 'stdio',
+      '--tools', 'Read,Glob,Grep', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}',
+      '--disable-slash-commands', '--settings', '{"disableAllHooks":true}', '--add-dir', root,
     ]);
     await until(async () => (await rpc({ method: 'get', runId: 'claude-protocol' })).state === 'running');
     await rpc({ method: 'input', runId: 'claude-protocol', inputId: 'initialize', data: JSON.stringify({

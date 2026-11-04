@@ -90,6 +90,16 @@ export interface Verification {
   startedAt: number | null; endedAt: number | null; exitCode: number | null; signal: string | null;
 }
 
+export interface FrozenSnapshot extends CodeSnapshot { commit: string; ref: string; base: string; patchPath: string }
+
+export interface CollaborationRecord {
+  id: string; taskId: string; runId: string; kind: 'handoff' | 'review'; sourceRunId: string | null;
+  sourceCheckoutId: string; sourceProvider: string | null; targetProvider: string;
+  goal: string; acceptance: string; instructions: string; createdAt: number;
+  snapshot: FrozenSnapshot | null; packet: string | null; result: string | null;
+  state: 'preparing' | 'running' | 'completed' | 'failed' | 'interrupted' | 'lost';
+}
+
 export interface TaskResult {
   snapshot: CodeSnapshot; status: string; diff: string; truncated: boolean; capturedAt: number;
 }
@@ -101,4 +111,5 @@ export interface WorkbenchSnapshot {
   runs: Run[];
   attention: Attention[];
   verifications: Verification[];
+  collaborations: CollaborationRecord[];
 }

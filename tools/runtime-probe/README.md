@@ -20,6 +20,7 @@ Optional installed-provider checks:
 node tools/runtime-probe/ssh-smoke.mjs --host localhost \
   --codex /absolute/path/to/codex --claude /absolute/path/to/claude \
   --report /tmp/gate-runtime-report.json
+GATE_CODEX_BIN=/absolute/path/to/codex node --test tools/runtime-probe/provider-cli.test.mjs
 ```
 
 The script uploads only these probe modules to a fresh `/tmp/gate-p0.*` directory, starts a detached runtime,
@@ -30,11 +31,14 @@ and print the directory; never stop unrelated processes or remove directories ba
 Provider checks run `--version` and initialize each CLI's bidirectional protocol over stdio, using isolated
 `CODEX_HOME` / `CLAUDE_CONFIG_DIR` directories. No user prompt or model turn is sent. Semantic approvals, terminal
 attachment, and hooks are not exercised by this probe.
+Review launch restrictions and Codex configuration reads are included. The optional Codex test creates a read-only
+thread and verifies an inherited MCP server stays disabled; it intercepts the turn request before sending any prompt.
 
 The production workbench check additionally restarts the actual backend, disconnects its SSH transport, checks
 parallel worktrees and confirmed completion/stop, persists decisions across restart, rejects conflicting answers,
 and runs real verification commands with code snapshots and downloaded logs. Provider decisions are exercised through
-a deterministic Codex app-server fixture:
+deterministic Claude streaming and Codex app-server fixtures. It also verifies handoff context, a fixed review snapshot
+across backend restart, concurrent work in the source checkout, and failure when the review checkout changes:
 
 ```bash
 npm run build

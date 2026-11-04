@@ -149,6 +149,48 @@ try {
 
   assert.equal(ssh(`cat ${quote(`${firstPath}/received-prompt`)}`), prompt);
   assert.equal(ssh(`test ! -e ${quote(`${firstPath}/injected`)} && test ! -e ${quote(`${firstPath}/injected2`)} && printf safe`).trim(), 'safe');
+  const collaborationTask = await api('/tasks', 'POST', { projectId: project.id, checkoutId: checkout.id,
+    title: 'Collaborative task', goal: 'Implement handoff behavior', acceptance: 'Timeout edge is covered', provider: 'claude' });
+  const original = await api(`/tasks/${collaborationTask.id}/runs`, 'POST', { requestId: 'original-claude' });
+  await until(async () => (await api('')).runs.find((run) => run.id === original.id).state === 'completed', 'initial Claude fixture');
+  const check = await api(`/tasks/${collaborationTask.id}/verify`, 'POST', { requestId: 'handoff-evidence', command: 'printf handoff-test' });
+  await until(async () => (await api('')).runs.find((run) => run.id === check.id).state === 'completed', 'handoff evidence');
+  const handed = await api(`/tasks/${collaborationTask.id}/collaborate`, 'POST', { requestId: 'handoff', kind: 'handoff',
+    sourceRunId: original.id, provider: 'codex', instructions: 'Check edge cases' });
+  const handoff = await until(async () => (await api('')).collaborations.find((item) => item.runId === handed.id && item.state === 'running'), 'handoff running');
+  assert.ok(handoff.packet.includes('Prior agent finding'));
+  assert.ok(handoff.packet.includes('handoff-test'));
+  assert.ok(handoff.packet.includes('Timeout edge is covered'));
+  const handoffState = await api('');
+  const sourcePath = handoffState.checkouts.find((item) => item.id === handed.checkoutId).path;
+  assert.ok(ssh(`cat ${quote(`${sourcePath}/received-prompt`)}`).includes('Handoff from claude'));
+  ssh(`touch ${quote(`${sourcePath}/finish-fixture`)}`);
+  await until(async () => (await api('')).runs.find((run) => run.id === handed.id).state === 'completed', 'handoff completion');
+  const reviewed = await api(`/tasks/${collaborationTask.id}/collaborate`, 'POST', { requestId: 'review', kind: 'review',
+    provider: 'codex', instructions: 'Find regressions independently' });
+  const review = await until(async () => (await api('')).collaborations.find((item) => item.runId === reviewed.id && item.state === 'running'), 'fixed review running');
+  assert.ok(!review.packet.includes('Prior agent finding'));
+  const reviewState = await api('');
+  const reviewCheckout = reviewState.checkouts.find((item) => item.id === reviewState.runs.find((item) => item.id === reviewed.id).checkoutId);
+  assert.notEqual(reviewCheckout.path, sourcePath);
+  assert.equal(ssh(`git -C ${quote(reviewCheckout.path)} rev-parse HEAD`).trim(), review.snapshot.commit);
+  await stopBackend(); await startBackend();
+  const writer = await api(`/tasks/${collaborationTask.id}/verify`, 'POST', { requestId: 'parallel-writer',
+    command: 'printf changed > after-review.txt; sleep 4; printf verification-done' });
+  await until(async () => (await api('')).runs.find((item) => item.id === writer.id).state === 'running', 'writer alongside review');
+  ssh(`touch ${quote(`${root}/finish-review`)}`);
+  await until(async () => (await api('')).collaborations.find((item) => item.runId === reviewed.id).state === 'completed', 'independent review result');
+  const concurrently = await api('');
+  assert.equal(concurrently.tasks.find((item) => item.id === collaborationTask.id).status, 'in-progress');
+  assert.equal(ssh(`test ! -e ${quote(`${reviewCheckout.path}/after-review.txt`)} && printf isolated`).trim(), 'isolated');
+  await until(async () => (await api('')).runs.find((item) => item.id === writer.id).state === 'completed', 'writer completion');
+  const latestCode = await api(`/tasks/${collaborationTask.id}/result`);
+  assert.notEqual(latestCode.snapshot.tree, review.snapshot.tree);
+  const invalidReview = await api(`/tasks/${collaborationTask.id}/collaborate`, 'POST', { requestId: 'mutated-review',
+    kind: 'review', provider: 'codex', instructions: 'mutate-fixture' });
+  await until(async () => (await api('')).collaborations.find((item) => item.runId === invalidReview.id).state === 'failed', 'review mutation rejection');
+  assert.equal(ssh(`test ! -e ${quote(`${sourcePath}/unexpected-review-edit`)} && printf safe`).trim(), 'safe');
+
   if (process.env.GATE_TEST_PLAYWRIGHT) {
     const { chromium } = await import(process.env.GATE_TEST_PLAYWRIGHT);
     const browser = await chromium.launch({ headless: true, executablePath: process.env.GATE_TEST_CHROMIUM,
@@ -192,6 +234,25 @@ try {
       assert.notEqual((await api('')).tasks.find((item) => item.id === browserDecision.id).status, 'done');
       await page.getByRole('combobox', { name: 'Task status' }).selectOption('done');
       await until(async () => (await api('')).tasks.find((item) => item.id === browserDecision.id).status === 'done', 'explicit task acceptance');
+      await page.goto(`${base}/#task/${collaborationTask.id}`);
+      await page.getByRole('combobox', { name: 'Next agent' }).selectOption('claude');
+      await page.getByRole('textbox', { name: 'Handoff or review instructions' }).fill('Continue with the recorded context');
+      const previous = (await api('')).collaborations.length;
+      await page.getByRole('button', { name: 'Hand off task', exact: true }).click();
+      await until(async () => {
+        const items = (await api('')).collaborations;
+        return items.length === previous + 1 && items.filter((item) => item.taskId === collaborationTask.id).at(-1).state === 'completed';
+      }, 'browser handoff');
+      await page.getByRole('button', { name: 'Refresh changes', exact: true }).click();
+      await page.getByText('Task code has changed since this review snapshot.', { exact: true }).first().waitFor();
+      await page.getByRole('heading', { name: 'Handoff & independent review', exact: true }).scrollIntoViewIfNeeded();
+      await page.screenshot({ path: '/tmp/gate-p4-collaboration.png' });
+      for (const width of [320, 390, 1365]) {
+        await page.setViewportSize({ width, height: 900 });
+        const clipped = await page.locator('button:visible, input:visible, textarea:visible, select:visible').evaluateAll((elements) =>
+          elements.filter((element) => { const box = element.getBoundingClientRect(); return box.left < 0 || box.right > innerWidth + 1; }).length);
+        assert.equal(clipped, 0, `Collaboration controls at ${width}px`);
+      }
       await page.goto(`${base}/#task/${first.id}`);
       await page.getByText(/tick 1/).waitFor();
       for (const width of [320, 390, 1365]) {
@@ -237,7 +298,8 @@ try {
   assert.equal(db.workbench.run(one.id).exitCode, 0);
   const report = { backendRestart: 'passed', sshReconnect: 'passed', deduplicatedStart: 'passed', literalPrompt: 'passed',
     parallelWorktrees: 'passed', confirmedCompletionAndStop: 'passed',
-    durableDecisions: 'passed', concurrentDecisionConflict: 'passed', verificationSnapshotsAndLogs: 'passed', provider: 'deterministic app-server fixture; no model call' };
+    durableDecisions: 'passed', concurrentDecisionConflict: 'passed', verificationSnapshotsAndLogs: 'passed', handoff: 'passed', fixedReviewWithConcurrentWriter: 'passed',
+    modifiedReviewRejected: 'passed', provider: 'deterministic app-server fixture; no model call' };
   console.log(JSON.stringify(report, null, 2));
   await remote.request(settings, { method: 'shutdown' });
   await until(async () => { try { await remote.request(settings, { method: 'ping' }); return false; } catch { return true; } }, 'runtime drain');

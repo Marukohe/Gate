@@ -1,7 +1,7 @@
 import type BetterSqlite3 from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import type { Attention, Verification, Checkout, Project, Run, RunEvent, RunKind, RunState, Task, TaskStatus, WorkbenchSnapshot } from './types.js';
+import type { Attention, Verification, CollaborationRecord, FrozenSnapshot, Checkout, Project, Run, RunEvent, RunKind, RunState, Task, TaskStatus, WorkbenchSnapshot } from './types.js';
 import { describeAttention, supportsStructuredAnswers, validateDecision } from './attention.js';
 import type { LaunchSpec, RuntimeSettings } from './remote.js';
 
@@ -72,6 +72,9 @@ export class WorkbenchStore {
           data TEXT NOT NULL, UNIQUE(runId, requestId)
         );
         CREATE TABLE IF NOT EXISTS workbench_features (name TEXT PRIMARY KEY);
+        CREATE TABLE IF NOT EXISTS collaborations (
+          id TEXT PRIMARY KEY, runId TEXT NOT NULL UNIQUE REFERENCES runs(id), data TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS verifications (
           id TEXT PRIMARY KEY, runId TEXT NOT NULL UNIQUE REFERENCES runs(id), data TEXT NOT NULL
         );
@@ -145,40 +148,59 @@ export class WorkbenchStore {
     })();
   }
 
-  enqueue(taskId: string, requestId: string, prompt: string, kind: 'implementation' | 'test' = 'implementation'): Run {
+  enqueue(taskId: string, requestId: string, prompt: string,
+    options: 'implementation' | 'test' | { kind: 'handoff' | 'review'; provider: string; sourceRunId?: string } = 'implementation'): Run {
+    const kind = typeof options === 'string' ? options : options.kind;
+    const targetProvider = typeof options === 'string' ? undefined : options.provider;
+    const sourceRunId = typeof options === 'string' ? undefined : options.sourceRunId;
+    if (targetProvider && !['claude', 'codex'].includes(targetProvider)) throw new Error('Choose Claude or Codex');
     return this.db.transaction(() => {
       const existing = this.db.prepare('SELECT * FROM runs WHERE requestId = ?').get(requestId) as Run | undefined;
       if (existing) {
-        if (existing.taskId !== taskId || existing.prompt !== prompt || existing.kind !== kind) throw new Error('Request ID belongs to another request');
+        if (existing.taskId !== taskId || existing.prompt !== prompt || existing.kind !== kind ||
+          (targetProvider && existing.provider !== targetProvider) ||
+          (sourceRunId && this.collaboration(existing.id)?.sourceRunId !== sourceRunId)) {
+          throw new Error('Request ID belongs to another request');
+        }
         return existing;
       }
       const task = this.task(taskId);
       if (!task) throw new Error('Task not found');
       if (['done', 'canceled'].includes(task.status)) throw new Error('Reopen the task before starting a run');
-      if (this.activeRuns().some((run) => run.taskId === taskId) ||
-        this.db.prepare("SELECT 1 FROM runs WHERE taskId = ? AND state = 'lost'").get(taskId)) {
+      if (this.activeRuns().some((run) => run.taskId === taskId && run.kind !== 'review') ||
+        this.db.prepare("SELECT 1 FROM runs WHERE taskId = ? AND state = 'lost' AND checkoutId = ?").get(taskId, task.checkoutId)) {
         throw new Error('Task has an active run or unresolved ownership loss');
+      }
+      const sourceRun = sourceRunId ? this.run(sourceRunId) : undefined;
+      if (kind === 'handoff' && (!sourceRun || sourceRun.taskId !== taskId ||
+        !['completed', 'failed', 'interrupted'].includes(sourceRun.state) || sourceRun.kind === 'review' ||
+        !['claude', 'codex'].includes(sourceRun.provider))) {
+        throw new Error('Choose a confirmed, finished agent run from this task for handoff');
       }
       let checkout = this.checkout(task.checkoutId)!;
       const settings = this.runtimeSettings(checkout.serverId);
       if (!settings) throw new Error('Set up the remote runtime on this machine first');
       let source: string | null = null;
       let branch: string | null = null;
-      if (task.isolation === 'worktree' && checkout.kind !== 'worktree') {
+      if (kind !== 'review' && task.isolation === 'worktree' && checkout.kind !== 'worktree') {
         source = checkout.path;
         branch = `gate/${task.id}`;
         checkout = this.createCheckout({ projectId: task.projectId, serverId: checkout.serverId,
           path: `${source}.gate-worktrees/${task.id}`, branch, kind: 'worktree' });
         this.updateTask(taskId, { checkoutId: checkout.id });
       }
-      const run = this.createRun({ taskId, requestId, prompt, kind, provider: kind === 'test' ? 'shell' : task.provider, checkoutId: checkout.id });
+      const run = this.createRun({ taskId, requestId, prompt, kind, provider: kind === 'test' ? 'shell' : targetProvider ?? task.provider, checkoutId: checkout.id });
       this.acquireCheckout(run.id);
       this.saveExecution({ runId: run.id, settings, launch: null, source, branch,
         stopRequested: false, connectionError: null, lastSeenAt: null });
       if (kind === 'test') this.saveVerification({ id: randomUUID(), taskId, runId: run.id, command: prompt,
         cwd: checkout.path, state: 'queued', before: null, after: null, startedAt: null, endedAt: null,
         exitCode: null, signal: null });
-      this.updateTask(taskId, { status: 'in-progress' });
+      if (kind === 'handoff' || kind === 'review') this.saveCollaboration({ id: randomUUID(), taskId, runId: run.id,
+        kind, sourceRunId: sourceRunId ?? null, sourceCheckoutId: checkout.id, sourceProvider: sourceRun?.provider ?? null,
+        targetProvider: run.provider, goal: task.goal, acceptance: task.acceptance, instructions: prompt, createdAt: Date.now(),
+        snapshot: null, packet: null, result: null, state: 'preparing' });
+      if (kind !== 'review') this.updateTask(taskId, { status: 'in-progress', ...(kind === 'handoff' ? { provider: run.provider } : {}) });
       return run;
     })();
   }
@@ -222,9 +244,49 @@ export class WorkbenchStore {
       runs: this.db.prepare('SELECT * FROM runs ORDER BY createdAt DESC, id').all() as Run[],
       attention: this.attentionItems(),
       verifications: this.verifications(),
+      collaborations: this.collaborations(),
     };
   }
 
+  collaborations(): CollaborationRecord[] {
+    return (this.db.prepare('SELECT data FROM collaborations').all() as { data: string }[]).map((row) => JSON.parse(row.data));
+  }
+
+  collaboration(runId: string): CollaborationRecord | undefined {
+    const row = this.db.prepare('SELECT data FROM collaborations WHERE runId = ?').get(runId) as { data: string } | undefined;
+    return row ? JSON.parse(row.data) : undefined;
+  }
+
+  saveCollaboration(item: CollaborationRecord): void {
+    this.db.prepare('INSERT INTO collaborations VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET data=excluded.data')
+      .run(item.id, item.runId, JSON.stringify(item));
+  }
+
+  prepareCollaboration(runId: string, snapshot: FrozenSnapshot, packet: string, reviewPath?: string): void {
+    this.db.transaction(() => {
+      const item = this.collaboration(runId);
+      const run = this.run(runId);
+      if (!item || !run || this.execution(runId)?.launch) throw new Error('Collaboration preparation is no longer pending');
+      if (item.snapshot) return;
+      if (item.kind === 'review') {
+        const source = this.checkout(item.sourceCheckoutId)!;
+        if (!reviewPath || reviewPath === source.path) throw new Error('Review requires an isolated checkout');
+        const checkout = this.createCheckout({ projectId: source.projectId, serverId: source.serverId,
+          path: reviewPath, kind: 'worktree' });
+        this.db.prepare('DELETE FROM checkout_leases WHERE runId = ?').run(runId);
+        this.updateRun(runId, { checkoutId: checkout.id });
+        this.acquireCheckout(runId);
+      }
+      this.saveCollaboration({ ...item, snapshot, packet });
+    })();
+  }
+
+  agentMessages(runId: string): string[] {
+    const rows = this.db.prepare(`SELECT json_extract(data, '$.data.text') AS text FROM run_events
+      WHERE runId = ? AND type = 'protocol' AND json_extract(data, '$.data.type') = 'message' ORDER BY seq DESC LIMIT 20`)
+      .all(runId) as { text: string }[];
+    return rows.reverse().map((row) => String(row.text).slice(0, 10_000));
+  }
 
   attentionItems(runId?: string): Attention[] {
     const rows = (runId ? this.db.prepare('SELECT data FROM attention WHERE runId = ?').all(runId)
@@ -249,6 +311,9 @@ export class WorkbenchStore {
     let description = method === 'failure'
       ? { kind: 'failure' as const, title: String(detail.message ?? 'Run failed'), questions: [], choices: ['acknowledge'] }
       : describeAttention(run.provider, method, detail);
+    if (run.kind === 'review' && description.kind === 'approval') {
+      description = { kind: 'unsupported', title: 'Review runs cannot grant additional access', questions: [], choices: [] };
+    }
     const execution = this.execution(runId);
     if (description.kind === 'question' && run.provider === 'claude' && execution?.launch &&
       !supportsStructuredAnswers(execution.launch.initialInput)) {

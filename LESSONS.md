@@ -108,3 +108,20 @@ Keep this file concise; implementation progress belongs in [the refactor plan](d
   a `better-sqlite3` iterator.
 - Fix: read bounded keyset pages with `.all()`, finish the read, then write each page's projections in the migration.
 - Check: the P2 attention migration regression covers opening, importing, answering, and reopening the database.
+
+## Empty provider configuration tables do not disable inherited entries
+
+- Observed: Codex 0.166.0 kept an inherited MCP server enabled with `-c mcp_servers={}`.
+- Cause: configuration tables merge. Quoted dotted keys in app-server thread overrides also created a different
+  entry instead of disabling the existing server.
+- Fix: read the effective checkout configuration, then provide nested per-entry `enabled: false` thread overrides.
+- Check: `GATE_CODEX_BIN=/path/to/codex node --test tools/runtime-probe/provider-cli.test.mjs` creates a read-only
+  thread and confirms a server with dots in its name is disabled and never starts. It sends no model prompt.
+
+## Review completion belongs to its snapshot, not the task's newest code
+
+- Found during collaboration implementation: a review can finish after a new writer has started in the task checkout.
+- Fix: pin the commit, tree, comparison base, and diff; use a separate review checkout; keep task status independent
+  of review completion. Check the review checkout again before marking the run successful.
+- Check: the localhost workbench smoke runs source verification during review, checks that review does not overwrite
+  `in-progress`, detects stale evidence, and rejects a review whose own checkout changed.

@@ -20,6 +20,13 @@ export function createAdapter(config, send, emit, finish) {
     send({ type: 'control_request', request_id: 'gate-init', request: { subtype: 'initialize' } });
   } else throw new Error('Unsupported managed provider');
 
+  function startThread(overrides) {
+    send({ id: 'gate-thread', method: threadId ? 'thread/resume' : 'thread/start', params: {
+      ...(threadId ? { threadId } : {}), cwd: config.cwd, approvalPolicy: 'on-request',
+      sandbox: config.readOnly ? 'read-only' : 'workspace-write', ...(overrides ? { config: overrides } : {}),
+    } });
+  }
+
   function message(msg) {
     if (config.provider === 'codex') {
       if (msg.id !== undefined && msg.method) {
@@ -29,10 +36,20 @@ export function createAdapter(config, send, emit, finish) {
       if (msg.error) { done(true, msg.error.message ?? 'Provider request failed'); return; }
       if (msg.id === 'gate-init') {
         send({ method: 'initialized' });
-        send({ id: 'gate-thread', method: threadId ? 'thread/resume' : 'thread/start', params: {
-          ...(threadId ? { threadId } : {}), cwd: config.cwd, approvalPolicy: 'on-request',
-          sandbox: config.readOnly ? 'read-only' : 'workspace-write',
-        } });
+        if (config.readOnly) {
+          send({ id: 'gate-review-config', method: 'config/read', params: { cwd: config.cwd, includeLayers: false } });
+          return;
+        }
+        startThread();
+      } else if (msg.id === 'gate-review-config') {
+        const effective = msg.result?.config;
+        if (!effective || typeof effective !== 'object') { done(true, 'Cannot inspect review tool configuration'); return; }
+        // Empty config tables merge with inherited entries; disable each entry explicitly for this thread.
+        const overrides = {};
+        for (const table of ['mcp_servers', 'plugins']) {
+          overrides[table] = Object.fromEntries(Object.keys(effective[table] ?? {}).map((name) => [name, { enabled: false }]));
+        }
+        startThread(overrides);
       } else if (msg.id === 'gate-thread') {
         threadId = msg.result?.thread?.id;
         if (!threadId) { done(true, 'Provider did not return a thread ID'); return; }

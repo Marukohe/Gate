@@ -32,6 +32,28 @@ files, installed dependencies, and external services are not part of the code sn
 the checkout. A changed checkout makes prior evidence stale; a command that changes source code is explicitly flagged.
 Passing verification and agent completion never mark a task done. Acceptance is a separate user action.
 
+## Handoff and independent review
+
+After an agent exits, choose a finished run and a target provider in the task's collaboration panel. Handoff starts
+a fresh conversation with the saved goal, acceptance criteria, additional instructions, recent agent messages, and
+verification evidence. Previous conclusions are labeled unverified. The exact packet and source run remain visible.
+
+Review captures tracked and non-ignored untracked code in a synthetic commit under `refs/gate/review/<runId>` and
+creates a detached worktree beside the task checkout. It preserves the source branch and staging area. The comparison
+base and full diff are pinned with the snapshot, so retries cannot silently review a newer version. Review starts
+with a fresh conversation and does not receive the implementation agent's conclusions. The source checkout lock is
+released only after the review checkout and its ownership are saved, allowing subsequent task work to proceed.
+
+Codex reviews use a read-only sandbox with hooks/apps disabled and each inherited MCP server/plugin disabled in the
+thread configuration. Claude reviews expose only Read, Glob, and Grep, disable slash commands, supply an empty strict
+MCP configuration, and request disabled hooks. These are provider restrictions, not an OS sandbox for Claude or a
+replacement for machine administration policy. Review runs cannot grant additional tool access through Gate.
+The worker checks HEAD and the code tree again before reporting success; changed review code fails the run.
+
+Refresh changes to compare a review with the latest task snapshot. Review completion does not overwrite a concurrent
+writer's task status or accept the task. Review worktrees, synthetic refs, and diff artifacts are retained for inspection;
+automatic cleanup is not implemented. Ignored files and external dependencies are outside the snapshot guarantee.
+
 ## Contracts
 
 - Prompts travel as JSON on SSH stdin, never as interpolated shell commands.
@@ -63,14 +85,18 @@ Provider references: [Codex app-server](https://learn.chatgpt.com/docs/app-serve
   actual backend process restart, closed/reopened SSH transport, parallel worktrees, partial Git preparation recovery,
   literal prompt transport, deduplicated starts/events, confirmed completion and stop, decisions across restart,
   actual test commands with exit 0 and 7, source-change detection, and complete event-log downloads.
+  Collaboration checks cover cross-provider handoff context, backend restart during review, a concurrent source
+  verification, stale review detection, and rejection of a modified review checkout.
 - Optional browser smoke: start/output/stop, two-browser decision synchronization, verification, explicit task acceptance,
   and controls at 320px, 390px, and 1365px.
 - Installed Claude Code 2.1.126 and Codex 0.166.0 both accepted protocol initialization through the runtime using
   isolated configuration directories. No model prompts or account operations were performed.
+- `GATE_CODEX_BIN=/path/to/codex node --test tools/runtime-probe/provider-cli.test.mjs` creates a real read-only
+  Codex thread with an inherited MCP fixture and confirms it stays disabled without starting a model turn.
 
 ## Remaining boundaries
 
 The end-to-end lifecycle test uses a deterministic provider fixture. Real model/tool/approval execution still needs
-separate validation. PTYs, hooks, handoff, and review snapshots are P4. Machine reboot, runtime-crash reattachment,
+separate validation. Managed PTYs and external-session hooks remain in P4. Machine reboot, runtime-crash reattachment,
 disk-full recovery, automatic journal retention, and descendants escaping the owned process group are not guaranteed.
 Concurrent writers started outside managed task execution are not covered by checkout locks.

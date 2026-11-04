@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import readline from 'node:readline';
 import path from 'node:path';
 import { createAdapter } from './provider.mjs';
+import { captureSnapshot } from './snapshot.mjs';
 
 const emit = (value) => process.stdout.write(JSON.stringify(value) + '\n');
 let child;
@@ -20,9 +21,14 @@ input.on('line', (line) => {
     value = JSON.parse(line);
     if (adapter) { adapter.input(value); return; }
     if (!['claude', 'codex'].includes(value.provider)) throw new Error('Unsupported provider');
-    const args = value.provider === 'codex' ? ['app-server', '--listen', 'stdio://'] :
+    const args = value.provider === 'codex' ? [...(value.readOnly
+      ? ['--disable', 'hooks', '--disable', 'apps'] : []),
+      'app-server', '--listen', 'stdio://'] :
       ['-p', '--verbose', '--input-format', 'stream-json', '--output-format', 'stream-json',
-        '--permission-prompt-tool', 'stdio', ...(value.nativeSessionId ? ['--resume', value.nativeSessionId] : [])];
+        '--permission-prompt-tool', 'stdio', ...(value.nativeSessionId ? ['--resume', value.nativeSessionId] : []),
+        ...(value.readOnly ? ['--tools', 'Read,Glob,Grep', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}',
+          '--disable-slash-commands', '--settings', '{"disableAllHooks":true}',
+          ...(value.review?.patchPath ? ['--add-dir', path.dirname(value.review.patchPath)] : [])] : [])];
     child = spawn(value.executable, args, { cwd: value.cwd, stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ''}` } });
     child.stderr.pipe(process.stderr);
@@ -38,6 +44,15 @@ input.on('line', (line) => {
     lines.on('line', (data) => { try { adapter.message(JSON.parse(data)); } catch (error) { fail(error); } });
     child.on('close', (code, signal) => {
       clearTimeout(timer);
+      if (value.review) {
+        try {
+          const snapshot = captureSnapshot(value.cwd);
+          if (snapshot.head !== value.review.commit || snapshot.tree !== value.review.tree) {
+            throw new Error('The review checkout changed; this result is not a review of the fixed snapshot');
+          }
+          emit({ type: 'review-verified', snapshot });
+        } catch (error) { failure = true; emit({ type: 'result', failed: true, message: error.message }); }
+      }
       if (!adapter.isComplete()) emit({ type: 'result', failed: true, message: `Provider exited before a result (${code ?? signal})` });
       input.close();
       process.stdin.destroy();

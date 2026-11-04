@@ -71,3 +71,21 @@ test('questions produce provider-specific answers without dropping original Clau
     questions, answers: { 'Features?': 'Replay, Approvals' },
   } });
 });
+
+test('Codex review disables inherited MCP servers and plugins before creating a read-only thread', () => {
+  const sent = [], finished = [];
+  const a = createAdapter({ provider: 'codex', cwd: '/review', prompt: 'Review', readOnly: true },
+    (value) => sent.push(value), () => {}, (failed) => finished.push(failed));
+  a.message({ id: 'gate-init', result: {} });
+  assert.equal(sent.at(-1).method, 'config/read');
+  assert.equal(sent.some((value) => value.method === 'thread/start'), false);
+  a.message({ id: 'gate-review-config', result: { config: {
+    mcp_servers: { 'server.with.dots': { command: '/tool' } }, plugins: { 'plugin@market': { enabled: true } },
+  } } });
+  assert.equal(sent.at(-1).params.sandbox, 'read-only');
+  assert.deepEqual(sent.at(-1).params.config, {
+    mcp_servers: { 'server.with.dots': { enabled: false } }, plugins: { 'plugin@market': { enabled: false } },
+  });
+  a.message({ id: 'gate-review-config', error: { message: 'Unsupported configuration read' } });
+  assert.deepEqual(finished, [true]);
+});

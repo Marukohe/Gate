@@ -92,6 +92,7 @@ export function Workbench({ onLegacy, onAddServer, onLegacySession }: {
                 {snapshot.projects.find((p) => p.id === task.projectId)?.name}</Button>
               <TaskDetail key={task.id} task={task} checkout={checkout} runs={snapshot.runs.filter((r) => r.taskId === task.id)}
                 attention={snapshot.attention.filter((item) => item.taskId === task.id)}
+                collaborations={snapshot.collaborations.filter((item) => item.taskId === task.id)}
                 verifications={snapshot.verifications.filter((item) => item.taskId === task.id)}
                 mutate={mutate} busy={busy} onLegacySession={onLegacySession} />
             </> : project ? <>

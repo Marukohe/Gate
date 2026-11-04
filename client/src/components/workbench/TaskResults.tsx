@@ -1,21 +1,25 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import type { Run, Task, TaskResult, Verification } from '../../../../server/src/workbench/types';
+import type { CodeSnapshot, Run, Task, TaskResult, Verification } from '../../../../server/src/workbench/types';
 import { workbenchRequest, type WorkbenchActions } from './use-workbench';
 
-export function TaskResults({ task, runs, verifications, mutate, busy }: WorkbenchActions & {
-  task: Task; runs: Run[]; verifications: Verification[];
+export function TaskResults({ task, runs, verifications, onSnapshot, mutate, busy }: WorkbenchActions & {
+  task: Task; runs: Run[]; verifications: Verification[]; onSnapshot: (value: CodeSnapshot) => void;
 }) {
   const [result, setResult] = useState<TaskResult | null>(null);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [command, setCommand] = useState('');
   const request = useRef<string | null>(null);
-  const active = runs.some((run) => ['queued', 'starting', 'running', 'waiting', 'stopping', 'lost'].includes(run.state));
+  const active = runs.some((run) => ['queued', 'starting', 'running', 'waiting', 'stopping', 'lost'].includes(run.state) &&
+    (run.kind !== 'review' || run.checkoutId === task.checkoutId));
   async function refresh() {
     setRefreshing(true); setError('');
-    try { setResult(await workbenchRequest<TaskResult>(`/tasks/${task.id}/result`)); }
+    try {
+      const next = await workbenchRequest<TaskResult>(`/tasks/${task.id}/result`);
+      setResult(next); onSnapshot(next.snapshot);
+    }
     catch (err) { setError((err as Error).message); }
     finally { setRefreshing(false); }
   }

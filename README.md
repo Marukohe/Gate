@@ -35,6 +35,8 @@ Browser (React) <--WebSocket--> Node.js Backend <--SSH--> Remote Server
 - **Decisions and evidence** — Resolve agent questions and supported approvals from the attention-first Overview.
   Run test commands, inspect changes, and compare recorded evidence with the checkout's code snapshot.
   Task acceptance stays explicit; test success does not automatically mark work done.
+- **Handoff and independent review** — Continue with another agent using recorded context and test evidence.
+  Review a fixed snapshot in a separate checkout while task work continues, and see when that review becomes stale.
 
 - **Code from anywhere** — Start on your desktop, pick up on your phone. Sessions persist across devices via SSH and CLI resume.
 - **Resume saved conversations** — Find a CLI transcript and resume its conversation. This starts a new process;

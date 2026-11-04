@@ -2,9 +2,10 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import type { Attention, Verification, Checkout, Run, Task, TaskStatus } from '../../../../server/src/workbench/types';
+import type { CodeSnapshot, CollaborationRecord, Attention, Verification, Checkout, Run, Task, TaskStatus } from '../../../../server/src/workbench/types';
 import type { WorkbenchActions } from './use-workbench';
 import { AttentionPanel } from './AttentionPanel';
+import { CollaborationPanel } from './CollaborationPanel';
 import { TaskResults } from './TaskResults';
 import { RunPanel } from './RunPanel';
 import { selectClass } from './ProjectForm';
@@ -13,11 +14,12 @@ export const taskLabels: Record<TaskStatus, string> = {
   backlog: 'Backlog', 'in-progress': 'In progress', paused: 'Paused', review: 'Ready for review', done: 'Done', canceled: 'Canceled',
 };
 
-export function TaskDetail({ task, checkout, runs, attention, verifications, mutate, busy, onLegacySession }: WorkbenchActions & {
-  task: Task; checkout: Checkout; runs: Run[]; attention: Attention[]; verifications: Verification[]; onLegacySession: (serverId: string, sessionId: string) => void;
+export function TaskDetail({ task, checkout, runs, attention, verifications, collaborations, mutate, busy, onLegacySession }: WorkbenchActions & {
+  task: Task; checkout: Checkout; runs: Run[]; attention: Attention[]; verifications: Verification[]; collaborations: CollaborationRecord[]; onLegacySession: (serverId: string, sessionId: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
+  const [current, setCurrent] = useState<CodeSnapshot | null>(null);
   async function update(values: Partial<Task>) {
     setError('');
     try { await mutate(`/tasks/${task.id}`, 'PATCH', values); setEditing(false); }
@@ -54,7 +56,8 @@ export function TaskDetail({ task, checkout, runs, attention, verifications, mut
         <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{task.acceptance || 'No criteria added yet.'}</p>
       </>}
     </section>
-    <TaskResults task={task} runs={runs} verifications={verifications} mutate={mutate} busy={busy} />
+    <TaskResults task={task} runs={runs} verifications={verifications} onSnapshot={setCurrent} mutate={mutate} busy={busy} />
+    <CollaborationPanel task={task} runs={runs} records={collaborations} current={current} mutate={mutate} busy={busy} />
     <RunPanel task={task} checkout={checkout} runs={runs} mutate={mutate} busy={busy} />
     {task.legacySessionId && <Button variant="outline"
       onClick={() => onLegacySession(checkout.serverId, task.legacySessionId!)}>Open previous conversation</Button>}

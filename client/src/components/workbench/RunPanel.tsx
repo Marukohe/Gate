@@ -15,7 +15,8 @@ export function RunPanel({ task, checkout, runs, mutate, busy }: WorkbenchAction
   const [loaded, setLoaded] = useState(false);
   const [prompt, setPrompt] = useState('');
   const requestId = useRef<string | null>(null);
-  const pending = runs.some((run) => active.includes(run.state) || run.state === 'lost');
+  const pending = runs.some((run) => (active.includes(run.state) || run.state === 'lost') &&
+    (run.kind !== 'review' || run.checkoutId === task.checkoutId));
   useEffect(() => {
     let disposed = false;
     void workbenchRequest<Record<string, string> | null>(`/machines/${checkout.serverId}/runtime`).then((value) => {

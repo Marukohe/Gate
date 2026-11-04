@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
-import type { TaskResult } from './types.js';
+import type { FrozenSnapshot, TaskResult } from './types.js';
 import { fileURLToPath } from 'node:url';
 import { SSHManager } from '../ssh-manager.js';
 import type { Database } from '../db.js';
@@ -20,7 +20,7 @@ export interface RemoteEvent {
   runId: string; seq: number; time: number; type: string; [key: string]: unknown;
 }
 export const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
-const bundle = ['runtime.mjs', 'cli.mjs', 'worker.mjs', 'provider.mjs', 'snapshot.mjs', 'verifier.mjs'].map((name) => ({ name,
+const bundle = ['runtime.mjs', 'cli.mjs', 'worker.mjs', 'provider.mjs', 'snapshot.mjs', 'verifier.mjs', 'collaboration.mjs'].map((name) => ({ name,
   data: fs.readFileSync(fileURLToPath(new URL(`../../runtime/${name}`, import.meta.url))) }));
 const build = createHash('sha256').update(Buffer.concat(bundle.map((file) => file.data))).digest('hex').slice(0, 16);
 
@@ -119,10 +119,17 @@ export class RemoteRuntime {
     return this.shell(settings.serverId, `git -C ${quote(directory)} rev-parse HEAD`);
   }
 
-  launch(settings: RuntimeSettings, provider: string, cwd: string, prompt: string): LaunchSpec {
+  launch(settings: RuntimeSettings, provider: string, cwd: string, prompt: string, review?: FrozenSnapshot): LaunchSpec {
     return { command: settings.nodePath, args: [`${this.releaseDirectory(settings)}/worker.mjs`], cwd, protocol: true,
       initialInput: JSON.stringify({ gateProtocol: 2, provider, executable: provider === 'codex' ? settings.codexPath : settings.claudePath,
-        cwd, prompt }) + '\n' };
+        cwd, prompt, ...(review ? { readOnly: true, review } : {}) }) + '\n' };
+  }
+
+  async freeze(settings: RuntimeSettings, source: string, runId: string, kind: 'review' | 'handoff',
+    reviewPath?: string, baseRef?: string | null): Promise<FrozenSnapshot> {
+    return JSON.parse(await this.shell(settings.serverId,
+      `${quote(settings.nodePath)} ${quote(`${this.releaseDirectory(settings)}/collaboration.mjs`)}`,
+      JSON.stringify({ source, runId, kind, reviewPath, baseRef }))) as FrozenSnapshot;
   }
 
   verification(settings: RuntimeSettings, cwd: string, command: string): LaunchSpec {

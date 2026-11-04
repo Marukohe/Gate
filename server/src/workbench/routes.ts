@@ -58,6 +58,14 @@ export function createWorkbenchRoutes(db: Database, ssh: SSHManager, execution?:
       text(req.body.command, 'test command')));
   });
 
+  router.post('/tasks/:id/collaborate', (req, res) => {
+    if (!execution) throw new Error('Managed execution is unavailable');
+    if (req.body.kind !== 'handoff' && req.body.kind !== 'review') throw new Error('Choose handoff or review');
+    res.status(202).json(execution.collaborate(String(req.params.id), text(req.body.requestId, 'request ID'),
+      req.body.kind, provider(req.body.provider), text(req.body.instructions, 'instructions', true),
+      req.body.sourceRunId === undefined ? undefined : text(req.body.sourceRunId, 'source run')));
+  });
+
   router.get('/tasks/:id/result', async (req, res) => {
     if (!execution) throw new Error('Managed execution is unavailable');
     res.json(await execution.result(String(req.params.id)));

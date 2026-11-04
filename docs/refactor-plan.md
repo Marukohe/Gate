@@ -109,8 +109,14 @@ Actual model-generated requests remain part of final provider validation, not a 
 
 - [ ] Discover external sessions through scoped hooks/plugins without claiming unsupported control.
 - [ ] Add a managed terminal launch entry point and explicit attachment capabilities.
-- [ ] Add agent handoff and independent review tied to a fixed code snapshot.
+- [x] Add agent handoff and independent review tied to a fixed code snapshot.
 - [ ] Isolate concurrent writers with worktrees and surface shared-checkout conflicts.
+
+Collaboration evidence: localhost SSH/backend/browser checks cover handoff across providers, persisted context,
+review restart, concurrent verification in the task checkout, stale review detection, and modified-review rejection.
+Review pins a synthetic commit and comparison base; its separate checkout is verified again at completion.
+Actual Codex configuration checks confirm inherited MCP entries are disabled for review. These checks do not claim
+model-generated findings. See [managed execution](managed-execution.md) for retained artifacts and provider limits.
 
 ## Validation and delivery
 

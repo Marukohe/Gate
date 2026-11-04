@@ -77,6 +77,8 @@ Data is stored in `~/.gate/gate.db` by default.
 - `server/src/db.ts` — SQLite layer for servers, sessions, messages, workspaces, and provider session maps
 - `server/src/workbench/` — Project, checkout, task, and run persistence; additive legacy import and event cursors
 - `server/src/workbench/attention.ts` — Provider request capabilities, question normalization, and decision validation
+- `server/src/workbench/collaboration.ts` — Recorded handoff packets and fresh review context
+- `server/runtime/collaboration.mjs` — Pinned code snapshots, comparison diffs, and detached review worktrees
 - `server/src/workbench/routes.ts` — REST project/checkout/task management, runtime setup, run start/stop, decisions, verification, result snapshots, event reads/downloads
 - `server/src/workbench/execution.ts` — Durable launch, reconnection, event projection, and confirmed stop handling
 - `server/src/workbench/remote.ts` — Runtime deployment, JSON over SSH stdin, and idempotent worktree preparation
@@ -94,7 +96,8 @@ Data is stored in `~/.gate/gate.db` by default.
 - `server/src/providers/codex/` — OpenAI Codex provider, parser, transcript support, tool utils, command building
 
 **Client:**
-- `client/src/components/workbench/` — Default overview, projects, task goals, runtime setup, managed execution, decisions, result snapshots, verification evidence, and replayed output
+- `client/src/components/workbench/` — Default overview, projects, task goals, runtime setup, managed execution,
+  decisions, result snapshots, verification evidence, handoff, independent review, and replayed output
 - `client/src/App.tsx` — Top-level route state for home, workspace overview, and chat sessions
 - `client/src/hooks/use-websocket.ts` — Singleton WebSocket connection with auto-reconnect and queued workspace actions
 - `client/src/stores/` — Zustand stores: server, session, chat, git, plan, plan-mode, workspace, ui
