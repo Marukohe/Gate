@@ -1,5 +1,6 @@
 import BetterSqlite3 from 'better-sqlite3';
 import { randomUUID } from 'crypto';
+import { WorkbenchStore } from './workbench/store.js';
 
 export interface Server {
   id: string;
@@ -109,6 +110,7 @@ export type CreateServerInput = Omit<Server, 'id' | 'createdAt'>;
 export type CreateMessageInput = Omit<Message, 'id'>;
 
 export interface Database {
+  workbench: WorkbenchStore;
   createServer(input: CreateServerInput): Server;
   getServer(id: string): Server | undefined;
   listServers(): Server[];
@@ -289,7 +291,9 @@ export function createDb(dbPath: string): Database {
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_workspaceId ON sessions(workspaceId)'); } catch { /* already exists */ }
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_isHidden ON sessions(isHidden)'); } catch { /* already exists */ }
 
+  const workbench = new WorkbenchStore(db);
   return {
+    workbench,
     createServer(input) {
       const id = randomUUID();
       const createdAt = Date.now();

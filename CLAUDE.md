@@ -71,6 +71,7 @@ Data is stored in `~/.gate/gate.db` by default.
 **Server:**
 - `tools/runtime-probe/` — Isolated P0 stdio runtime and localhost SSH checks; not used by production sessions
 - `server/src/db.ts` — SQLite layer for servers, sessions, messages, workspaces, and provider session maps
+- `server/src/workbench/` — Project, checkout, task, and run persistence; additive legacy import and event cursors
 - `server/src/ssh-manager.ts` — SSH connection pool, CLI channel management, and command execution via ssh2
 - `server/src/ssh-browse.ts` — Remote directory browsing over SSH
 - `server/src/git-utils.ts` — Git command helpers

@@ -81,6 +81,8 @@ Contributors should read [LESSONS.md](LESSONS.md) before making changes and reco
 Each completed refactor step is validated and committed separately.
 The [runtime feasibility probe](tools/runtime-probe/README.md) checks independent execution and replay over SSH.
 It is an isolated experiment; existing Gate sessions continue using the current backend.
+The new task model is stored alongside legacy workspaces and sessions. Migration preserves existing chat history
+and imports explicit workspace goals once; ambiguous sessions remain available in the legacy workspace views.
 
 ### Setup
 

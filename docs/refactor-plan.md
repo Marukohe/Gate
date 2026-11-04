@@ -71,10 +71,14 @@ Evidence and limits: [P0 runtime evaluation](runtime-evaluation.md).
 
 ### P1: Task model and navigation
 
-- [ ] Add Project, Checkout, Task, and Run persistence with additive, tested migrations.
-- [ ] Preserve old workspace/session history; avoid guessing ambiguous task relationships.
+- [x] Add Project, Checkout, Task, and Run persistence with additive, tested migrations.
+- [x] Preserve old workspace/session history; avoid guessing ambiguous task relationships.
 - [ ] Add task creation, project/task lists, and independent goals and delivery status.
-- [ ] Verify two tasks in the same repository do not overwrite each other's state.
+- [x] Verify two tasks in the same repository do not overwrite each other's state.
+
+Persistence evidence: `server/src/__tests__/workbench-store.test.ts` covers repeated upgrades, untouched history,
+ambiguous primary sessions, independent task state, cross-project constraints, durable checkout ownership,
+request deduplication, and transactional event projection. Task navigation remains in progress.
 
 ### P2: Persistent managed execution
 
