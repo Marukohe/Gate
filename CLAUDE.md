@@ -110,6 +110,8 @@ Data is stored in `~/.gate/gate.db` by default.
 **Client:**
 - `client/src/components/workbench/` — Default overview, projects, task goals, runtime setup, managed execution,
   decisions, result snapshots, verification evidence, handoff, independent review, and replayed output
+- `client/src/components/workbench/TaskDetail.tsx` — Desktop execution/results columns and mobile section navigation;
+  verification/delivery panels show recent records before expandable history
 - `client/src/components/workbench/ExternalSessions.tsx` — Checkout hook settings, observed activity, task association,
   and explicit clearing after native-process inspection
 - `client/src/components/workbench/TerminalView.tsx` — Lazy xterm.js view, output replay, resize, and controller input
@@ -157,9 +159,9 @@ the terminal and its owned process session, so it cannot provide the managed-ter
 
 ## Responsive Breakpoints
 
-- Desktop (>=1024px): sidebar + workspace/chat + on-demand fixed inspector
-- Tablet (768-1023px): workspace/chat fullwidth, sidebar and inspector as drawers
-- Mobile (<768px): fullscreen workspace/chat, sidebar/inspector as bottom sheets
+- Desktop (>=1024px): task execution/results columns; legacy sidebar + workspace/chat + on-demand inspector
+- Tablet (768-1023px): stacked task sections with direct navigation; legacy sidebar/inspector as drawers
+- Mobile (<768px): stacked task sections with recent evidence first; legacy chat and bottom sheets
 
 ## Best Practices
 
@@ -174,6 +176,7 @@ the terminal and its owned process session, so it cannot provide the managed-ter
 
 Read `LESSONS.md` for relevant problems and prevention rules before investigating or changing code.
 The staged refactor and its acceptance criteria are tracked in `docs/refactor-plan.md`.
+Completed requirement coverage and validation limits are recorded in `docs/workbench-acceptance.md`.
 
 1. Review recent history:
    ```bash

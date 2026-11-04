@@ -21,6 +21,7 @@ export function RunPanel({ task, checkout, runs, checkoutBlocked, mutate, busy }
   const pending = (checkoutBlocked && (task.isolation === 'shared' || checkout.kind === 'worktree')) ||
     runs.some((run) => (active.includes(run.state) || run.state === 'lost') &&
     (run.kind !== 'review' || run.checkoutId === task.checkoutId));
+  const closedTask = ['done', 'canceled'].includes(task.status);
   useEffect(() => {
     let disposed = false;
     void workbenchRequest<Record<string, string> | null>(`/machines/${checkout.serverId}/runtime`).then((value) => {
@@ -82,13 +83,14 @@ export function RunPanel({ task, checkout, runs, checkoutBlocked, mutate, busy }
       <p className="text-xs text-muted-foreground">{task.isolation === 'worktree'
         ? 'Runs use a task worktree created from the repository’s committed HEAD.'
         : 'This run will lock the shared checkout until its exit is confirmed.'}</p>
-      <Button disabled={busy} onClick={() => void start()}>{runs.length ? 'Start another run' : 'Start task'}</Button>
+      <Button disabled={busy || closedTask} onClick={() => void start()}>{runs.length ? 'Start another run' : 'Start task'}</Button>
+      {closedTask && <p className="text-xs text-muted-foreground">Reopen the task before starting another execution.</p>}
       <div className="flex flex-wrap items-center gap-2 border-t pt-3">
         <select aria-label="Terminal program" className="rounded border bg-background px-2 py-2 text-sm" value={terminalProvider}
           onChange={(event) => { setTerminalProvider(event.target.value); terminalRequestId.current = null; }}>
           <option value="shell">Shell</option><option value="claude">Claude CLI</option><option value="codex">Codex CLI</option>
         </select>
-        <Button disabled={busy} variant="outline" onClick={() => void startTerminal()}>Open managed terminal</Button>
+        <Button disabled={busy || closedTask} variant="outline" onClick={() => void startTerminal()}>Open managed terminal</Button>
       </div>
       <p className="text-xs text-muted-foreground">A persistent native terminal with live input and resize. Approvals stay inside the terminal.</p>
     </div>}

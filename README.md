@@ -7,7 +7,7 @@
 Waiting in line, on the couch, on the train — pull out your phone and pick up right where you left off. Gate bridges your browser to CLI sessions over SSH, so your coding environment is always one tap away.
 
 ```
-Browser (React) <--WebSocket--> Node.js Backend <--SSH--> Remote Server
+Browser (React) <--HTTP/WebSocket--> Node.js Backend <--SSH--> Remote Server
                                      |
                               Provider Layer
                               Claude / Codex / ...
@@ -61,7 +61,9 @@ Browser (React) <--WebSocket--> Node.js Backend <--SSH--> Remote Server
 - **Repo scripts and delivery actions** — Optional `gate.json` scripts (`setup`, `run`, `test`) can run over SSH; generate commit messages, commit and push, push, create PR, and mark review/done/canceled from the workspace inspector.
 - **Live plan tracking** — Checklists auto-extracted from Claude's output into a side panel. Check off steps, edit plans, send them back for execution.
 - **Transcript sync** — Catch up on work done outside Gate by syncing the transcript from the remote CLI session.
-- **Responsive everywhere** — Three-column desktop, drawers on tablet, bottom sheets and swipe gestures on mobile. Notch-safe.
+- **Responsive tasks** — Execution and results share two columns on desktop. Mobile section controls reach execution,
+  results, and delivery directly; recent evidence stays visible with older records expandable.
+  Existing chat views retain their drawers, bottom sheets, and swipe gestures.
 - **Multi-CLI support** — Works with Claude Code and OpenAI Codex CLI. Switch between CLI tools within a session with automatic context sync. Provider sessions are preserved — switching back resumes your previous conversation, not a new one.
 - **Switch Chat** — Start a fresh CLI conversation or resume a previous one within the same session. Messages are scoped per CLI session so switching gives you a clean view.
 - **Persistent history** — SQLite-backed chat history survives reconnects and server restarts.
@@ -98,7 +100,8 @@ Open the app → click **Add Server** → fill in your SSH credentials (password
 
 ## Development
 
-The task workbench refactor is tracked in [the implementation plan](docs/refactor-plan.md).
+The task workbench refactor is tracked in [the implementation plan](docs/refactor-plan.md), with completed checks
+and scope in the [acceptance record](docs/workbench-acceptance.md).
 Contributors should read [LESSONS.md](LESSONS.md) before making changes and record verified problems there.
 Each completed refactor step is validated and committed separately.
 The [runtime feasibility probe](tools/runtime-probe/README.md) checks independent execution and replay over SSH.
@@ -205,9 +208,9 @@ Server → Client:
 
 | Breakpoint | Layout |
 |------------|--------|
-| Desktop (≥1024px) | Sidebar + workspace/chat + on-demand fixed inspector |
-| Tablet (768–1023px) | Workspace/chat fullwidth, sidebar/inspector as drawers |
-| Mobile (<768px) | Fullscreen workspace/chat, bottom sheets for servers and inspector |
+| Desktop (≥1024px) | Tasks: execution and results side by side. Sessions: sidebar + chat + on-demand inspector |
+| Tablet (768–1023px) | Tasks: stacked sections with direct navigation. Sessions: sidebar/inspector as drawers |
+| Mobile (<768px) | Tasks: stacked sections, current evidence before history. Sessions: fullscreen chat and bottom sheets |
 
 ## Why "Gate"?
 

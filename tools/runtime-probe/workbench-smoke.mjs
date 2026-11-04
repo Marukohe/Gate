@@ -351,6 +351,18 @@ try {
         title: 'Browser task', goal: 'Browser run', provider: 'codex' });
       await page.goto(`${base}/#task/${third.id}`);
       await page.getByRole('button', { name: 'Start task', exact: true }).waitFor();
+      await page.setViewportSize({ width: 1365, height: 900 });
+      const columns = await page.locator('[aria-label="Task execution"], [aria-label="Task results"]').evaluateAll((items) =>
+        items.map((item) => { const box = item.getBoundingClientRect(); return { left: box.left, right: box.right, top: box.top }; }));
+      assert.ok(columns[0].right < columns[1].left, 'Desktop execution and results are side by side');
+      assert.equal(columns[0].top, columns[1].top);
+      await page.screenshot({ path: '/tmp/gate-final-desktop.png', fullPage: true });
+      await page.setViewportSize({ width: 390, height: 900 });
+      await page.getByRole('navigation', { name: 'Task sections' }).getByRole('button', { name: 'Execution', exact: true }).click();
+      await delay(400);
+      const executionTop = await page.locator('[aria-label="Task execution"]').evaluate((item) => item.getBoundingClientRect().top);
+      assert.ok(executionTop >= 0 && executionTop < 200, 'Mobile execution shortcut reaches the launch controls');
+      await page.screenshot({ path: '/tmp/gate-final-mobile.png', fullPage: true });
       await page.getByRole('textbox', { name: 'Run instructions' }).fill('Started from the browser');
       await page.getByRole('button', { name: 'Start task', exact: true }).click();
       await page.getByText(/tick 1/).waitFor();
@@ -381,6 +393,14 @@ try {
       assert.notEqual((await api('')).tasks.find((item) => item.id === browserDecision.id).status, 'done');
       await page.getByRole('combobox', { name: 'Task status' }).selectOption('done');
       await until(async () => (await api('')).tasks.find((item) => item.id === browserDecision.id).status === 'done', 'explicit task acceptance');
+      await until(async () => await page.getByRole('button', { name: 'Start another run', exact: true }).isDisabled(), 'closed task cannot launch');
+      const cancelTask = await api('/tasks', 'POST', { projectId: project.id, checkoutId: checkout.id,
+        title: 'Native cancellation', goal: 'cancel-fixture', provider: 'codex' });
+      const cancelRun = await api(`/tasks/${cancelTask.id}/runs`, 'POST', { requestId: 'browser-cancel', prompt: 'cancel-fixture' });
+      await page.goto(`${base}/#task/${cancelTask.id}`);
+      await page.getByRole('button', { name: 'Cancel turn', exact: true }).click();
+      await until(async () => (await api('')).runs.find((item) => item.id === cancelRun.id).state === 'interrupted', 'browser native cancel');
+      assert.equal((await api('')).tasks.find((item) => item.id === cancelTask.id).status, 'in-progress');
       await page.goto(`${base}/#task/${collaborationTask.id}`);
       await page.getByRole('combobox', { name: 'Next agent' }).selectOption('claude');
       await page.getByRole('textbox', { name: 'Handoff or review instructions' }).fill('Continue with the recorded context');

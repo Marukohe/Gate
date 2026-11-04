@@ -23,6 +23,7 @@ input.on('line', (line) => {
     decisions.set(msg.id, msg.result);
     fs.appendFileSync('decision-replies', JSON.stringify(msg) + '\n');
     send({ method: 'serverRequest/resolved', params: { requestId: msg.id } });
+    if (msg.result.decision === 'cancel') send({ method: 'turn/completed', params: { turn: { status: 'interrupted' } } });
     if (decisions.size === 2) send({ method: 'turn/completed', params: { turn: { status: 'completed' } } });
   }
   if (msg.method === 'initialize') send({ id: msg.id, result: {} });
@@ -45,6 +46,12 @@ input.on('line', (line) => {
       return;
     }
     send({ id: msg.id, result: { turn: { id: 'fixture-turn' } } });
+    if (msg.params.input[0].text === 'cancel-fixture') {
+      send({ id: 100, method: 'item/commandExecution/requestApproval', params: {
+        command: 'printf probe', cwd: process.cwd(), availableDecisions: ['accept', 'cancel'],
+      } });
+      return;
+    }
     if (msg.params.input[0].text === 'approval-fixture') {
       send({ id: 100, method: 'item/commandExecution/requestApproval', params: {
         command: 'npm test', cwd: process.cwd(), reason: 'Validate changes', availableDecisions: ['accept', 'decline'],

@@ -37,6 +37,16 @@ export function DeliveryPanel({ task, runs, records, defaultBranch, checkoutBloc
       pending.current = null; setPreview(null);
     } catch (err) { setError((err as Error).message); }
   }
+  const times = new Map(runs.map((run) => [run.id, run.createdAt]));
+  const history = [...records].sort((a, b) => (times.get(b.runId) ?? 0) - (times.get(a.runId) ?? 0)).map((item) => <article key={item.id} className="space-y-1 rounded-lg border p-3 text-xs">
+      <p className="font-medium">{item.request.action} · {item.state}</p>
+      <p>{item.startedAt || item.endedAt ? new Date((item.startedAt ?? item.endedAt)!).toLocaleString() : 'Queued'}</p>
+      {item.result && <><p className="break-all text-muted-foreground">Commit {item.result.commit}<br />Tree {item.result.tree}</p>
+        {item.result.url && <a className="underline" href={item.result.url} target="_blank" rel="noreferrer">Open pull request</a>}</>}
+      <p className="text-muted-foreground">{['failed', 'lost', 'interrupted'].includes(item.state)
+        ? 'Inspect the execution log and repository before retrying; a command may have changed local or remote state.'
+        : 'Command output is saved in the execution log.'}</p>
+    </article>);
   return <section className="space-y-4 rounded-xl border bg-card p-5">
     <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-medium">Delivery</h2>
       <Button size="sm" variant="outline" disabled={loading} onClick={() => void refresh()}>
@@ -69,15 +79,11 @@ export function DeliveryPanel({ task, runs, records, defaultBranch, checkoutBloc
       </div>}
       {active && <p className="text-xs text-muted-foreground">Wait for the current checkout owner to finish before delivery.</p>}
     </div>}
-    {records.map((item) => <article key={item.id} className="space-y-1 rounded-lg border p-3 text-xs">
-      <p className="font-medium">{item.request.action} · {item.state}</p>
-      <p>{item.startedAt || item.endedAt ? new Date((item.startedAt ?? item.endedAt)!).toLocaleString() : 'Queued'}</p>
-      {item.result && <><p className="break-all text-muted-foreground">Commit {item.result.commit}<br />Tree {item.result.tree}</p>
-        {item.result.url && <a className="underline" href={item.result.url} target="_blank" rel="noreferrer">Open pull request</a>}</>}
-      <p className="text-muted-foreground">{['failed', 'lost', 'interrupted'].includes(item.state)
-        ? 'Inspect the execution log and repository before retrying; a command may have changed local or remote state.'
-        : 'Command output is saved in the execution log.'}</p>
-    </article>)}
+    {history[0]}
+    {history.length > 1 && <details className="text-sm">
+      <summary className="cursor-pointer text-muted-foreground">Earlier delivery records ({history.length - 1})</summary>
+      <div className="mt-3 space-y-3">{history.slice(1)}</div>
+    </details>}
     <p className="text-xs text-muted-foreground">Delivery does not accept the task. Mark it Done after checking the change and acceptance criteria.</p>
   </section>;
 }

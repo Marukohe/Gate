@@ -1,6 +1,7 @@
 # Gate
 
-任务工作台重构进度见[实施规划](docs/refactor-plan.md)。修改前请阅读 [LESSONS.md](LESSONS.md)，
+任务工作台重构进度见[实施规划](docs/refactor-plan.md)，已完成检查和范围见[验收记录](docs/workbench-acceptance.md)。
+修改前请阅读 [LESSONS.md](LESSONS.md)，
 并记录已验证的问题、原因和预防方法。每个完成的重构步骤分别验证并提交。
 [Runtime 验证工具](tools/runtime-probe/README.md)用于验证独立运行和 SSH 事件恢复，
 使用隔离数据验证 `server/runtime/` 中的托管运行时；现有 Sessions 继续使用原来的后端连接方式。
@@ -26,6 +27,8 @@ Codex 原生终端要求支持 `--no-daemon`，避免任务交给独立后台 da
 setup、run 记录会与测试证据明确区分；命令变更后必须重新查看，重复请求不会重新执行。
 任务交付可预览分支和代码版本，提交已查看的全部变更、向 origin 推送该提交，并创建或复用 GitHub 草稿 PR。
 每次操作都有独立执行记录和提交/PR 结果；旧预览会被拒绝，交付成功不会自动将任务标记为完成。
+桌面任务页并排显示执行和结果；手机可直接跳转执行、结果、交付区，最近记录优先显示，历史记录可展开。
+已完成或取消的任务需要重新打开后才能启动执行。
 配置步骤、已验证行为和限制见[托管执行说明](docs/managed-execution.md)。
 
 [English](README.md) | [中文](README_CN.md)
@@ -35,7 +38,7 @@ setup、run 记录会与测试证据明确区分；命令变更后必须重新�
 排队、沙发上、地铁里 — 掏出手机，接上之前的工作。Gate 通过 SSH 将浏览器连接到远程 CLI 会话，你的编程环境触手可及。
 
 ```
-浏览器 (React) <--WebSocket--> Node.js 后端 <--SSH--> 远程服务器
+浏览器 (React) <--HTTP/WebSocket--> Node.js 后端 <--SSH--> 远程服务器
                                      |
                                Provider Layer
                               Claude / Codex / ...
@@ -57,7 +60,7 @@ setup、run 记录会与测试证据明确区分；命令变更后必须重新�
 ## 核心特性
 
 - **随时随地编程** — 在电脑上开始，手机上继续。会话通过 SSH 和 CLI resume 跨设备持久化。
-- **接入已有会话** — 已经在终端跑 CLI 了？Gate 能找到它的日志并从断点处恢复。
+- **恢复已有对话** — 查找 CLI 日志并恢复对话上下文。这会启动新进程，不会接管其他终端中正在运行的进程。
 - **清爽的聊天界面** — 终端输出解析为 Markdown 消息，可折叠的工具调用卡片，语法高亮代码块，可滚动表格。
 - **多服务器、多会话** — 管理多台远程服务器，每台多个会话。滑动或点击切换。
 - **Workspace Command Center** — 仓库是一级工作区，按 backlog、in-progress、review、done、canceled 分组管理，可置顶、归档、继续工作。
@@ -201,9 +204,9 @@ gate/
 
 | 断点 | 布局 |
 |------|------|
-| 桌面（≥1024px） | Sidebar + workspace/chat + 按需打开的固定 Inspector |
-| 平板（768–1023px） | Workspace/chat 全宽，sidebar/inspector 使用抽屉 |
-| 手机（<768px） | Workspace/chat 全屏，server 和 inspector 使用底部弹出 |
+| 桌面（≥1024px） | 任务页并排显示执行和结果；Sessions 保留 sidebar、chat 和按需打开的 Inspector |
+| 平板（768–1023px） | 任务页分区纵向排列并提供直接导航；Sessions 使用抽屉 |
+| 手机（<768px） | 任务页优先显示当前证据，历史记录可展开；Sessions 保留全屏聊天和底部弹出 |
 
 ## 为什么叫 "Gate"？
 

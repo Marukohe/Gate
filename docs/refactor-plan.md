@@ -1,6 +1,7 @@
 # Gate task workbench refactor
 
-Status: implementation started. This document tracks proposed behavior, completed steps, and evidence separately.
+Status: implementation and agreed workflow acceptance complete. See the [acceptance record](workbench-acceptance.md)
+for requirement coverage, repeatable checks, and remaining platform/provider limits.
 
 ## Product goal
 
@@ -36,7 +37,7 @@ Run completion does not automatically complete a task. Review and test evidence 
 ## Runtime direction
 
 ```text
-Browser <--WebSocket--> Gate backend <--SSH--> Remote runtime
+Browser <--HTTP/WebSocket--> Gate backend <--SSH--> Remote runtime
                                                |-- Provider adapter <--> Managed agent
                                                |-- PTY <--> Interactive terminal
                                                |-- Local socket <-- Hooks/plugins
@@ -129,7 +130,13 @@ Hooks are advisory: unmanaged tools can still start or write without reporting t
 - [x] Verify project defaults/scripts and task delivery actions against the user surfaces above.
 - [x] Verify managed terminal input, resize, attachment, reconnect, and confirmed exit.
 - [x] Validate real provider model/tool/decision flows and trusted Codex hook execution in isolated checkouts.
-- [ ] Audit the complete start → blockers → evidence → delivery workflow on desktop and mobile.
+- [x] Audit the complete start → blockers → evidence → delivery workflow on desktop and mobile.
+
+Final browser acceptance covers the full workflow at 320/390/1365px, desktop execution/results columns, mobile
+section navigation, recorded decisions including native cancellation, and explicit acceptance with launch disabled
+for closed tasks. Recent verification/delivery records stay visible while older records remain expandable.
+The final build passes; server tests pass 179 with one optional test skipped, and runtime tests pass all 30,
+including installed-provider initialization and the installed Codex PTY lifecycle check.
 
 Terminal evidence: Linux PTY tests cover UTF-8, resize, Ctrl-C, foreground/background cleanup, keyed input deduplication,
 and journal recovery. The actual localhost SSH/backend/browser check covers a shell surviving backend restart,

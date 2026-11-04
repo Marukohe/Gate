@@ -32,6 +32,24 @@ export function TaskResults({ task, runs, verifications, onSnapshot, mutate, bus
       request.current = null;
     } catch (err) { setError((err as Error).message); }
   }
+  const times = new Map(runs.map((run) => [run.id, run.createdAt]));
+  const evidence = [...verifications].sort((a, b) => (times.get(b.runId) ?? 0) - (times.get(a.runId) ?? 0)).map((item) => {
+    const matches = result && item.before && result.snapshot.tree === item.before.tree && result.snapshot.head === item.before.head;
+    const changed = item.before && item.after && (item.before.tree !== item.after.tree || item.before.head !== item.after.head);
+    return <article key={item.id} className="space-y-1 rounded-lg border p-3 text-xs">
+      <p className="font-medium">{item.purpose ?? 'test'} · {item.state} · <code className="break-all">{item.command}</code></p>
+      <p className="break-all text-muted-foreground">{item.cwd}</p>
+      <p>{item.startedAt ? new Date(item.startedAt).toLocaleString() : 'Queued'}
+        {item.endedAt ? ` → ${new Date(item.endedAt).toLocaleString()}` : ''}</p>
+      <p>Exit: {item.exitCode ?? 'not confirmed'}{item.signal ? ` · ${item.signal}` : ''}</p>
+      {item.before && <p className="break-all text-muted-foreground">Code tree: {item.before.tree}</p>}
+      {changed && <p className="text-amber-600">The checkout changed during verification.</p>}
+      {item.before && <p className={matches ? 'text-emerald-600' : 'text-amber-600'}>{!result
+        ? 'Refresh changes to compare this evidence with the current checkout.'
+        : matches ? 'Matches the last captured checkout.' : 'Evidence belongs to a different code snapshot.'}</p>}
+      <p className="text-muted-foreground">Full command output is in this run’s execution log.</p>
+    </article>;
+  });
   return <section className="space-y-4 rounded-xl border bg-card p-5">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h2 className="font-medium">Results & verification</h2>
@@ -56,23 +74,11 @@ export function TaskResults({ task, runs, verifications, onSnapshot, mutate, bus
       {active && <p className="text-xs text-muted-foreground">Wait for the current run to exit before verifying this checkout.</p>}
     </form>
     <TaskScripts key={task.checkoutId} task={task} active={active} mutate={mutate} busy={busy} />
-    <div className="space-y-3">{verifications.map((item) => {
-      const matches = result && item.before && result.snapshot.tree === item.before.tree && result.snapshot.head === item.before.head;
-      const changed = item.before && item.after && (item.before.tree !== item.after.tree || item.before.head !== item.after.head);
-      return <article key={item.id} className="space-y-1 rounded-lg border p-3 text-xs">
-        <p className="font-medium">{item.purpose ?? 'test'} · {item.state} · <code className="break-all">{item.command}</code></p>
-        <p className="break-all text-muted-foreground">{item.cwd}</p>
-        <p>{item.startedAt ? new Date(item.startedAt).toLocaleString() : 'Queued'}
-          {item.endedAt ? ` → ${new Date(item.endedAt).toLocaleString()}` : ''}</p>
-        <p>Exit: {item.exitCode ?? 'not confirmed'}{item.signal ? ` · ${item.signal}` : ''}</p>
-        {item.before && <p className="break-all text-muted-foreground">Code tree: {item.before.tree}</p>}
-        {changed && <p className="text-amber-600">The checkout changed during verification.</p>}
-        {item.before && <p className={matches ? 'text-emerald-600' : 'text-amber-600'}>{!result
-          ? 'Refresh changes to compare this evidence with the current checkout.'
-          : matches ? 'Matches the last captured checkout.' : 'Evidence belongs to a different code snapshot.'}</p>}
-        <p className="text-muted-foreground">Full command output is in this run’s execution log.</p>
-      </article>;
-    })}</div>
+    {evidence[0]}
+    {evidence.length > 1 && <details className="text-sm">
+      <summary className="cursor-pointer text-muted-foreground">Earlier command records ({evidence.length - 1})</summary>
+      <div className="mt-3 space-y-3">{evidence.slice(1)}</div>
+    </details>}
     <p className="text-xs text-muted-foreground">Tests and agent completion do not accept the task. Review the results before marking it Done.</p>
   </section>;
 }
