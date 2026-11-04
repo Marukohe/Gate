@@ -1,223 +1,54 @@
-# AGENTS.md / CLAUDE.md
+# Gate
 
-This file provides guidance to coding agents, including Claude Code, when working with code in this repository.
-
-## Project Overview
-
-Gate is a responsive monitoring panel for AI coding sessions on many SSH servers.
-The primary model is Server → Sessions: recent activity, trustworthy status, and direct entry to a session.
-Do not reintroduce project/task workflows or navigation menus as prerequisites for monitoring.
-Internal network deployment only, no auth.
+Gate is a simple Server → Codex sessions panel. Keep it simple.
+The only execution backend is Codex's native shared app-server daemon, reached through SSH Unix socket forwarding.
+Do not add task/project workflows, a Gate remote runtime, transcript scanners, hook observers, or per-message CLI execution.
 
 ## Architecture
 
-```
-Browser (React) <--HTTP/WebSocket--> Node.js Backend <--SSH--> Remote runtime / legacy CLI tools
-                                     |
-                              Provider Layer
-                              Claude  Codex  ...
-```
+- React browser → HTTP actions and WebSocket events → Gate → SSH → Codex shared backend.
+- Codex owns sessions, history, approvals, and execution. Gate only stores SSH connection settings.
+- Opening a session subscribes to the existing native thread. Sending messages uses `turn/start` or `turn/steer`.
+- Backend disconnect/restart must never restart a turn, resend an uncertain input, or stop Codex.
+- Gate is for trusted internal networks and has no authentication.
 
-- Managed tasks use a detached remote runtime with durable events, replay cursors, provider adapters, and checkout locks.
-- **Monorepo** with npm workspaces: `client/` and `server/`
-- Backend parses CLI terminal output into structured messages via provider-specific parsers and streams them to the frontend via WebSocket
-- Frontend renders parsed messages as chat bubbles with markdown, syntax highlighting, collapsible tool cards, diff views, and plan panels
-- Plan management extracts markdown checklists from chat into a dedicated panel for tracking/editing
-- Workspace management treats repositories as first-class work units with status, goal, primary session, branch/worktree start options, a simplified overview, an on-demand fixed inspector, repo scripts, one-shot terminal commands, and delivery actions
+## Key files
 
-## Tech Stack
-
-- **Client**: Vite + React 19 + TypeScript + Tailwind CSS + shadcn/ui + Zustand
-- **Server**: Express 5 + ws + ssh2 + better-sqlite3 + TypeScript
-- **Testing**: Vitest (server-side)
+- `server/src/codex-connection.ts`: SSH, native daemon discovery/start, Unix socket forwarding, JSON-RPC correlation.
+- `server/src/codex.ts`: native session listing, history, subscriptions, messages, decisions, and interruption.
+- `server/src/codex-requests.ts`: offered approval choices and structured question answers.
+- `server/src/types.ts`: shared browser/server response types.
+- `server/src/db.ts`: server settings and one-time preservation of old Gate data.
+- `server/src/routes.ts` / `index.ts`: HTTP API and browser event delivery.
+- `client/src/components/monitor/SessionMonitor.tsx`: the single server/session panel and creation form.
+- `client/src/components/chat/SessionView.tsx`: conversation history, live events, input, and approvals.
+- `client/src/components/server/ServerDialog.tsx`: SSH connection settings.
 
 ## Commands
 
 ```bash
-# Development (both client and server)
+npm install
 npm run dev
-
-# Client only (port 5173, proxies /api and /ws to server)
-npm run dev:client
-
-# Server only (port 3030)
-npm run dev:server
-
-# Build client and server
 npm run build
-
-# Run all server tests
-cd server && npx vitest run
-
-# Type check server
-cd server && npx tsc --noEmit
-
-# Isolated runtime feasibility tests (from repository root)
-node --test tools/runtime-probe/*.test.mjs
-node tools/runtime-probe/ssh-smoke.mjs --host localhost
-# Production backend restart and SSH recovery (build first; uses isolated localhost fixtures)
-node tools/runtime-probe/workbench-smoke.mjs
-# Optional real model acceptance; requires existing provider login and sends model requests
-GATE_LIVE_PROVIDER_TEST=1 node tools/runtime-probe/live-workbench-smoke.mjs
-GATE_LIVE_PROVIDER_TEST=1 node tools/runtime-probe/live-hooks-smoke.mjs
+npm test --workspace=server -- --run
+npx playwright install chromium
+npm run test:ui       # build first
+npm run lint --workspace=client
 ```
 
-## Deployment
+Gate is published as `@marukohe/gate`; `bin/gate.js` serves the built app on port 3030.
+Data defaults to `~/.gate/gate.db`. Preserve existing user data when removing old mechanisms.
 
-Published as `@marukohe/gate` on npm. Users install globally:
+## Working rules
 
-```bash
-npm i -g @marukohe/gate
-gate                        # starts on http://0.0.0.0:3030
-gate --port 8080            # custom port
-gate --data-dir /custom     # custom data directory (default: ~/.gate)
-```
-
-Data is stored in `~/.gate/gate.db` by default.
-
-## Key Modules
-
-**Server:**
-- `server/src/monitor.ts` / `monitor-types.ts` — Read-only server/session summary and shared response types
-- `GET /api/monitor` — Bounded message previews, owned-channel liveness, runtime health, hooks, and cached discovery.
-  Never start/resume coding agents while monitoring. Persist message subtypes for explicit result/error evidence.
-- `server/src/session-discovery.ts` / `providers/codex/discovery.ts` — Background SSH/SFTP discovery of terminal
-  Codex sessions; separate connections, bounded cached file reads, and explicit per-server discovery errors.
-- `server/runtime/` — Packaged remote daemon, durable journals, socket CLI, provider worker, code snapshots, and test runner
-- `server/runtime/scripts.mjs` — Strict checkout script discovery; project overrides and preview checks live in execution.ts
-- `server/runtime/delivery.mjs` — Snapshot-checked commit, pinned non-force push, and explicit draft PR creation/reuse
-- `server/src/workbench/delivery.ts` — Canonical delivery request validation before durable enqueue
-- `tools/runtime-probe/` — Isolated runtime/provider tests and real localhost SSH/backend restart checks
-- `server/src/db.ts` — SQLite layer for servers, sessions, messages, workspaces, and provider session maps
-- `server/src/workbench/` — Project, checkout, task, and run persistence; additive legacy import and event cursors
-- `server/src/workbench/attention.ts` — Provider request capabilities, question normalization, and decision validation
-- Managed launch protocol 3 adds native Codex cancellation; protocol 2 introduced structured question answers.
-  Keep old workers pinned and do not advertise a new decision capability to an older launch.
-- `server/src/workbench/collaboration.ts` — Recorded handoff packets and fresh review context
-- `server/runtime/collaboration.mjs` — Pinned code snapshots, comparison diffs, and detached review worktrees
-- `server/runtime/observations.mjs`, `hook.mjs`, `hook-install.mjs` — Scoped external-session observation over the
-  private runtime socket; preserving hook installation/removal without native-session control
-- `server/runtime/terminal.py` and `terminal-bridge.mjs` — Linux PTY ownership/cleanup and replayed SSH attachment
-- `server/src/workbench/terminal-ws.ts` — Terminal WebSocket roles, bounded frames, heartbeat, and SSH stream lifecycle
-- `server/src/workbench/routes.ts` — REST project/checkout/task management, runtime setup, run start/stop, decisions, verification, result snapshots, event reads/downloads
-- `server/src/workbench/execution.ts` — Durable launch, reconnection, event projection, and confirmed stop handling
-- `server/src/workbench/remote.ts` — Runtime deployment, JSON over SSH stdin, and idempotent worktree preparation
-- `server/src/ssh-manager.ts` — SSH connection pool, CLI channel management, and command execution via ssh2
-- `server/src/ssh-browse.ts` — Remote directory browsing over SSH
-- `server/src/git-utils.ts` — Git command helpers
-- `server/src/repo-scripts.ts` — Optional `gate.json` parser for `setup`, `run`, and `test` commands
-- `server/src/workspace-actions.ts` — Deterministic workspace delivery action state updates
-- `server/src/workspace-inspector.ts` — Workspace inspector snapshot builder
-- `server/src/ws-handler.ts` — WebSocket server for chat, provider switching, workspace CRUD, start flow, scripts, actions, and terminal exec results
-- `server/src/routes/servers.ts` — REST CRUD for server configurations and sessions
-- `server/src/providers/types.ts` — CLIProvider interface, OutputParser abstract class, ParsedMessage type
-- `server/src/providers/registry.ts` — Provider registration and lookup
-- `server/src/providers/claude/` — Claude Code provider, parser, transcript support, command building
-- `server/src/providers/codex/` — OpenAI Codex provider, parser, transcript support, tool utils, command building
-
-**Client:**
-- `client/src/components/workbench/` — Compatibility views for overview, projects, task goals, runtime setup, managed execution,
-  decisions, result snapshots, verification evidence, handoff, independent review, and replayed output
-- `client/src/components/layout/AppHeader.tsx` — Brand, Add server, theme, and return-to-panel action; no menus
-- `client/src/components/monitor/SessionMonitor.tsx` — Default server-grouped panel, polling, search, and session creation
-- `client/src/components/monitor/SessionDetails.tsx` — Managed logs/decisions/terminal and read-only external details
-- `client/src/components/workbench/TaskDetail.tsx` — Desktop execution/results columns and one scrolling mobile page;
-  verification/delivery panels show recent records before expandable history
-- `client/src/components/workbench/ExternalSessions.tsx` — Checkout hook settings, observed activity, task association,
-  and explicit clearing after native-process inspection
-- `client/src/components/workbench/TerminalView.tsx` — Lazy xterm.js view, output replay, resize, and controller input
-- `client/src/components/workbench/ProjectSettings.tsx` and `TaskScripts.tsx` — Project defaults, command previews,
-  and explicit setup/run/test execution with recorded purpose
-- `client/src/components/workbench/DeliveryPanel.tsx` — Checkout-bound delivery previews and recorded commit/PR results
-- `client/src/App.tsx` — Top-level route state for home, workspace overview, and chat sessions
-- `client/src/hooks/use-websocket.ts` — Singleton WebSocket connection with auto-reconnect and queued workspace actions
-- `client/src/stores/` — Zustand stores: server, session, chat, git, plan, plan-mode, workspace, ui
-- `client/src/components/layout/` — Monitor header and AppShell with desktop inspector/mobile sheets;
-  legacy Sidebar and TopBar are no longer mounted
-- `client/src/components/home/` — CommandCenter workspace board
-- `client/src/components/workspace/` — WorkspaceHome, WorkspaceStart, WorkspaceInspector, WorkspaceActionBar, AddWorkspaceDialog
-- `client/src/components/changes/` — ChangesPanel, FileItem, CreatePRDialog
-- `client/src/components/diff/` — DiffView, DiffFile, diff parser
-- `client/src/components/chat/` — ChatView, SessionBar, MessageBubble, ChatInput, provider/session dialogs, tool rendering
-- `client/src/components/plan/` and `client/src/components/plan-mode/` — Plan panels and plan-mode interaction
-- `client/src/lib/plan-parser.ts` — Markdown checklist ↔ PlanStep conversion
-
-## WebSocket Protocol
-
-Client sends:
-- `{ type: 'connect'|'input'|'interrupt'|'disconnect', serverId, sessionId?, text? }`
-- `{ type: 'switch-provider', serverId, sessionId, provider }`
-- `{ type: 'reset-conversation'|'resume-cli-session', serverId, sessionId, claudeSessionId? }`
-- `{ type: 'list-cli-sessions', serverId, workingDir, provider }`
-- `{ type: 'exec', serverId, sessionId, command, workspaceId?, terminal?, requestId? }`
-- `{ type: 'list-workspaces'|'create-workspace'|'update-workspace'|'delete-workspace', workspaceId?, ... }`
-- `{ type: 'start-workspace-task', workspaceId, goal, provider?, branchMode?, branchName?, worktreeMode?, worktreePath? }`
-- `{ type: 'fetch-workspace-inspector'|'run-workspace-script'|'run-workspace-action', workspaceId, ... }`
-
-Server sends:
-- `{ type: 'message'|'status'|'history'|'history-prepend'|'sessions', serverId, ... }`
-- `{ type: 'git-info'|'git-status'|'git-diff'|'pr-info', serverId, sessionId, ... }`
-- `{ type: 'cli-sessions', serverId, sessions }`
-- `{ type: 'exec-result', workspaceId, requestId, stdout, stderr, exitCode, ... }`
-- `{ type: 'workspace-list'|'workspace-update'|'workspace-deleted'|'workspace-task-started', workspaceId, ... }`
-- `{ type: 'workspace-inspector'|'workspace-run-result'|'workspace-action-result'|'workspace-error', workspaceId, ... }`
-
-Managed terminal connections use `/ws/terminal?runId=<id>&after=<cursor>` separately from legacy `/ws`.
-Client messages claim control or send an input ID plus a base64-input/resize message. Server frames carry control
-capabilities, ordered events, ready state, acknowledgements, and errors. Only terminal runs accept these connections.
-Keep input redacted in journals and never replay unacknowledged keystrokes automatically.
-Launch native Codex terminals with `--no-daemon` and probe support first. The default shared daemon can outlive
-the terminal and its owned process session, so it cannot provide the managed-terminal exit guarantee.
-
-## Responsive Breakpoints
-
-- All sizes: one server/session panel, search, server actions, status and latest activity; no global menu
-- Desktop: compact session rows within server groups; details open on demand
-- Tablet/mobile: the same groups in one column; do not clip server actions or status labels
-- Existing `#task`, `#project`, and `#overview` links retain compatibility views; they are not the default product flow
-
-## Best Practices
-
-1. Use git frequently and meaningfully
-2. Follow **Conventional Commits**
-3. Keep `README.md`, `README_CN.md`, `CLAUDE.md`, and `AGENTS.md` in sync when architecture, commands, or workflows change
-4. Fix compiler warnings
-5. Keep a clean, layered project structure
-6. Write comments that explain *why*, not *what*
-
-## Before Starting Work
-
-Read `LESSONS.md` for relevant problems and prevention rules before investigating or changing code.
-Current product scope and monitoring guarantees are in `docs/session-monitor.md`.
-
-1. Review recent history:
-   ```bash
-   git log --oneline --stat
-   git show --summary --stat --name-only <commit>
-   git diff <commit> <commit>
-   ```
-2. Understand existing design decisions before changing behavior
-3. For large tasks, commit incrementally with clear messages
-
-## Before Saving Changes
-
-Always:
-
-1. Clear compiler warnings
-2. Ensure relevant tests pass
-3. Verify the project builds (`npm run build`) for broad frontend/server changes
-4. Check changes with `git status`
-5. Commit completed changes with a small, reviewable Conventional Commit
-
-## Documentation and Lessons
-
-- Keep `LESSONS.md` concise: reusable failure causes, prevention rules, and relevant checks; no work diary.
-- Update an existing entry when learning more about the same issue; avoid duplicate notes and speculative rules.
-- Include a regression test, command, or source reference that makes each lesson actionable.
-- Keep credentials, personal connection details, and raw private transcripts out of lessons and documentation.
-- Keep `docs/` for current usage and architecture. Do not add implementation journals, progress reports,
-  acceptance reports, session transcripts, or generated agent plans to Git.
-- Put optional scratch notes in `.agent-notes/` (gitignored). Report progress and validation in conversation
-  or concise commit bodies rather than creating additional documentation.
-- Commit each completed step separately. Explain its behavior, relevant validation, and remaining limits in the commit body.
-- `AGENTS.md` is a symlink to this file. Preserve the link so both entry points stay synchronized.
+- Read `LESSONS.md` and recent `git log` before changing behavior.
+- Commit completed steps with small, meaningful Conventional Commits.
+- Run relevant tests, clear compiler warnings, and build broad frontend/server changes before committing.
+- Validate real shared-backend behavior, including existing native threads; mocked UI alone does not prove attachment.
+- Never kill a shared backend to test reconnection. Close only Gate's own connection or an isolated test fixture.
+- Preserve passwords on an unchanged edit and never return them in browser API responses or logs.
+- Keep `README.md`, `README_CN.md`, and these instructions consistent with shipped behavior.
+- Keep `docs/` for current usage and architecture. Do not commit process journals, plans, or validation reports.
+- Put optional scratch notes in `.agent-notes/` (ignored); report progress in conversation and commit bodies.
+- Keep `LESSONS.md` short and actionable. Update existing lessons instead of appending a diary.
+- `AGENTS.md` is a symlink to this file. Preserve the link.

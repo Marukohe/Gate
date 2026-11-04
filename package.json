@@ -1,7 +1,7 @@
 {
   "name": "@marukohe/gate",
   "version": "1.1.0",
-  "description": "Chat with AI coding CLIs on remote servers via SSH, from any device",
+  "description": "Monitor and continue shared Codex sessions across SSH servers",
   "type": "module",
   "bin": {
     "gate": "bin/gate.js"
@@ -9,7 +9,6 @@
   "files": [
     "bin/",
     "server/dist/",
-    "server/runtime/",
     "client/dist/"
   ],
   "workspaces": [
@@ -22,17 +21,18 @@
     "dev:client": "npm run dev --workspace=client",
     "build": "npm run build --workspace=client && npm run build --workspace=server",
     "start": "npm run start --workspace=server",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "test:ui": "node tools/browser-smoke.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",
     "express": "^5.2.1",
     "ssh2": "^1.17.0",
-    "uuid": "^13.0.0",
     "ws": "^8.19.0"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "playwright": "^1.59.1"
   },
   "repository": {
     "type": "git",

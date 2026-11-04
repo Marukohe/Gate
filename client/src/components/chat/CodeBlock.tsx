@@ -1,35 +1,13 @@
 import { Check, Copy } from 'lucide-react';
-import { useState, useSyncExternalStore } from 'react';
+import { useState } from 'react';
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Button } from '@/components/ui/button';
 import { codeLanguageAliases } from '@/lib/code-languages';
+import { useUIStore } from '@/stores/ui-store';
 
-// Shared singleton observer — all CodeBlock instances reuse one MutationObserver
-const themeListeners = new Set<() => void>();
-let sharedObserver: MutationObserver | null = null;
-
-function subscribeToTheme(cb: () => void) {
-  themeListeners.add(cb);
-  if (!sharedObserver) {
-    sharedObserver = new MutationObserver(() => themeListeners.forEach((fn) => fn()));
-    sharedObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-  }
-  return () => {
-    themeListeners.delete(cb);
-    if (themeListeners.size === 0 && sharedObserver) {
-      sharedObserver.disconnect();
-      sharedObserver = null;
-    }
-  };
-}
-
-function getIsDark() {
-  return document.documentElement.classList.contains('dark');
-}
-
-const CODE_FONT = "'Fira Code', monospace";
+const CODE_FONT = "ui-monospace, monospace";
 
 interface CodeBlockProps {
   code: string;
@@ -38,7 +16,7 @@ interface CodeBlockProps {
 
 export function CodeBlock({ code, language }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
-  const isDark = useSyncExternalStore(subscribeToTheme, getIsDark);
+  const isDark = useUIStore((state) => state.darkMode);
 
   const handleCopy = async () => {
     try {
@@ -65,6 +43,7 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
       <div className="flex items-center justify-between border-b border-border bg-muted/50 px-3 py-1">
         <span className="text-xs text-muted-foreground">{displayLang}</span>
         <Button
+          aria-label="Copy code"
           variant="ghost"
           size="icon"
           className="h-6 w-6"

@@ -1,120 +1,57 @@
 import express from 'express';
-import { createServer } from 'http';
-import { fileURLToPath } from 'url';
-import path from 'path';
-import os from 'os';
-import fs from 'fs';
+import { createServer } from 'node:http';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import os from 'node:os';
+import fs from 'node:fs';
+import { WebSocket, WebSocketServer } from 'ws';
 import { createDb } from './db.js';
-import { monitorSnapshot } from './monitor.js';
-import { SessionDiscovery } from './session-discovery.js';
-import { createServerRoutes } from './routes/servers.js';
-import { setupWebSocket } from './ws-handler.js';
-import { listRemoteDirectory, createRemoteDirectory } from './ssh-browse.js';
-import { ProviderRegistry } from './providers/registry.js';
-import { ClaudeProvider } from './providers/claude/index.js';
-import { CodexProvider } from './providers/codex/index.js';
-import { createWorkbenchRoutes } from './workbench/routes.js';
-import { ExecutionService } from './workbench/execution.js';
-import { setupTerminalWebSocket } from './workbench/terminal-ws.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import { CodexService } from './codex.js';
+import { routes } from './routes.js';
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3030;
-const HOST = process.env.HOST || '0.0.0.0';
-
-app.use(express.json({ limit: '50mb' }));
-
+app.use(express.json({ limit: '1mb' }));
 const dataDir = process.env.GATE_DATA_DIR || path.join(os.homedir(), '.gate');
 fs.mkdirSync(dataDir, { recursive: true });
-const dbPath = path.join(dataDir, 'gate.db');
-const db = createDb(dbPath);
-
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok' });
+const db = createDb(path.join(dataDir, 'gate.db'));
+const codex = new CodexService();
+app.use('/api', routes(db, codex));
+app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
+app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  res.status(400).json({ error: error.message });
 });
-
-// Ad-hoc browse: list remote directories without a saved server
-app.post('/api/browse', async (req, res) => {
-  const { host, port, username, authType, password, privateKeyPath, path: dirPath } = req.body;
-  if (!host || !username || !authType) {
-    return res.status(400).json({ error: 'Missing connection fields' });
+const http = createServer(app);
+const wss = new WebSocketServer({ server: http, path: '/ws', maxPayload: 1024 });
+// Browser sockets only receive events. Mutations are explicit HTTP requests and are never queued or replayed.
+const broadcast = (event: object) => {
+  const data = JSON.stringify(event);
+  for (const client of wss.clients) if (client.readyState === WebSocket.OPEN) {
+    if (client.bufferedAmount > 2 * 1024 * 1024) client.terminate(); else client.send(data);
   }
-  try {
-    const result = await listRemoteDirectory(
-      { host, port: port ?? 22, username, authType, password, privateKeyPath },
-      dirPath || '$HOME',
-    );
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+};
+codex.on('event', broadcast);
+const heartbeat = setInterval(() => {
+  for (const client of wss.clients) {
+    if (!(client as any).alive) { client.terminate(); continue; }
+    (client as any).alive = false; client.ping();
   }
+}, 30_000);
+wss.on('connection', (client) => {
+  (client as any).alive = true;
+  client.on('pong', () => { (client as any).alive = true; });
+  client.on('error', () => client.terminate());
 });
-
-// Ad-hoc mkdir: create a directory on a remote server without a saved server
-app.post('/api/mkdir', async (req, res) => {
-  const { host, port, username, authType, password, privateKeyPath, parentPath, name } = req.body;
-  if (!host || !username || !authType || !parentPath || !name) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
-  try {
-    const createdPath = await createRemoteDirectory(
-      { host, port: port ?? 22, username, authType, password, privateKeyPath },
-      parentPath, name,
-    );
-    res.json({ path: createdPath });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-const registry = new ProviderRegistry();
-registry.register(new ClaudeProvider());
-registry.register(new CodexProvider());
-registry.setDefault('claude');
-
-const httpServer = createServer(app);
-
-const sshManager = setupWebSocket(httpServer, db, registry);
-
-app.use('/api/servers', createServerRoutes(db, sshManager));
-const discovery = new SessionDiscovery();
-app.get('/api/monitor', (_req, res) => {
-  const discovered = discovery.snapshot(db.listServers());
-  res.json(monitorSnapshot(db, sshManager, Date.now(), discovered));
-});
-const execution = new ExecutionService(db);
-const closeTerminals = setupTerminalWebSocket(httpServer, db, execution);
-execution.start();
-app.use('/api/workbench', createWorkbenchRoutes(db, sshManager, execution));
-
-// Serve built client in production
-const clientDist = path.resolve(__dirname, '../../client/dist');
-const clientIndexPath = path.join(clientDist, 'index.html');
-if (fs.existsSync(clientIndexPath)) {
+const clientDist = fileURLToPath(new URL('../../client/dist/', import.meta.url));
+if (fs.existsSync(path.join(clientDist, 'index.html'))) {
   app.use(express.static(clientDist));
-  app.get('/{*path}', (_req, res, next) => {
-    if (_req.path.startsWith('/api')) return next();
-    res.sendFile(clientIndexPath);
-  });
-} else {
-  console.warn(`Warning: client build not found at ${clientDist}`);
-  console.warn('Run "npm run build" first, or use "npm run dev" for development.');
+  app.get('/{*path}', (_req, res) => res.sendFile(path.join(clientDist, 'index.html')));
 }
-
-httpServer.listen(PORT, HOST, () => {
-  console.log(`Server running on http://${HOST}:${PORT}`);
-});
-
+const port = Number(process.env.PORT) || 3030;
+const host = process.env.HOST || '0.0.0.0';
+http.listen(port, host, () => console.log(`Gate running on http://${host}:${port}`));
 function shutdown() {
-  console.log('Shutting down...');
-  discovery.close();
-  closeTerminals();
-  Promise.all([execution.close(), sshManager.disconnectAll()]).catch(() => {}).finally(() => {
-    httpServer.close();
-    db.close();
-    process.exit(0);
-  });
+  clearInterval(heartbeat); codex.close(); db.close();
+  for (const client of wss.clients) client.terminate();
+  wss.close(); http.close(() => process.exit(0));
 }
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown); process.on('SIGINT', shutdown);

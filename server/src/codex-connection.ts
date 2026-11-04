@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { posix } from 'node:path';
 import { Client, type ClientChannel } from 'ssh2';
 import WebSocket from 'ws';
 
@@ -105,8 +106,17 @@ export async function connectCodex(settings: ConnectionSettings, signal: AbortSi
         ...(settings.authType === 'password' ? { password: settings.password }
           : { privateKey: keyPath ? readFileSync(keyPath) : undefined }) });
     });
-    const command = (args: string) => `$SHELL -lc ${quote(`${quote(settings.codexPath || 'codex')} app-server daemon ${args}`)}`;
-    let info = JSON.parse(await exec(ssh, command('version')));
+    const executable = settings.codexPath || 'codex';
+    const prefix = executable.startsWith('/') ? `PATH=${quote(posix.dirname(executable))}:"$PATH" ` : '';
+    const command = (args: string) => `$SHELL -lc ${quote(`${prefix}${quote(executable)} app-server daemon ${args}`)}`;
+    let info;
+    try { info = JSON.parse(await exec(ssh, command('version'))); }
+    catch (error) {
+      if (/unrecognized subcommand.*daemon/.test((error as Error).message)) {
+        throw new Error('This Codex version does not support the shared backend. Update Codex on this server.');
+      }
+      throw error;
+    }
     if (info.status !== 'running') {
       await exec(ssh, command('start'));
       info = JSON.parse(await exec(ssh, command('version')));

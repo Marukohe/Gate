@@ -13,7 +13,7 @@ export default defineConfig({
       manifest: {
         name: 'Gate',
         short_name: 'Gate',
-        description: 'Chat with Claude Code on remote servers',
+        description: 'Monitor and continue Codex sessions across servers',
         theme_color: '#ffffff',
         background_color: '#ffffff',
         display: 'standalone',
@@ -24,16 +24,7 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: '/index.html',
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts',
-              expiration: { maxEntries: 10, maxAgeSeconds: 365 * 24 * 60 * 60 },
-            },
-          },
-        ],
+
       },
     }),
   ],

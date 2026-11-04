@@ -1,335 +1,40 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createDb, type Database } from '../db.js';
-import fs from 'fs';
+import { expect, it } from 'vitest';
+import BetterSqlite3 from 'better-sqlite3';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createDb, publicServer } from '../db.js';
 
-const TEST_DB = '/tmp/gate-test.db';
+it('keeps server credentials private and ignores unexpected update fields', () => {
+  const db = createDb(':memory:');
+  try {
+    const server = db.createServer({ name: 'Test', host: 'localhost', port: 22, username: 'user', authType: 'password', password: 'secret' });
+    expect(publicServer(server)).toMatchObject({ hasPassword: true });
+    expect(JSON.stringify(publicServer(server))).not.toContain('secret');
+    db.updateServer(server.id, { name: 'Updated', id: 'another-id' });
+    expect(db.getServer(server.id)?.name).toBe('Updated');
+    db.deleteServer(server.id); expect(db.listServers()).toEqual([]);
+  } finally { db.close(); }
+});
 
-describe('Database', () => {
-  let db: Database;
-
-  beforeEach(() => {
-    db = createDb(TEST_DB);
-  });
-
-  afterEach(() => {
-    db.close();
-    if (fs.existsSync(TEST_DB)) fs.unlinkSync(TEST_DB);
-  });
-
-  describe('servers', () => {
-    it('should create and list servers', () => {
-      db.createServer({
-        name: 'My Server',
-        host: '192.168.1.100',
-        port: 22,
-        username: 'user',
-        authType: 'password',
-        password: 'pass123',
-      });
-
-      const servers = db.listServers();
-      expect(servers).toHaveLength(1);
-      expect(servers[0].name).toBe('My Server');
-      expect(servers[0].host).toBe('192.168.1.100');
-    });
-
-    it('should delete a server', () => {
-      const server = db.createServer({
-        name: 'ToDelete',
-        host: '10.0.0.1',
-        port: 22,
-        username: 'root',
-        authType: 'privateKey',
-        privateKeyPath: '/home/user/.ssh/id_rsa',
-      });
-
-      db.deleteServer(server.id);
-      expect(db.listServers()).toHaveLength(0);
-    });
-
-    it('should update a server', () => {
-      const server = db.createServer({
-        name: 'Old Name',
-        host: '10.0.0.1',
-        port: 22,
-        username: 'root',
-        authType: 'password',
-        password: 'old',
-      });
-
-      db.updateServer(server.id, { name: 'New Name', password: 'new' });
-      const updated = db.getServer(server.id);
-      expect(updated?.name).toBe('New Name');
-      expect(updated?.password).toBe('new');
-    });
-  });
-
-  describe('sessions', () => {
-    it('should create and list sessions for a server', () => {
-      const server = db.createServer({
-        name: 'S1',
-        host: '10.0.0.1',
-        port: 22,
-        username: 'root',
-        authType: 'password',
-        password: 'pass',
-      });
-
-      db.createSession(server.id, 'claude-main');
-      const sessions = db.listSessions(server.id);
-      expect(sessions).toHaveLength(1);
-      expect(sessions[0].name).toBe('claude-main');
-    });
-  });
-
-  describe('sessions with provider', () => {
-    it('should create session with provider field', () => {
-      const server = db.createServer({ name: 'S1', host: '10.0.0.1', port: 22, username: 'root', authType: 'password', password: 'p' });
-      const session = db.createSession(server.id, 'test', undefined, 'codex');
-      expect(session.provider).toBe('codex');
-    });
-
-    it('should default provider to claude', () => {
-      const server = db.createServer({ name: 'S1', host: '10.0.0.1', port: 22, username: 'root', authType: 'password', password: 'p' });
-      const session = db.createSession(server.id, 'test');
-      expect(session.provider).toBe('claude');
-    });
-
-    it('should update cliSessionId', () => {
-      const server = db.createServer({ name: 'S1', host: '10.0.0.1', port: 22, username: 'root', authType: 'password', password: 'p' });
-      const session = db.createSession(server.id, 'test');
-      db.updateCliSessionId(session.id, 'cli-123');
-      const updated = db.getSession(session.id);
-      expect(updated?.cliSessionId).toBe('cli-123');
-    });
-
-    it('should update session provider and clear cliSessionId', () => {
-      const server = db.createServer({ name: 'S1', host: '10.0.0.1', port: 22, username: 'root', authType: 'password', password: 'p' });
-      const session = db.createSession(server.id, 'test', undefined, 'claude');
-      db.updateCliSessionId(session.id, 'cli-123');
-      db.updateSessionProvider(session.id, 'codex');
-      const updated = db.getSession(session.id);
-      expect(updated?.provider).toBe('codex');
-      expect(updated?.cliSessionId).toBeNull();
-    });
-  });
-
-  describe('messages', () => {
-    it('should save and retrieve messages', () => {
-      const server = db.createServer({
-        name: 'S1',
-        host: '10.0.0.1',
-        port: 22,
-        username: 'root',
-        authType: 'password',
-        password: 'pass',
-      });
-      const session = db.createSession(server.id, 'claude-main');
-
-      db.saveMessage({
-        sessionId: session.id,
-        type: 'assistant',
-        content: 'Hello, how can I help?',
-        timestamp: Date.now(),
-      });
-
-      const messages = db.getMessages(session.id);
-      expect(messages).toHaveLength(1);
-      expect(messages[0].type).toBe('assistant');
-      expect(messages[0].content).toBe('Hello, how can I help?');
-    });
-
-    it('should save and retrieve message with provider', () => {
-      const server = db.createServer({ name: 'S1', host: '10.0.0.1', port: 22, username: 'root', authType: 'password', password: 'p' });
-      const session = db.createSession(server.id, 'test');
-      db.saveMessage({ sessionId: session.id, type: 'assistant', content: 'hi', timestamp: Date.now(), provider: 'codex' });
-      const msgs = db.getMessages(session.id);
-      expect(msgs[0].provider).toBe('codex');
-    });
-  });
-
-  describe('workspaces schema', () => {
-    it('creates a workspace row with all expected fields', () => {
-      const server = db.createServer({ name: 'S1', host: '10.0.0.1', port: 22, username: 'root', authType: 'password', password: 'p' });
-      const ws = db.createWorkspace({
-        serverId: server.id,
-        repoPath: '/home/user/proj',
-        remoteUrl: 'git@github.com:foo/bar.git',
-        defaultBranch: 'main',
-        name: 'proj',
-      });
-      expect(ws.id).toBeDefined();
-      expect(ws.serverId).toBe(server.id);
-      expect(ws.repoPath).toBe('/home/user/proj');
-      expect(ws.remoteUrl).toBe('git@github.com:foo/bar.git');
-      expect(ws.defaultBranch).toBe('main');
-      expect(ws.name).toBe('proj');
-      expect(ws.autoOpenLastSession).toBe(false);
-      expect(ws.status).toBe('backlog');
-      expect(ws.goal).toBeNull();
-      expect(ws.pinnedAt).toBeNull();
-      expect(ws.archivedAt).toBeNull();
-      expect(ws.primarySessionId).toBeNull();
-      expect(ws.prUrl).toBeNull();
-      expect(ws.prState).toBe('none');
-      expect(typeof ws.createdAt).toBe('number');
-      expect(typeof ws.updatedAt).toBe('number');
-    });
-
-    it('adds workspace metadata columns to sessions', () => {
-      const server = db.createServer({ name: 'S1', host: '10.0.0.1', port: 22, username: 'root', authType: 'password', password: 'p' });
-      const session = db.createSession(server.id, 'test');
-      expect(session.workspaceId ?? null).toBeNull();
-      expect(session.workspaceProbedAt ?? null).toBeNull();
-      expect(session.isHidden).toBe(false);
-      expect(session.actionKind).toBeNull();
-      expect(session.unreadCount).toBe(0);
-    });
-  });
-
-  describe('workspaces CRUD', () => {
-    it('lists workspaces and looks up by (serverId, repoPath)', () => {
-      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
-      const a = db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
-      const b = db.createWorkspace({ serverId: s.id, repoPath: '/b', remoteUrl: null, defaultBranch: 'main', name: 'b' });
-      const list = db.listWorkspaces();
-      expect(list.map((w) => w.id).sort()).toEqual([a.id, b.id].sort());
-      expect(db.getWorkspaceByPath(s.id, '/a')?.id).toBe(a.id);
-      expect(db.getWorkspaceByPath(s.id, '/missing')).toBeUndefined();
-    });
-
-    it('upsert returns existing row when (serverId, repoPath) matches', () => {
-      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
-      const a = db.upsertWorkspaceByPath({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
-      const b = db.upsertWorkspaceByPath({ serverId: s.id, repoPath: '/a', remoteUrl: 'git@x', defaultBranch: 'dev', name: 'renamed' });
-      expect(b.id).toBe(a.id);
-      // Existing row preserved, no fields overwritten on upsert
-      expect(b.name).toBe('a');
-      expect(b.defaultBranch).toBe('main');
-    });
-
-    it('updateWorkspace patches name and autoOpenLastSession', () => {
-      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
-      const a = db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
-      db.updateWorkspace(a.id, {
-        name: 'renamed',
-        autoOpenLastSession: true,
-        status: 'review',
-        goal: 'ship the thing',
-        pinnedAt: 123,
-        prUrl: 'https://github.com/foo/bar/pull/1',
-        prState: 'open',
-      });
-      const got = db.getWorkspace(a.id)!;
-      expect(got.name).toBe('renamed');
-      expect(got.autoOpenLastSession).toBe(true);
-      expect(got.status).toBe('review');
-      expect(got.goal).toBe('ship the thing');
-      expect(got.pinnedAt).toBe(123);
-      expect(got.prUrl).toBe('https://github.com/foo/bar/pull/1');
-      expect(got.prState).toBe('open');
-    });
-
-    it('archives and restores workspaces without deleting sessions', () => {
-      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
-      const w = db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
-      const sess = db.createSession(s.id, 'sess', null, undefined, { workspaceId: w.id });
-      db.archiveWorkspace(w.id);
-      const archived = db.getWorkspace(w.id)!;
-      expect(archived.archivedAt).not.toBeNull();
-      expect(db.getSession(sess.id)).toBeDefined();
-      db.restoreWorkspace(w.id);
-      expect(db.getWorkspace(w.id)!.archivedAt).toBeNull();
-    });
-
-    it('deleteWorkspace cascades to sessions', () => {
-      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
-      const w = db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
-      const sess = db.createSession(s.id, 'sess');
-      db.setSessionWorkspace(sess.id, w.id);
-      db.deleteWorkspace(w.id);
-      expect(db.getWorkspace(w.id)).toBeUndefined();
-      expect(db.getSession(sess.id)).toBeUndefined();
-    });
-
-    it('rejects duplicate (serverId, repoPath)', () => {
-      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
-      db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
-      expect(() => db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a2' })).toThrow();
-    });
-
-    it('sets primary session for a workspace', () => {
-      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
-      const w = db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
-      const sess = db.createSession(s.id, 'sess', null, undefined, { workspaceId: w.id });
-      db.setWorkspacePrimarySession(w.id, sess.id);
-      expect(db.getWorkspace(w.id)?.primarySessionId).toBe(sess.id);
-      db.setWorkspacePrimarySession(w.id, null);
-      expect(db.getWorkspace(w.id)?.primarySessionId).toBeNull();
-    });
-  });
-
-  describe('session-workspace linkage', () => {
-    it('setSessionWorkspace links and unlinks', () => {
-      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
-      const w = db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
-      const sess = db.createSession(s.id, 't');
-      db.setSessionWorkspace(sess.id, w.id);
-      expect(db.getSession(sess.id)?.workspaceId).toBe(w.id);
-      db.setSessionWorkspace(sess.id, null);
-      expect(db.getSession(sess.id)?.workspaceId).toBeNull();
-    });
-
-    it('markSessionProbed sets workspaceProbedAt', () => {
-      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
-      const sess = db.createSession(s.id, 't');
-      const before = Date.now();
-      db.markSessionProbed(sess.id);
-      const after = Date.now();
-      const got = db.getSession(sess.id)!;
-      expect(got.workspaceProbedAt).not.toBeNull();
-      expect(got.workspaceProbedAt!).toBeGreaterThanOrEqual(before);
-      expect(got.workspaceProbedAt!).toBeLessThanOrEqual(after);
-    });
-
-    it('aggregateWorkspace returns counts and lastActivityAt', () => {
-      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
-      const w = db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
-      const a = db.createSession(s.id, 'a');
-      const b = db.createSession(s.id, 'b');
-      db.setSessionWorkspace(a.id, w.id);
-      db.setSessionWorkspace(b.id, w.id);
-      db.saveMessage({ sessionId: a.id, type: 'assistant', content: 'x', timestamp: 100 });
-      db.saveMessage({ sessionId: b.id, type: 'assistant', content: 'y', timestamp: 200 });
-      const agg = db.aggregateWorkspace(w.id);
-      expect(agg.totalSessionCount).toBe(2);
-      expect(agg.lastActivityAt).toBe(200);
-    });
-
-    it('hides action sessions from default session lists and aggregates', () => {
-      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
-      const w = db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
-      const visible = db.createSession(s.id, 'visible', null, undefined, { workspaceId: w.id });
-      const hidden = db.createSession(s.id, 'hidden', null, undefined, { workspaceId: w.id, isHidden: true, actionKind: 'create-pr' });
-      db.saveMessage({ sessionId: visible.id, type: 'assistant', content: 'x', timestamp: 100 });
-      db.saveMessage({ sessionId: hidden.id, type: 'assistant', content: 'y', timestamp: 200 });
-
-      expect(db.listSessions(s.id).map((session) => session.id)).toEqual([visible.id]);
-      expect(db.listSessions(s.id, { includeHidden: true }).map((session) => session.id).sort()).toEqual([hidden.id, visible.id].sort());
-      expect(db.getSession(hidden.id)?.isHidden).toBe(true);
-      expect(db.getSession(hidden.id)?.actionKind).toBe('create-pr');
-
-      const agg = db.aggregateWorkspace(w.id);
-      expect(agg.totalSessionCount).toBe(1);
-      expect(agg.lastActivityAt).toBe(100);
-    });
-
-    it('aggregateWorkspace returns null lastActivityAt when no messages', () => {
-      const s = db.createServer({ name: 'S', host: 'h', port: 22, username: 'u', authType: 'password', password: 'p' });
-      const w = db.createWorkspace({ serverId: s.id, repoPath: '/a', remoteUrl: null, defaultBranch: 'main', name: 'a' });
-      const agg = db.aggregateWorkspace(w.id);
-      expect(agg.totalSessionCount).toBe(0);
-      expect(agg.lastActivityAt).toBeNull();
-    });
-  });
+it('migrates server settings once and preserves legacy history when a connection is removed', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-db-'));
+  const file = join(dir, 'gate.db');
+  try {
+    const old = new BetterSqlite3(file);
+    old.exec(`CREATE TABLE servers (id TEXT PRIMARY KEY, name TEXT, host TEXT, port INTEGER, username TEXT,
+      authType TEXT, password TEXT, privateKeyPath TEXT, createdAt INTEGER);
+      INSERT INTO servers VALUES ('existing', 'Original', 'localhost', 22, 'user', 'password', 'secret', NULL, 1);
+      CREATE TABLE sessions (id TEXT PRIMARY KEY, serverId TEXT REFERENCES servers(id));
+      INSERT INTO sessions VALUES ('history', 'existing');`);
+    old.close();
+    const db = createDb(file);
+    expect(db.getServer('existing')).toMatchObject({ name: 'Original', password: 'secret' });
+    db.deleteServer('existing'); db.close();
+    const reopened = createDb(file);
+    expect(reopened.listServers()).toEqual([]); reopened.close();
+    const archive = new BetterSqlite3(file, { readonly: true });
+    expect(archive.prepare('SELECT * FROM sessions').all()).toEqual([{ id: 'history', serverId: 'existing' }]);
+    expect(archive.prepare('PRAGMA foreign_key_check').all()).toEqual([]); archive.close();
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

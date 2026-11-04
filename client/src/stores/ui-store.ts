@@ -1,84 +1,10 @@
 import { create } from 'zustand';
-
-function getInitialDarkMode(): boolean {
-  const stored = localStorage.getItem('gate-dark-mode');
-  if (stored !== null) return stored === 'true';
-  return window.matchMedia('(prefers-color-scheme: dark)').matches;
-}
-
-export type SyncStatus = { state: 'idle' } | { state: 'syncing' } | { state: 'done'; added: number } | { state: 'error'; error: string };
-
-function getInitialNotifyPref(key: string, fallback: boolean): boolean {
-  const stored = localStorage.getItem(key);
-  if (stored !== null) return stored === 'true';
-  return fallback;
-}
-
-interface UIStore {
-  sidebarOpen: boolean;
-  planPanelOpen: boolean;
-  darkMode: boolean;
-  notifyBrowser: boolean;
-  notifyToast: boolean;
-  notifySound: boolean;
-  syncStatus: Record<string, SyncStatus>; // sessionId → status
-  toggleSidebar: () => void;
-  setSidebarOpen: (open: boolean) => void;
-  togglePlanPanel: () => void;
-  setPlanPanelOpen: (open: boolean) => void;
-  toggleDarkMode: () => void;
-  setNotifyBrowser: (on: boolean) => void;
-  setNotifyToast: (on: boolean) => void;
-  setNotifySound: (on: boolean) => void;
-  setSyncStatus: (sessionId: string, status: SyncStatus) => void;
-  activeTab: 'chat' | 'diff';
-  setActiveTab: (tab: 'chat' | 'diff') => void;
-  changesPanelOpen: boolean;
-  setChangesPanelOpen: (open: boolean) => void;
-  toggleChangesPanel: () => void;
-  rightPanelOpen: boolean;
-  setRightPanelOpen: (open: boolean) => void;
-  toggleRightPanel: () => void;
-}
-
-export const useUIStore = create<UIStore>((set) => ({
-  sidebarOpen: false,
-  planPanelOpen: false,
-  darkMode: getInitialDarkMode(),
-  notifyBrowser: getInitialNotifyPref('gate-notify-browser', false),
-  notifyToast: getInitialNotifyPref('gate-notify-toast', true),
-  notifySound: getInitialNotifyPref('gate-notify-sound', false),
-  syncStatus: {},
-  toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
-  setSidebarOpen: (open) => set({ sidebarOpen: open }),
-  togglePlanPanel: () => set((s) => ({ planPanelOpen: !s.planPanelOpen })),
-  setPlanPanelOpen: (open) => set({ planPanelOpen: open }),
-  toggleDarkMode: () => set((s) => {
-    const next = !s.darkMode;
-    localStorage.setItem('gate-dark-mode', String(next));
-    return { darkMode: next };
+const stored = localStorage.getItem('gate-dark-mode');
+export const useUIStore = create<{ darkMode: boolean; toggleDarkMode: () => void }>((set) => ({
+  darkMode: stored === null ? matchMedia('(prefers-color-scheme: dark)').matches : stored === 'true',
+  toggleDarkMode: () => set((state) => {
+    const darkMode = !state.darkMode;
+    localStorage.setItem('gate-dark-mode', String(darkMode));
+    return { darkMode };
   }),
-  setNotifyBrowser: (on) => set(() => {
-    localStorage.setItem('gate-notify-browser', String(on));
-    return { notifyBrowser: on };
-  }),
-  setNotifyToast: (on) => set(() => {
-    localStorage.setItem('gate-notify-toast', String(on));
-    return { notifyToast: on };
-  }),
-  setNotifySound: (on) => set(() => {
-    localStorage.setItem('gate-notify-sound', String(on));
-    return { notifySound: on };
-  }),
-  setSyncStatus: (sessionId, status) => set((s) => ({
-    syncStatus: { ...s.syncStatus, [sessionId]: status },
-  })),
-  activeTab: 'chat',
-  setActiveTab: (tab) => set({ activeTab: tab }),
-  changesPanelOpen: false,
-  setChangesPanelOpen: (open) => set({ changesPanelOpen: open }),
-  toggleChangesPanel: () => set((s) => ({ changesPanelOpen: !s.changesPanelOpen })),
-  rightPanelOpen: false,
-  setRightPanelOpen: (open) => set({ rightPanelOpen: open }),
-  toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
 }));

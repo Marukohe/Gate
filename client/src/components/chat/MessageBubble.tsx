@@ -2,73 +2,28 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from './CodeBlock';
 import { ScrollableTable } from './ScrollableTable';
-import { CheckpointButton } from './CheckpointButton';
-import { cn, stripLineNumbers } from '@/lib/utils';
-import { getProviderStyle } from '@/lib/provider-colors';
-import type { ChatMessage } from '@/stores/chat-store';
+import type { Item } from '../../../../server/src/types';
 
-interface MessageBubbleProps {
-  message: ChatMessage;
-  provider?: string | null;
-  onRevert?: () => void;
-}
-
-export function MessageBubble({ message, provider, onRevert }: MessageBubbleProps) {
-  if (message.type === 'system') {
-    return (
-      <div className="my-2 text-center text-xs text-muted-foreground">{message.content}</div>
-    );
-  }
-
-  const isUser = message.type === 'user';
-  const providerStyle = !isUser ? getProviderStyle(provider) : null;
-
-  return (
-    <div className={cn('my-2 flex', isUser ? 'justify-end' : 'justify-start')}>
-      <div className={cn(
-        'relative max-w-[85%]',
-        isUser && onRevert && 'group',
-      )}>
-        {isUser && onRevert && <CheckpointButton onClick={onRevert} />}
-        <div className={cn(
-          'min-w-0 overflow-hidden rounded-lg px-4 py-2 text-sm',
-          isUser
-            ? 'bg-primary text-primary-foreground'
-            : providerStyle?.bg || 'bg-muted'
-        )}>
-          {isUser ? (
-            <p className="whitespace-pre-wrap break-words">{message.content}</p>
-          ) : (
-            <div className="markdown-prose overflow-x-auto">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  code({ className, children, ...props }) {
-                    const match = /language-(\w+)/.exec(className || '');
-                    const code = String(children).replace(/\n$/, '');
-                    if (match) {
-                      return <CodeBlock code={code} language={match[1]} />;
-                    }
-                    // Fenced code block without language (inside <pre>)
-                    if (code.includes('\n')) {
-                      return <CodeBlock code={code} language="text" />;
-                    }
-                    return <code className="break-all rounded border border-border/40 bg-muted/70 px-1.5 py-0.5 text-[0.8125rem]" style={{ fontFamily: "'Fira Code', monospace" }} {...props}>{children}</code>;
-                  },
-                  pre({ children }) {
-                    return <>{children}</>;
-                  },
-                  table({ children }) {
-                    return <ScrollableTable>{children}</ScrollableTable>;
-                  },
-                }}
-              >
-                {stripLineNumbers(message.content)}
-              </ReactMarkdown>
-            </div>
-          )}
-        </div>
-      </div>
+export function MessageBubble({ item }: { item: Item }) {
+  if (item.kind === 'tool') return <details className="my-3 rounded-lg border bg-muted/20 px-3 py-2 text-xs">
+    <summary className="cursor-pointer break-all text-muted-foreground">{item.title}<span className="ml-2">{item.status}</span></summary>
+    <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-all">{item.text || 'No output'}</pre>
+  </details>;
+  if (item.kind === 'notice') return <p className="my-3 text-sm text-muted-foreground">{item.text}</p>;
+  return <div className={`my-5 flex ${item.kind === 'user' ? 'justify-end' : 'justify-start'}`}>
+    <div className={`min-w-0 max-w-full rounded-xl px-4 py-3 text-sm ${item.kind === 'user' ? 'bg-muted sm:max-w-[85%]' : 'w-full'}`}>
+      {item.kind === 'user' ? <p className="whitespace-pre-wrap break-words">{item.text}</p> : <div className="markdown-prose">
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+          code({ className, children, ...props }) {
+            const language = /language-([^\s]+)/.exec(className ?? '')?.[1];
+            const code = String(children).replace(/\n$/, '');
+            return language || code.includes('\n') ? <CodeBlock code={code} language={language ?? 'text'} />
+              : <code className="break-all rounded bg-muted px-1 py-0.5" {...props}>{children}</code>;
+          },
+          pre({ children }) { return <>{children}</>; },
+          table({ children }) { return <ScrollableTable>{children}</ScrollableTable>; },
+        }}>{item.text}</ReactMarkdown>
+      </div>}
     </div>
-  );
+  </div>;
 }

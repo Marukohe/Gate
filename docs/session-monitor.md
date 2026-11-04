@@ -1,44 +1,20 @@
-# Session monitor
+# Sessions
 
-Gate's default page answers three questions: what is running on each server, what needs a response, and what
-finished. Servers group sessions on one page. Search finds a server, session, agent, or working directory.
-There is no navigation menu and no required project/task setup.
+Gate uses one connection per server to Codex's shared app-server daemon. SSH forwards the native Unix socket;
+Gate installs no remote files and opens no public Codex port. It starts an absent daemon without restarting an existing one.
+The Codex executable is resolved through the SSH login shell or an explicit path in server settings.
 
-Each server has New session and Edit controls. A new session uses a name, directory, and agent (Codex by default).
-Opening a saved conversation explicitly connects it; browsing the panel never launches a CLI. Returning to the
-panel clears the automatic conversation reconnect target without stopping an owned process. Managed sessions
-open logs, pending decisions, stop controls, or terminal attachment directly. External sessions open observed
-activity and identity; their input and lifecycle remain in the native terminal.
+The panel reads native threads without starting turns. Opening a conversation subscribes through `thread/resume`
+and reads paginated history. New sessions use `thread/start`; messages use `turn/start`, or `turn/steer` while a turn
+is active. Stop interrupts the current turn. Closing Gate only disconnects its client; Codex continues running.
 
-## Status evidence
+Status comes from Codex: running, waiting for input/approval, idle, saved but not loaded, or error.
+Connection failures retain the last list with unknown status. Reconnection reloads state and history, never user input.
+A saved thread can be resumed on this backend; Gate cannot attach to a separate `--no-daemon` process.
 
-`GET /api/monitor` is a read-only projection refreshed every three seconds. It combines saved chat messages and
-owned SSH channels, managed runtime records, checkout hooks, and cached terminal discovery. It returns bounded activity
-previews without prompts, review packets, full tool payloads, or server credentials.
+Approvals and questions are shared across Gate browser clients. Only provider-offered decisions are accepted,
+answers are sent once, and requests disappear when Codex confirms resolution or the turn completes.
+Unsupported request types remain visible for handling in the native terminal. Gate does not grant permissions automatically.
 
-- Running: a live owned chat channel without a final result, a recently confirmed active managed run, or a fresh
-  native busy event or recent recorded Codex activity. It is not a completion percentage or proof of process liveness.
-- Needs you: a current question or managed approval, or a fresh external waiting event.
-- Finished/Failed: an explicit saved result/error or confirmed managed outcome. Finished means the turn/run ended;
-  it does not accept a task or imply an interactive CLI has exited.
-- Idle/Stopped: a ready channel or native idle/end report, or an interrupted managed run.
-- Unknown: no live ownership, lost/unconfirmed runtime contact, or stale native observations. Managed health expires
-  after 30 seconds without reconciliation; native activity expires after 60 seconds without an event.
-
-The panel keeps the last snapshot during a refresh failure and marks its state unconfirmed until recovery.
-Legacy records lacking result subtypes are not guessed complete. Native conversation IDs are not process handles:
-a matching externally resumed conversation replaces an inactive saved entry with an observed entry, preventing
-an accidental second writer. Existing managed ownership takes precedence over duplicate hook signals.
-
-## Terminal Codex sessions
-
-While the panel is open, Gate checks each server over a separate SSH/SFTP connection approximately every 15 seconds.
-It reads the SSH user's `~/.codex/sessions`, or `$CODEX_HOME/sessions` when that variable is available to the SSH shell.
-No hooks, project registration, remote runtime, or Codex restart are needed. A custom home set only in a terminal
-must also be available to the SSH shell. Gate cannot discover another OS user's private sessions.
-
-Discovery reads bounded headers and tails of the 100 most recently modified rollouts, including resumed files
-in older date directories. Unchanged files are cached; child-agent rollouts are excluded. These rows show recorded
-activity and open read-only details. They do not attach to, send input to, or stop the native process.
-Connection failures appear under the server; cached activity remains visible with unknown status until recovery.
-Existing checkout hooks continue to supply events, including approval requests that rollouts may not record.
+SQLite contains connection settings. Codex remains the source of conversation history; there is no second Gate message store.
+When upgrading an older Gate database, legacy tables and their server references are preserved as inactive archives.

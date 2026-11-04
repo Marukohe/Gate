@@ -11,7 +11,7 @@
     <style>
       html { background: #fff }
       @media (prefers-color-scheme: dark) {
-        html { background: #0f172a; color-scheme: dark }
+        html { background: #171717; color-scheme: dark }
       }
     </style>
     <script>
@@ -23,14 +23,11 @@
         } catch(e) {}
         if (dark) {
           document.documentElement.classList.add('dark');
-          document.documentElement.style.background = '#0f172a';
-          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0f172a');
+          document.documentElement.style.background = '#171717';
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#171717');
         }
       })();
     </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet" />
     <title>Gate</title>
   </head>
   <body>
