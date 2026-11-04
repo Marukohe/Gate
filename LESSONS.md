@@ -142,3 +142,20 @@ Keep this file concise; implementation progress belongs in [the refactor plan](d
 - Fix: serialize Gate start requests with hook installation/upgrade, inspect confirmed remote exit, and refuse upgrades
   with active or lost ownership. Slow observation polls run separately from managed execution reconciliation.
 - Check: `workbench-hooks-upgrade.test.ts` holds a start in flight and verifies that neither active nor lost runs trigger shutdown.
+
+## A PTY shell owns more than one process group
+
+- Verified: interactive shells place foreground and background jobs in different process groups.
+- Fix: clean the owned Linux session using pidfds before reaping its leader; require a terminal cleanup event before
+  releasing the checkout. A worker exit alone is insufficient and becomes lost ownership.
+- Check: `terminal.test.mjs` interrupts a shell with background/TERM-resistant jobs; execution tests keep the checkout
+  locked when the worker exits without cleanup confirmation. Processes that create another session remain outside this guarantee.
+
+## Wait for the specific input acknowledgement before testing disconnect survival
+
+- Observed: the first terminal restart check closed its SSH bridge before the last command was accepted; that command
+  never appeared in the journal. Earlier acknowledgements were incorrectly counted as confirmation for the new input.
+- Fix: wait for the exact input ID's acknowledgement, then disconnect. The product never resends uncertain keystrokes.
+- Check: the localhost workbench smoke verifies command execution and cursor replay across backend restart.
+- Terminal input uses keyed HMAC fingerprints for deduplication, not plain hashes that expose guessable individual keys.
+  Keep `input.key` private and with its journals; missing or changed keys must stop recovery.

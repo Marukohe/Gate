@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
+import { WebSocket } from 'ws';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createDb } from '../../server/dist/db.js';
 import { ExecutionService } from '../../server/dist/workbench/execution.js';
@@ -66,6 +67,8 @@ try {
   const fake = '#!' + process.execPath + '\n' + fs.readFileSync(
     new URL('./workbench-fixture.mjs', import.meta.url), 'utf8').split('\n').slice(1).join('\n');
   ssh(`cat > ${quote(`${root}/fake-codex.mjs`)} && chmod 700 ${quote(`${root}/fake-codex.mjs`)}`, fake);
+  ssh(`cat > ${quote(`${root}/clean-shell`)} && chmod 700 ${quote(`${root}/clean-shell`)}`,
+    '#!/bin/sh\nexec /bin/bash --noprofile --norc -i\n');
   ssh(`git init -q ${quote(`${root}/repo`)} && git -C ${quote(`${root}/repo`)} -c user.name=Gate -c user.email=gate@example.invalid commit -qm initial --allow-empty`);
   db = createDb(dbPath);
   const machine = db.createServer({ name: 'Isolated localhost', host: '127.0.0.1', port: 22,
@@ -79,7 +82,7 @@ try {
   db.close(); db = null;
   await startBackend();
   const settings = { serverId: machine.id, nodePath: process.execPath, codexPath: `${root}/fake-codex.mjs`,
-    claudePath: `${root}/fake-codex.mjs`, directory: `${root}/rt` };
+    claudePath: `${root}/fake-codex.mjs`, directory: `${root}/rt`, shellPath: `${root}/clean-shell` };
   await api(`/machines/${machine.id}/runtime`, 'PUT', settings);
   const hook = await api(`/checkouts/${checkout.id}/hooks`, 'PUT', { provider: 'claude', enabled: true });
   const codexHook = await api(`/checkouts/${checkout.id}/hooks`, 'PUT', { provider: 'codex', enabled: true });
@@ -215,6 +218,51 @@ try {
   await until(async () => (await api('')).collaborations.find((item) => item.runId === invalidReview.id).state === 'failed', 'review mutation rejection');
   assert.equal(ssh(`test ! -e ${quote(`${sourcePath}/unexpected-review-edit`)} && printf safe`).trim(), 'safe');
 
+  const terminalTask = await api('/tasks', 'POST', { projectId: project.id, checkoutId: checkout.id,
+    title: 'Managed terminal', goal: 'Validate terminal persistence' });
+  const terminalRun = await api(`/tasks/${terminalTask.id}/terminal`, 'POST', { requestId: 'native-shell', provider: 'shell' });
+  await until(async () => (await api('')).runs.find((item) => item.id === terminalRun.id).state === 'running', 'terminal start');
+  async function attachTerminal(after = 0) {
+    const ws = new WebSocket(`${base.replace('http:', 'ws:')}/ws/terminal?runId=${terminalRun.id}&after=${after}`);
+    const messages = [], events = [];
+    let output = '';
+    ws.on('message', (bytes) => {
+      const message = JSON.parse(bytes.toString()); messages.push(message);
+      for (const event of message.events ?? []) {
+        events.push(event);
+        if (event.type === 'protocol' && event.data.type === 'terminal-output') output += Buffer.from(event.data.data, 'base64').toString();
+      }
+    });
+    await until(() => messages.some((message) => message.type === 'ready'), 'terminal attachment');
+    const send = (message) => { const id = crypto.randomUUID(); ws.send(JSON.stringify({ id, message })); return id; };
+    return { ws, messages, events, output: () => output, send,
+      input: (text) => send({ type: 'input', data: Buffer.from(text).toString('base64') }) };
+  }
+  let terminal = await attachTerminal();
+  assert.equal(terminal.messages.find((item) => item.type === 'control').writable, true);
+  const viewer = await attachTerminal();
+  assert.equal(viewer.messages.find((item) => item.type === 'control').writable, false);
+  viewer.input('touch forbidden-second-writer\n');
+  await until(() => viewer.messages.some((item) => item.type === 'input-error'), 'read-only terminal attachment');
+  viewer.ws.close();
+  terminal.send({ type: 'resize', cols: 97, rows: 29 });
+  terminal.input("stty size; printf 'PTY-中文\\n'\n");
+  await until(() => terminal.output().includes('29 97\r\n') && terminal.output().includes('PTY-中文\r\n'), 'native PTY resize and Unicode');
+  terminal.input("stty -echo; printf 'SECRET-READY\\n'; read -r answer; printf 'SECRET-RECEIVED\\n'; stty echo\n");
+  await until(() => terminal.output().includes('SECRET-READY\r\n'), 'hidden terminal input');
+  terminal.input('test-hidden-password\n');
+  await until(() => terminal.output().includes('SECRET-RECEIVED\r\n'), 'password receipt');
+  const terminalLog = await (await fetch(`${base}/api/workbench/runs/${terminalRun.id}/log`)).text();
+  assert.equal(terminalLog.includes('test-hidden-password'), false);
+  assert.equal(terminalLog.includes(Buffer.from('test-hidden-password\n').toString('base64')), false);
+  const restartInput = terminal.input("sleep 1; printf 'SURVIVED-RESTART\\n'\n");
+  await until(() => terminal.messages.some((item) => item.type === 'ack' && item.id === restartInput), 'input acknowledgement');
+  const terminalCursor = terminal.events.at(-1).seq;
+  terminal.ws.close(); await stopBackend(); await startBackend();
+  terminal = await attachTerminal(terminalCursor);
+  await until(() => terminal.output().includes('SURVIVED-RESTART\r\n'), 'terminal backend restart replay');
+  terminal.ws.close();
+
   if (process.env.GATE_TEST_PLAYWRIGHT) {
     const { chromium } = await import(process.env.GATE_TEST_PLAYWRIGHT);
     const browser = await chromium.launch({ headless: true, executablePath: process.env.GATE_TEST_CHROMIUM,
@@ -295,6 +343,29 @@ try {
       await page.getByRole('button', { name: 'Remove claude hooks', exact: true }).click();
       await page.getByRole('button', { name: 'Install claude hooks', exact: true }).waitFor();
       assert.equal(JSON.stringify(JSON.parse(fs.readFileSync(hook.file, 'utf8'))).includes('gate-observer:'), false);
+      await page.goto(`${base}/#task/${terminalTask.id}`);
+      await page.getByRole('button', { name: 'Attach terminal', exact: true }).click();
+      await page.getByText('Connected · You control input', { exact: true }).waitFor();
+      await page.locator('.xterm-helper-textarea').focus();
+      await page.keyboard.type("printf 'BROWSER-PTY\\n'"); await page.keyboard.press('Enter');
+      await until(async () => (await api(`/runs/${terminalRun.id}/events`)).some((event) => event.data.data?.type === 'terminal-output' &&
+        Buffer.from(event.data.data.data, 'base64').toString().includes('BROWSER-PTY\r\n')), 'browser terminal keyboard');
+      const terminalPage = await context.newPage();
+      await terminalPage.goto(`${base}/#task/${terminalTask.id}`);
+      await terminalPage.getByRole('button', { name: 'Attach terminal', exact: true }).click();
+      await terminalPage.getByText('Connected · Read-only attachment', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Detach terminal', exact: true }).click();
+      await terminalPage.getByRole('button', { name: 'Control terminal', exact: true }).click();
+      await terminalPage.getByText('Connected · You control input', { exact: true }).waitFor();
+      for (const width of [320, 390, 1365]) {
+        await terminalPage.setViewportSize({ width, height: 900 });
+        await terminalPage.getByRole('region', { name: 'Interactive terminal', exact: true }).scrollIntoViewIfNeeded();
+        await delay(150);
+        assert.equal(await terminalPage.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+        if (width === 390) await terminalPage.screenshot({ path: '/tmp/gate-p4-terminal.png' });
+      }
+      await terminalPage.close();
+      assert.equal((await api('')).runs.find((item) => item.id === terminalRun.id).state, 'running');
       await page.goto(`${base}/#task/${first.id}`);
       await page.getByText(/tick 1/).waitFor();
       for (const width of [320, 390, 1365]) {
@@ -309,6 +380,11 @@ try {
       console.log('Browser execution, two-client decisions, verification, explicit acceptance, and 320/390/1365px layouts passed');
     } finally { await browser.close(); }
   }
+  terminal = await attachTerminal();
+  terminal.input('exit 0\n');
+  await until(async () => (await api('')).runs.find((item) => item.id === terminalRun.id).state === 'completed', 'confirmed PTY exit');
+  terminal.ws.close();
+  assert.equal((await api('')).tasks.find((item) => item.id === terminalTask.id).status, 'in-progress');
   await stopBackend();
   await delay(400);
   await startBackend();
@@ -341,7 +417,7 @@ try {
   const report = { backendRestart: 'passed', sshReconnect: 'passed', deduplicatedStart: 'passed', literalPrompt: 'passed',
     parallelWorktrees: 'passed', confirmedCompletionAndStop: 'passed',
     durableDecisions: 'passed', concurrentDecisionConflict: 'passed', verificationSnapshotsAndLogs: 'passed', handoff: 'passed', fixedReviewWithConcurrentWriter: 'passed',
-    modifiedReviewRejected: 'passed', scopedHooksAndExternalConflicts: 'passed',
+    modifiedReviewRejected: 'passed', scopedHooksAndExternalConflicts: 'passed', managedTerminal: 'passed',
     provider: 'deterministic app-server fixture and hook payloads; no model call' };
   console.log(JSON.stringify(report, null, 2));
   await remote.request(settings, { method: 'shutdown' });

@@ -54,6 +54,41 @@ Refresh changes to compare a review with the latest task snapshot. Review comple
 writer's task status or accept the task. Review worktrees, synthetic refs, and diff artifacts are retained for inspection;
 automatic cleanup is not implemented. Ignored files and external dependencies are outside the snapshot guarantee.
 
+## Managed terminals
+
+Choose **Shell**, **Claude CLI**, or **Codex CLI** and **Open managed terminal** in a task's Execution panel. The terminal
+uses the same task worktree/shared-checkout ownership as other runs. Expand **Terminal paths (Linux)** in machine
+settings if Python or the interactive shell is not at `/usr/bin/python3` or `/bin/bash`. Python 3.9+ and Linux pidfd APIs
+are required; Gate probes these before launch. No remote npm install or native Node.js addon is required.
+
+Use **Attach terminal** to view the real PTY through xterm.js. One browser controls input and window size; additional
+attachments are read-only. Detach the controller to make **Control terminal** available in another browser. Heartbeats
+release abandoned browser connections. Resizing the controlling page resizes the remote PTY; other viewers follow its
+dimensions. Mobile buttons provide Ctrl-C, Escape, Tab, and arrow keys. Native CLI approvals remain in the terminal;
+Gate does not infer structured approvals or task completion from screen text.
+
+Closing a page or losing SSH/backend connectivity detaches the view without stopping execution. Reattachment replays
+ordered output and resize events. The page keeps its cursor across transport reconnect; opening a new view replays from
+the start. Output is subject to the runtime's 64 MiB journal limit and the browser keeps 5,000 scrollback lines.
+Input accepted by the runtime is deduplicated, but input whose acknowledgement was lost is never automatically resent.
+Inspect the terminal before retrying such input, especially an Enter key or a command.
+
+Terminal input journal entries contain keyed HMAC fingerprints, not raw bytes. The private `input.key` stays in the
+runtime directory and is excluded from downloaded logs; retain it with the journals when backing up runtime state.
+Missing/changed keys stop journal recovery. Visible terminal output is still recorded, including anything the program
+echoes. This keeps non-echoed password input out of the normal event log without pretending all terminal output is secret-free.
+
+**Stop run** terminates the PTY session, including its foreground/background process groups, and waits for confirmed
+cleanup. Linux pidfds prevent signalling a reused process ID; the session leader is retained until cleanup finishes.
+A worker exit without the terminal cleanup event becomes `lost` and retains checkout ownership. A terminal exiting
+successfully does not move the task to review or done. Runtime/machine crashes and descendants that create another OS
+session remain outside the cleanup/recovery guarantee. The terminal is a native shell, not a filesystem sandbox.
+
+The PTY worker uses [Python's PTY facilities](https://docs.python.org/3/library/pty.html) and the browser uses
+[xterm.js](https://xtermjs.org/docs/api/terminal/classes/terminal/). [Herdr-core](https://herdr.dev/core/) was reconsidered
+as a mature terminal runtime. Gate keeps the existing supervisor, journal, and checkout lifecycle here instead of adding
+a second daemon/state store; this choice currently limits the PTY implementation to Linux.
+
 ## Contracts
 
 - Prompts travel as JSON on SSH stdin, never as interpolated shell commands.
@@ -130,11 +165,15 @@ and [Herdr integrations](https://acrogenesis.com/herdr/docs/integrations/).
   private payload minimization, managed/subagent suppression, and runtime restart.
 - `GATE_CLAUDE_BIN=/path/to/claude GATE_CODEX_BIN=/path/to/codex node --test tools/runtime-probe/hooks-cli.test.mjs`
   verifies actual Claude SessionStart delivery and Codex discovery without automatically trusting hooks or sending a model turn.
+- `terminal.test.mjs` uses an actual PTY and shell to verify UTF-8, window size, Ctrl-C, session cleanup, redacted input,
+  retry deduplication after runtime restart, and rejection of missing input keys.
+- The workbench SSH/browser check also validates backend restart during a terminal command, native output replay,
+  non-echoed input absent from logs, concurrent attachment roles, keyboard input, control transfer, detach, and exit.
 
 ## Remaining boundaries
 
 The end-to-end lifecycle test uses a deterministic provider fixture. Real model/tool/approval execution still needs
-separate validation. Managed PTYs remain in P4. Machine reboot, runtime-crash reattachment,
+separate validation. Machine reboot, runtime-crash reattachment,
 disk-full recovery, automatic journal retention, and descendants escaping the owned process group are not guaranteed.
 Concurrent writers started outside managed task execution are not covered by checkout locks; hooks surface only reported activity.
 Observation snapshots and hook backups are retained without automatic cleanup. Codex hook execution after native trust

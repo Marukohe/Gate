@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { observations } from './observations.mjs';
 
 export const PROTOCOL_VERSION = 1;
@@ -47,6 +48,13 @@ export async function startRuntime(directory, { stopTimeoutMs = 1500, maxJournal
   if (process.platform === 'win32') throw new Error('The runtime requires Unix sockets and process groups');
   const root = path.resolve(directory);
   fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+  const keyFile = path.join(root, 'input.key');
+  let keyCreated = false;
+  try { fs.writeFileSync(keyFile, randomBytes(32), { flag: 'wx', mode: 0o600 }); keyCreated = true; }
+  catch (error) { if (error.code !== 'EEXIST') throw error; }
+  const inputKey = fs.readFileSync(keyFile);
+  if (inputKey.length !== 32) throw new Error('Invalid runtime input key');
+  const keyId = createHash('sha256').update(inputKey).digest('hex');
   const socketPath = path.join(root, 'runtime.sock');
   if (Buffer.byteLength(socketPath) > 100) throw new Error('Runtime socket path is too long');
   const runs = new Map();
@@ -177,7 +185,7 @@ export async function startRuntime(directory, { stopTimeoutMs = 1500, maxJournal
     if (!request || request.version !== PROTOCOL_VERSION) throw new Error('Unsupported protocol version');
     if (request.method === 'ping') {
       return { version: PROTOCOL_VERSION, closing,
-        capabilities: { stdio: true, replay: true, pty: false, approvals: false, observations: true } };
+        capabilities: { stdio: true, replay: true, pty: false, approvals: false, observations: true, redactedInput: true } };
     }
     if (closing) throw new Error('Runtime is shutting down');
     switch (request.method) {
@@ -207,15 +215,16 @@ export async function startRuntime(directory, { stopTimeoutMs = 1500, maxJournal
         const run = getRun(request.runId);
         const inputId = identifier(request.inputId);
         const data = text(request.data, 'input data');
+        const fingerprint = request.redact === true ? { digest: createHmac('sha256', inputKey).update(data).digest('hex'), keyId } : data;
         if (run.inputs.has(inputId)) {
-          if (run.inputs.get(inputId) !== data) throw new Error('Input ID already has different data');
+          if (JSON.stringify(run.inputs.get(inputId)) !== JSON.stringify(fingerprint)) throw new Error('Input ID already has different data');
           return { accepted: true, duplicate: true };
         }
         if (!run.child || run.state !== 'running' || !run.child.stdin.writable) throw new Error('Run cannot accept input');
         if (run.bytes + Buffer.byteLength(data) * 6 + 1024 > maxJournalBytes) throw new Error('Run journal limit reached');
         // Acceptance is durable before delivery. A crash in between is ambiguous; never replay input automatically.
-        record(run, 'input-accepted', { inputId, data });
-        run.inputs.set(inputId, data);
+        record(run, 'input-accepted', { inputId, ...(request.redact === true ? fingerprint : { data }) });
+        run.inputs.set(inputId, fingerprint);
         run.child.stdin.write(data);
         return { accepted: true, duplicate: false };
       }
@@ -297,7 +306,13 @@ export async function startRuntime(directory, { stopTimeoutMs = 1500, maxJournal
       for (let after = 0; after < run.seq; after += 50) {
         for (const event of readPage(run, after, 50)) {
           if (event.runId !== run.id || event.seq !== ++run.validatedSeq) throw new Error(`Invalid journal sequence: ${name}`);
-          if (event.type === 'input-accepted') run.inputs.set(event.inputId, event.data);
+          if (event.type === 'input-accepted') {
+            if (event.digest && event.keyId !== keyId) {
+              if (keyCreated) fs.unlinkSync(keyFile);
+              throw new Error('Runtime input key is missing or changed; restore input.key before journal recovery');
+            }
+            run.inputs.set(event.inputId, event.digest ? { digest: event.digest, keyId: event.keyId } : event.data);
+          }
         }
       }
       runs.set(run.id, run);

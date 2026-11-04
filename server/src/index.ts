@@ -13,6 +13,7 @@ import { ClaudeProvider } from './providers/claude/index.js';
 import { CodexProvider } from './providers/codex/index.js';
 import { createWorkbenchRoutes } from './workbench/routes.js';
 import { ExecutionService } from './workbench/execution.js';
+import { setupTerminalWebSocket } from './workbench/terminal-ws.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -76,6 +77,7 @@ const sshManager = setupWebSocket(httpServer, db, registry);
 
 app.use('/api/servers', createServerRoutes(db, sshManager));
 const execution = new ExecutionService(db);
+const closeTerminals = setupTerminalWebSocket(httpServer, db, execution);
 execution.start();
 app.use('/api/workbench', createWorkbenchRoutes(db, sshManager, execution));
 
@@ -99,6 +101,7 @@ httpServer.listen(PORT, HOST, () => {
 
 function shutdown() {
   console.log('Shutting down...');
+  closeTerminals();
   Promise.all([execution.close(), sshManager.disconnectAll()]).catch(() => {}).finally(() => {
     httpServer.close();
     db.close();

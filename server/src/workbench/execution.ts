@@ -32,6 +32,11 @@ export class ExecutionService {
         throw new Error(`${key} must be an absolute remote path`);
       }
     }
+    for (const key of ['pythonPath', 'shellPath'] as const) {
+      if (settings[key] !== undefined && (!settings[key]!.startsWith('/') || settings[key]!.includes('\0'))) {
+        throw new Error(`${key} must be an absolute remote path`);
+      }
+    }
     if (Buffer.byteLength(`${settings.directory}/runtime.sock`) > 100) throw new Error('Runtime directory is too long');
     const ready = await this.remote.install(settings);
     this.db.workbench.saveRuntimeSettings(ready);
@@ -90,6 +95,12 @@ export class ExecutionService {
   collaborate(taskId: string, requestId: string, kind: 'handoff' | 'review', provider: string,
     instructions: string, sourceRunId?: string) {
     const run = this.db.workbench.enqueue(taskId, requestId, instructions, { kind, provider, sourceRunId });
+    void this.reconcile(run.id);
+    return run;
+  }
+
+  terminal(taskId: string, requestId: string, provider: string) {
+    const run = this.db.workbench.enqueue(taskId, requestId, '', { kind: 'terminal', provider });
     void this.reconcile(run.id);
     return run;
   }
@@ -167,7 +178,8 @@ export class ExecutionService {
         }
         if (collaboration?.snapshot) codeRef = collaboration.snapshot.commit;
         // Persist the exact spawn bytes before sending start. A lost acknowledgement is retried with identical identity.
-        execution.launch = run.kind === 'test' ? this.remote.verification(execution.settings, checkout.path, run.prompt)
+        execution.launch = run.kind === 'terminal' ? await this.remote.terminal(execution.settings, checkout.path, run.provider)
+          : run.kind === 'test' ? this.remote.verification(execution.settings, checkout.path, run.prompt)
           : this.remote.launch(execution.settings, run.provider, checkout.path, collaboration?.packet ?? run.prompt,
             collaboration?.kind === 'review' ? collaboration.snapshot! : undefined);
         store.prepareRun(runId, execution.launch, codeRef);
@@ -238,6 +250,11 @@ export class ExecutionService {
       }
       case 'protocol': {
         const message = payload.data as Record<string, unknown>;
+        if (run.kind === 'terminal' && message.type === 'terminal-exit') {
+          store.saveExecution({ ...store.execution(run.id)!, terminalExit: {
+            exitCode: Number(message.exitCode), signal: typeof message.signal === 'string' ? message.signal : null,
+          } });
+        }
         if (message.type === 'session') store.updateRun(run.id, { nativeSessionId: String(message.nativeSessionId) });
         if (message.type === 'attention') {
           store.addAttention(run.id, String(message.id), String(message.kind),
@@ -266,10 +283,17 @@ export class ExecutionService {
         break;
       }
       case 'exited': {
+        if (run.kind === 'terminal' && !store.execution(run.id)?.terminalExit) {
+          const error = 'Terminal worker exited without confirming PTY cleanup; inspect the remote processes before releasing ownership';
+          store.updateRun(run.id, { state: 'lost', error });
+          store.addAttention(run.id, 'ownership-loss', 'failure', { message: error }, event.time);
+          break;
+        }
         const failed = run.error || (!payload.interrupted && payload.exitCode !== 0);
+        const outcome = run.kind === 'terminal' ? store.execution(run.id)!.terminalExit! : payload;
         store.updateRun(run.id, { state: failed ? 'failed' : payload.interrupted ? 'interrupted' : 'completed',
-          exitCode: typeof payload.exitCode === 'number' ? payload.exitCode : null,
-          signal: typeof payload.signal === 'string' ? payload.signal : null, endedAt: event.time });
+          exitCode: typeof outcome.exitCode === 'number' ? outcome.exitCode : null,
+          signal: typeof outcome.signal === 'string' ? outcome.signal : null, endedAt: event.time });
         store.releaseCheckout(run.id);
         store.expireAttention(run.id, event.time);
         if (failed) store.addAttention(run.id, 'run-failure', 'failure',
@@ -285,7 +309,7 @@ export class ExecutionService {
           state: failed ? 'failed' : payload.interrupted ? 'interrupted' : 'completed',
           result: store.agentMessages(run.id).join('\n\n') || null });
         // A review finishing in its own checkout must not overwrite a concurrently running implementation's status.
-        if (!failed && !payload.interrupted && run.kind !== 'review') store.updateTask(run.taskId, { status: 'review' });
+        if (!failed && !payload.interrupted && !['review', 'terminal'].includes(run.kind)) store.updateTask(run.taskId, { status: 'review' });
         break;
       }
     }

@@ -52,6 +52,8 @@ This check uses localhost SSH and `~/.ssh/id_rsa` by default; set `GATE_TEST_SSH
 Optional browser checks use `GATE_TEST_PLAYWRIGHT` (absolute module path) and `GATE_TEST_CHROMIUM` (executable).
 Scoped-hook checks also cover event delivery through localhost SSH, record recovery, task association, shared-checkout
 conflicts, manual inspection, new activity after inspection, and preserving removal through the browser.
+Terminal checks use an actual isolated shell over a Linux PTY, including browser input/control transfer, window sizing,
+backend restart, hidden input excluded from logs, and confirmed exit. Python 3.9+ with Linux pidfd APIs is required.
 
 ## Protocol v1
 
@@ -66,7 +68,7 @@ The direct socket request must include that version explicitly.
 | `list` | None | All run snapshots |
 | `get` | `runId` | Run snapshot |
 | `events` | `runId`, optional `after` and `limit` | Events, next cursor, more flag |
-| `input` | `runId`, `inputId`, `data` | Accepted/duplicate status |
+| `input` | `runId`, `inputId`, `data`, optional `redact` | Accepted/duplicate status; terminal input uses keyed digests |
 | `interrupt` | `runId` | Snapshot; poll until confirmed exit |
 | `shutdown` | None | Acknowledgement; socket closes after owned children exit |
 | `observe-configure` | `scopeId`, canonical `cwd`, `provider`, `enabled` | Scoped observer settings |
@@ -94,8 +96,10 @@ to stdin; a crash between acceptance and writing has an unknown delivery outcome
 - Truncated/corrupt journal: fail startup and preserve evidence instead of guessing which command ran.
 - Journals have a 64 MiB per-run output limit and indexed, byte-bounded replay; exceeding the limit stops the run.
   Completed journals are retained until explicitly removed while the runtime is stopped. Aggregate disk use is not bounded.
-- Machine reboot, disk-full recovery, automatic runtime upgrades, and PTYs remain outside these checks.
+- Machine reboot, disk-full recovery, and unattended supervisor upgrades remain outside these checks.
   Descendants that leave the owned process group are not contained.
 
 The directory and socket must remain private to the owning OS user. Journals contain command arguments and
 input/output; they are local diagnostic data and must not be committed with credentials or private transcripts.
+Terminal raw input is excluded from journals, while visible/echoed output remains. The private runtime `input.key` is
+required to preserve redacted input deduplication across restart and must be backed up with the journals.

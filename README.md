@@ -39,6 +39,8 @@ Browser (React) <--WebSocket--> Node.js Backend <--SSH--> Remote Server
   Review a fixed snapshot in a separate checkout while task work continues, and see when that review becomes stale.
 - **External session awareness** — Install checkout-scoped Claude/Codex hooks to see native session activity and link it
   to tasks. Shared-checkout conflicts stay visible; native sessions remain controlled in their original terminals.
+- **Persistent native terminals** — Open a shell or native coding CLI in a task, attach from the browser, resize it,
+  and reconnect after closing the page. One browser controls input at a time. Remote terminals require Linux and Python 3.9+.
 
 - **Code from anywhere** — Start on your desktop, pick up on your phone. Sessions persist across devices via SSH and CLI resume.
 - **Resume saved conversations** — Find a CLI transcript and resume its conversation. This starts a new process;

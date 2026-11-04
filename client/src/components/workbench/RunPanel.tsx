@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -6,6 +6,7 @@ import type { Checkout, Run, RunEvent, Task } from '../../../../server/src/workb
 import { workbenchRequest, type WorkbenchActions } from './use-workbench';
 
 const active = ['queued', 'starting', 'running', 'waiting', 'stopping'];
+const TerminalView = lazy(() => import('./TerminalView'));
 
 export function RunPanel({ task, checkout, runs, checkoutBlocked, mutate, busy }: WorkbenchActions & {
   task: Task; checkout: Checkout; runs: Run[]; checkoutBlocked: boolean;
@@ -14,7 +15,9 @@ export function RunPanel({ task, checkout, runs, checkoutBlocked, mutate, busy }
   const [settings, setSettings] = useState<Record<string, string> | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [prompt, setPrompt] = useState('');
+  const [terminalProvider, setTerminalProvider] = useState('shell');
   const requestId = useRef<string | null>(null);
+  const terminalRequestId = useRef<string | null>(null);
   const pending = (checkoutBlocked && (task.isolation === 'shared' || checkout.kind === 'worktree')) ||
     runs.some((run) => (active.includes(run.state) || run.state === 'lost') &&
     (run.kind !== 'review' || run.checkoutId === task.checkoutId));
@@ -42,6 +45,13 @@ export function RunPanel({ task, checkout, runs, checkoutBlocked, mutate, busy }
       setPrompt('');
     } catch (err) { setError((err as Error).message); }
   }
+  async function startTerminal() {
+    setError(''); terminalRequestId.current ??= crypto.randomUUID();
+    try {
+      await mutate(`/tasks/${task.id}/terminal`, 'POST', { requestId: terminalRequestId.current, provider: terminalProvider });
+      terminalRequestId.current = null;
+    } catch (err) { setError((err as Error).message); }
+  }
   return <section className="space-y-4 rounded-xl border bg-card p-5">
     <h2 className="font-medium">Execution</h2>
     {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}
@@ -55,6 +65,10 @@ export function RunPanel({ task, checkout, runs, checkoutBlocked, mutate, busy }
         ].map(([key, label, placeholder]) => <label className="block text-sm" key={key}>{label}
           <Input name={key} aria-label={label} defaultValue={settings?.[key] ?? ''} placeholder={placeholder} required />
         </label>)}
+        <details><summary className="cursor-pointer text-xs">Terminal paths (Linux)</summary>
+          <label className="mt-2 block text-sm">Python 3.9+<Input name="pythonPath" defaultValue={settings?.pythonPath ?? '/usr/bin/python3'} /></label>
+          <label className="mt-2 block text-sm">Interactive shell<Input name="shellPath" defaultValue={settings?.shellPath ?? '/bin/bash'} /></label>
+        </details>
         <Button disabled={busy} variant="outline">Install / reconnect runtime</Button>
       </form>
     </details>}
@@ -65,6 +79,14 @@ export function RunPanel({ task, checkout, runs, checkoutBlocked, mutate, busy }
         ? 'Runs use a task worktree created from the repository’s committed HEAD.'
         : 'This run will lock the shared checkout until its exit is confirmed.'}</p>
       <Button disabled={busy} onClick={() => void start()}>{runs.length ? 'Start another run' : 'Start task'}</Button>
+      <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+        <select aria-label="Terminal program" className="rounded border bg-background px-2 py-2 text-sm" value={terminalProvider}
+          onChange={(event) => { setTerminalProvider(event.target.value); terminalRequestId.current = null; }}>
+          <option value="shell">Shell</option><option value="claude">Claude CLI</option><option value="codex">Codex CLI</option>
+        </select>
+        <Button disabled={busy} variant="outline" onClick={() => void startTerminal()}>Open managed terminal</Button>
+      </div>
+      <p className="text-xs text-muted-foreground">A persistent native terminal with live input and resize. Approvals stay inside the terminal.</p>
     </div>}
     {runs.map((run) => <RunOutput key={run.id} run={run} mutate={mutate} busy={busy} />)}
     {!runs.length && <p className="text-sm text-muted-foreground">No executions yet.</p>}
@@ -72,6 +94,7 @@ export function RunPanel({ task, checkout, runs, checkoutBlocked, mutate, busy }
 }
 
 function RunOutput({ run, mutate, busy }: WorkbenchActions & { run: Run }) {
+  const [attached, setAttached] = useState(false);
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [connection, setConnection] = useState<{ connectionError?: string; stopRequested?: boolean }>({});
   const [error, setError] = useState('');
@@ -115,7 +138,10 @@ function RunOutput({ run, mutate, busy }: WorkbenchActions & { run: Run }) {
     return [];
   });
   return <details className="rounded-md border p-3" open={active.includes(run.state)}>
-    <summary className="cursor-pointer text-sm">{run.provider} · {run.state} · {new Date(run.createdAt).toLocaleString()}</summary>
+    <summary className="cursor-pointer text-sm">{run.kind === 'terminal' ? 'Terminal · ' : ''}{run.provider} · {run.state} · {new Date(run.createdAt).toLocaleString()}</summary>
+    {run.kind === 'terminal' && (attached
+      ? <Suspense fallback={<p className="mt-3 text-sm">Loading terminal…</p>}><TerminalView runId={run.id} onDetach={() => setAttached(false)} /></Suspense>
+      : <Button className="mt-3" size="sm" variant="outline" onClick={() => setAttached(true)}>Attach terminal</Button>)}
     {run.codeRef && <p className="mt-2 break-all text-xs text-muted-foreground">Started at {run.codeRef}</p>}
     {connection.connectionError && <p role="status" className="mt-2 break-words text-sm text-amber-600">
       Connection unavailable: {connection.connectionError}. Execution status is unconfirmed; Gate will reconnect.</p>}

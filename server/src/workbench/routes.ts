@@ -55,7 +55,9 @@ export function createWorkbenchRoutes(db: Database, ssh: SSHManager, execution?:
     if (!execution) throw new Error('Managed execution is unavailable');
     const settings = { serverId: String(req.params.id), nodePath: text(req.body.nodePath, 'Node.js path'),
       claudePath: text(req.body.claudePath, 'Claude path'), codexPath: text(req.body.codexPath, 'Codex path'),
-      directory: text(req.body.directory, 'runtime directory') };
+      directory: text(req.body.directory, 'runtime directory'),
+      ...(req.body.pythonPath ? { pythonPath: text(req.body.pythonPath, 'Python path') } : {}),
+      ...(req.body.shellPath ? { shellPath: text(req.body.shellPath, 'shell path') } : {}) };
     await execution.configure(settings);
     res.json(store.runtimeSettings(settings.serverId));
   });
@@ -69,6 +71,12 @@ export function createWorkbenchRoutes(db: Database, ssh: SSHManager, execution?:
     if (!execution) throw new Error('Managed execution is unavailable');
     res.status(202).json(execution.verify(String(req.params.id), text(req.body.requestId, 'request ID'),
       text(req.body.command, 'test command')));
+  });
+
+  router.post('/tasks/:id/terminal', (req, res) => {
+    if (!execution) throw new Error('Managed execution is unavailable');
+    const target = req.body.provider === 'shell' ? 'shell' : provider(req.body.provider);
+    res.status(202).json(execution.terminal(String(req.params.id), text(req.body.requestId, 'request ID'), target));
   });
 
   router.post('/tasks/:id/collaborate', (req, res) => {

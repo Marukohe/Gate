@@ -17,6 +17,7 @@ class RemoteFixture {
   launch(_settings: RuntimeSettings, _provider: string, cwd: string, prompt: string) {
     return { command: '/node', args: ['/worker'], cwd, protocol: true, initialInput: prompt };
   }
+  async terminal(settings: RuntimeSettings, cwd: string, provider: string) { return this.launch(settings, provider, cwd, 'terminal'); }
   push(runId: string, type: string, data = {}) {
     const all = this.events.get(runId) ?? [];
     all.push({ runId, seq: all.length + 1, time: Date.now(), type, ...data });
@@ -150,6 +151,26 @@ describe('Managed execution recovery', () => {
     expect(remote.releases.length).toBeGreaterThan(0);
     expect(remote.releases.every((release) => release === '/runtime/releases/older')).toBe(true);
     expect(db.workbench.execution(run.id)?.settings.release).toBe('/runtime/releases/older');
+  });
+
+  it('retains terminal ownership when the PTY worker exits without confirming child cleanup', async () => {
+    const run = service.terminal(taskId, 'terminal', 'shell');
+    await service.reconcile(run.id);
+    remote.push(run.id, 'exited', { exitCode: 0, signal: null });
+    await service.reconcile(run.id);
+    expect(db.workbench.run(run.id)?.state).toBe('lost');
+    expect(() => service.run(otherTaskId, 'unsafe', 'work')).toThrow(/in use/);
+  });
+
+  it('releases confirmed terminal exit without accepting or advancing the task', async () => {
+    const run = service.terminal(taskId, 'terminal', 'shell');
+    await service.reconcile(run.id);
+    remote.push(run.id, 'protocol', { data: { type: 'terminal-exit', exitCode: 0, signal: null } });
+    remote.push(run.id, 'exited', { exitCode: 0, signal: null });
+    await service.reconcile(run.id);
+    expect(db.workbench.run(run.id)?.state).toBe('completed');
+    expect(db.workbench.task(taskId)?.status).toBe('in-progress');
+    expect(() => service.run(otherTaskId, 'next', 'work')).not.toThrow();
   });
 
 });

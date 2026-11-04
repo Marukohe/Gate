@@ -157,7 +157,11 @@ function workspaceScriptName(value?: string): RepoScriptName | null {
 }
 
 export function setupWebSocket(httpServer: HttpServer, db: Database, registry: ProviderRegistry): SSHManager {
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  const wss = new WebSocketServer({ noServer: true });
+  httpServer.on('upgrade', (request, socket, head) => {
+    if (new URL(request.url ?? '/', 'http://localhost').pathname !== '/ws') return;
+    wss.handleUpgrade(request, socket, head, (client) => wss.emit('connection', client, request));
+  });
   const sshManager = new SSHManager();
   const parsers = new Map<string, OutputParser>(); // keyed by sessionId
   const connecting = new Set<string>(); // sessionIds currently being connected

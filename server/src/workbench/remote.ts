@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import path from 'node:path';
 import type { FrozenSnapshot, TaskResult } from './types.js';
 import { fileURLToPath } from 'node:url';
 import { SSHManager } from '../ssh-manager.js';
@@ -11,6 +12,8 @@ export interface RuntimeSettings {
   claudePath: string;
   codexPath: string;
   directory: string;
+  pythonPath?: string;
+  shellPath?: string;
   release?: string;
 }
 export interface LaunchSpec {
@@ -21,7 +24,7 @@ export interface RemoteEvent {
 }
 export const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 const bundle = ['runtime.mjs', 'cli.mjs', 'worker.mjs', 'provider.mjs', 'snapshot.mjs', 'verifier.mjs', 'collaboration.mjs',
-  'observations.mjs', 'hook.mjs', 'hook-install.mjs'].map((name) => ({ name,
+  'observations.mjs', 'hook.mjs', 'hook-install.mjs', 'terminal.py', 'terminal-bridge.mjs'].map((name) => ({ name,
   data: fs.readFileSync(fileURLToPath(new URL(`../../runtime/${name}`, import.meta.url))) }));
 const build = createHash('sha256').update(Buffer.concat(bundle.map((file) => file.data))).digest('hex').slice(0, 16);
 
@@ -108,11 +111,22 @@ export class RemoteRuntime {
   }
 
   private async installCheckoutHooks(settings: RuntimeSettings, scopeId: string, cwd: string, provider: string, enabled: boolean) {
+    const ready = await this.ensureCapability(settings, 'observations');
+    await this.prepare(ready, cwd, null, null);
+    const result = JSON.parse(await this.shell(ready.serverId,
+      `${quote(ready.nodePath)} ${quote(`${this.releaseDirectory(ready)}/hook-install.mjs`)}`,
+      JSON.stringify({ cwd, scopeId, provider, enabled, directory: ready.directory, nodePath: ready.nodePath,
+        hookPath: `${this.releaseDirectory(ready)}/hook.mjs` })));
+    await this.request(ready, { method: 'observe-configure', scopeId, cwd, provider, enabled });
+    return result;
+  }
+
+  private async ensureCapability(settings: RuntimeSettings, capability: string) {
     let ready = await this.install(settings);
-    const ping = await this.request<{ capabilities: { observations?: boolean } }>(ready, { method: 'ping' });
-    if (!ping.capabilities.observations) {
+    const ping = await this.request<{ capabilities: Record<string, boolean> }>(ready, { method: 'ping' });
+    if (!ping.capabilities[capability]) {
       const runs = await this.request<{ state: string }[]>(ready, { method: 'list' });
-      if (runs.some((run) => run.state !== 'exited')) throw new Error('Finish active runs and inspect lost ownership before upgrading the runtime for hooks');
+      if (runs.some((run) => run.state !== 'exited')) throw new Error('Finish active runs and inspect lost ownership before upgrading the runtime');
       await this.request(ready, { method: 'shutdown' });
       // Upgrade only a drained supervisor. A live socket means shutdown has not completed yet.
       let drained = false;
@@ -124,13 +138,23 @@ export class RemoteRuntime {
       if (!drained) throw new Error('Runtime shutdown is still draining; retry hook installation');
       ready = await this.install(settings);
     }
-    await this.prepare(ready, cwd, null, null);
-    const result = JSON.parse(await this.shell(ready.serverId,
-      `${quote(ready.nodePath)} ${quote(`${this.releaseDirectory(ready)}/hook-install.mjs`)}`,
-      JSON.stringify({ cwd, scopeId, provider, enabled, directory: ready.directory, nodePath: ready.nodePath,
-        hookPath: `${this.releaseDirectory(ready)}/hook.mjs` })));
-    await this.request(ready, { method: 'observe-configure', scopeId, cwd, provider, enabled });
-    return result;
+    return ready;
+  }
+
+  async terminal(settings: RuntimeSettings, cwd: string, provider: string): Promise<LaunchSpec> {
+    await this.runtimeChange(settings, () => this.ensureCapability(settings, 'redactedInput'));
+    const python = settings.pythonPath ?? '/usr/bin/python3';
+    await this.shell(settings.serverId, `${quote(python)} -c ${quote("import os, sys, signal, pty; assert sys.platform.startswith('linux') and sys.version_info >= (3,9); fd=os.pidfd_open(os.getpid()); os.close(fd); assert hasattr(signal, 'pidfd_send_signal')")}`);
+    const executable = provider === 'shell' ? settings.shellPath ?? '/bin/bash' : provider === 'codex' ? settings.codexPath : settings.claudePath;
+    return { command: python, args: [`${this.releaseDirectory(settings)}/terminal.py`], cwd, protocol: true,
+      initialInput: JSON.stringify({ executable, args: provider === 'shell' ? ['-i'] : [], cwd,
+        nodeDirectory: path.posix.dirname(settings.nodePath), cols: 80, rows: 24 }) + '\n' };
+  }
+
+  async terminalStream(settings: RuntimeSettings, runId: string, after: number) {
+    await this.connect(settings.serverId);
+    return this.ssh.openStream(settings.serverId, [settings.nodePath, `${this.releaseDirectory(settings)}/terminal-bridge.mjs`,
+      settings.directory, runId, String(after)].map(quote).join(' '));
   }
 
   async prepare(settings: RuntimeSettings, directory: string, source: string | null, branch: string | null): Promise<string> {

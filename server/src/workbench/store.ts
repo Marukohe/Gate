@@ -9,6 +9,7 @@ import type { HookSettings, ObservedSession } from './types.js';
 export interface Execution {
   runId: string; settings: RuntimeSettings; launch: LaunchSpec | null; source: string | null; branch: string | null;
   stopRequested: boolean; connectionError: string | null; lastSeenAt: number | null;
+  terminalExit?: { exitCode: number; signal: string | null };
 }
 
 const taskStatuses: TaskStatus[] = ['backlog', 'in-progress', 'paused', 'review', 'done', 'canceled'];
@@ -203,11 +204,13 @@ export class WorkbenchStore {
   }
 
   enqueue(taskId: string, requestId: string, prompt: string,
-    options: 'implementation' | 'test' | { kind: 'handoff' | 'review'; provider: string; sourceRunId?: string } = 'implementation'): Run {
+    options: 'implementation' | 'test' | { kind: 'handoff' | 'review' | 'terminal'; provider: string; sourceRunId?: string } = 'implementation'): Run {
     const kind = typeof options === 'string' ? options : options.kind;
     const targetProvider = typeof options === 'string' ? undefined : options.provider;
     const sourceRunId = typeof options === 'string' ? undefined : options.sourceRunId;
-    if (targetProvider && !['claude', 'codex'].includes(targetProvider)) throw new Error('Choose Claude or Codex');
+    if (targetProvider && !['claude', 'codex', ...(kind === 'terminal' ? ['shell'] : [])].includes(targetProvider)) {
+      throw new Error('Choose a supported provider');
+    }
     return this.db.transaction(() => {
       const existing = this.db.prepare('SELECT * FROM runs WHERE requestId = ?').get(requestId) as Run | undefined;
       if (existing) {

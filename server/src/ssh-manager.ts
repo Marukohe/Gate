@@ -331,7 +331,22 @@ export class SSHManager extends EventEmitter {
     });
   }
 
-  /** Close all channels and the SSH connection. */
+  async openStream(serverId: string, command: string): Promise<ClientChannel> {
+    const conn = this.connections.get(serverId);
+    if (!conn) throw new Error(`No connection for server ${serverId}`);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { settled = true; reject(new Error('SSH stream open timed out')); }, 10_000);
+      let settled = false;
+      conn.client.exec(command, (error, stream) => {
+        clearTimeout(timer);
+        stream?.on('error', () => {});
+        if (settled) { stream?.close(); return; }
+        settled = true;
+        if (error) reject(error); else resolve(stream);
+      });
+    });
+  }
+
   async execute(serverId: string, command: string, input = '', timeoutMs = 30_000):
     Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const conn = this.connections.get(serverId);

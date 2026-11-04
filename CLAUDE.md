@@ -81,6 +81,8 @@ Data is stored in `~/.gate/gate.db` by default.
 - `server/runtime/collaboration.mjs` — Pinned code snapshots, comparison diffs, and detached review worktrees
 - `server/runtime/observations.mjs`, `hook.mjs`, `hook-install.mjs` — Scoped external-session observation over the
   private runtime socket; preserving hook installation/removal without native-session control
+- `server/runtime/terminal.py` and `terminal-bridge.mjs` — Linux PTY ownership/cleanup and replayed SSH attachment
+- `server/src/workbench/terminal-ws.ts` — Terminal WebSocket roles, bounded frames, heartbeat, and SSH stream lifecycle
 - `server/src/workbench/routes.ts` — REST project/checkout/task management, runtime setup, run start/stop, decisions, verification, result snapshots, event reads/downloads
 - `server/src/workbench/execution.ts` — Durable launch, reconnection, event projection, and confirmed stop handling
 - `server/src/workbench/remote.ts` — Runtime deployment, JSON over SSH stdin, and idempotent worktree preparation
@@ -102,6 +104,7 @@ Data is stored in `~/.gate/gate.db` by default.
   decisions, result snapshots, verification evidence, handoff, independent review, and replayed output
 - `client/src/components/workbench/ExternalSessions.tsx` — Checkout hook settings, observed activity, task association,
   and explicit clearing after native-process inspection
+- `client/src/components/workbench/TerminalView.tsx` — Lazy xterm.js view, output replay, resize, and controller input
 - `client/src/App.tsx` — Top-level route state for home, workspace overview, and chat sessions
 - `client/src/hooks/use-websocket.ts` — Singleton WebSocket connection with auto-reconnect and queued workspace actions
 - `client/src/stores/` — Zustand stores: server, session, chat, git, plan, plan-mode, workspace, ui
@@ -133,6 +136,11 @@ Server sends:
 - `{ type: 'exec-result', workspaceId, requestId, stdout, stderr, exitCode, ... }`
 - `{ type: 'workspace-list'|'workspace-update'|'workspace-deleted'|'workspace-task-started', workspaceId, ... }`
 - `{ type: 'workspace-inspector'|'workspace-run-result'|'workspace-action-result'|'workspace-error', workspaceId, ... }`
+
+Managed terminal connections use `/ws/terminal?runId=<id>&after=<cursor>` separately from legacy `/ws`.
+Client messages claim control or send an input ID plus a base64-input/resize message. Server frames carry control
+capabilities, ordered events, ready state, acknowledgements, and errors. Only terminal runs accept these connections.
+Keep input redacted in journals and never replay unacknowledged keystrokes automatically.
 
 ## Responsive Breakpoints
 

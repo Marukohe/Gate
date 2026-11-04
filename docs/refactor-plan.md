@@ -108,7 +108,7 @@ Actual model-generated requests remain part of final provider validation, not a 
 ### P4: Collaboration and external sessions
 
 - [x] Discover external sessions through scoped hooks/plugins without claiming unsupported control.
-- [ ] Add a managed terminal launch entry point and explicit attachment capabilities.
+- [x] Add a managed terminal launch entry point and explicit attachment capabilities.
 - [x] Add agent handoff and independent review tied to a fixed code snapshot.
 - [x] Isolate concurrent writers with worktrees and surface shared-checkout conflicts.
 
@@ -127,9 +127,15 @@ Hooks are advisory: unmanaged tools can still start or write without reporting t
 ### Final workflow acceptance
 
 - [ ] Verify project defaults/scripts and task delivery actions against the user surfaces above.
-- [ ] Verify managed terminal input, resize, attachment, reconnect, and confirmed exit.
+- [x] Verify managed terminal input, resize, attachment, reconnect, and confirmed exit.
 - [ ] Validate real provider model/tool/decision flows and trusted Codex hook execution in isolated checkouts.
 - [ ] Audit the complete start → blockers → evidence → delivery workflow on desktop and mobile.
+
+Terminal evidence: Linux PTY tests cover UTF-8, resize, Ctrl-C, foreground/background cleanup, keyed input deduplication,
+and journal recovery. The actual localhost SSH/backend/browser check covers a shell surviving backend restart,
+cursor replay, read-only second attachment, browser keyboard input, control transfer, mobile resizing, and confirmed exit.
+Native Claude/Codex model turns remain in final provider validation. Terminal support currently requires Linux and Python 3.9+
+with pidfd APIs; descendants that create a different OS session are outside the cleanup guarantee.
 
 ## Validation and delivery
 
