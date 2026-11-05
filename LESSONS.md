@@ -14,3 +14,5 @@
 - Preserve old database history when removing workflows; connection removal must not erase archived conversations.
 - Check actual control bounds at 320px and 390px. Hidden overflow can conceal clipped controls.
 - Keep generated output out of Git, and clean the server build directory so removed modules are not shipped in npm packages.
+- Group repositories by their full Git root, sharing the common directory for linked worktrees; names and remote URLs
+  alone can merge unrelated clones. Directory lookup failure must not hide sessions or change their native status.

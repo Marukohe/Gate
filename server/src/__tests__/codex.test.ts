@@ -7,11 +7,12 @@ import type { Server } from '../types.js';
 const server: Server = { id: 'server', name: 'Local', host: 'localhost', port: 22, username: 'test', authType: 'password', password: 'secret', createdAt: 1 };
 const native = { id: 'native', cwd: '/repo', name: 'Work', preview: 'First message', updatedAt: 1700000000,
   status: { type: 'active', activeFlags: [] }, canAcceptDirectInput: true };
-let peer: EventEmitter & { request: ReturnType<typeof vi.fn>; send: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
+let peer: EventEmitter & { projectPaths: ReturnType<typeof vi.fn>; request: ReturnType<typeof vi.fn>; send: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
 let service: CodexService;
 let connect: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   peer = Object.assign(new EventEmitter(), {
+    projectPaths: vi.fn(async (directories: string[]) => directories),
     request: vi.fn(async (method: string) => {
       if (method === 'thread/list') return { data: [native, { ...native, id: 'child', parentThreadId: native.id }], nextCursor: null };
       if (method === 'thread/start' || method === 'thread/read' || method === 'thread/resume') return { thread: native };
@@ -95,4 +96,23 @@ it('shows native turn failures instead of leaving an unexplained empty response'
     : request(method));
   expect(await service.detail(server.id, 'native')).toMatchObject({ turnId: null,
     items: [{ text: 'Working' }, { kind: 'notice', text: 'Turn failed: Provider unavailable' }] });
+});
+
+it('caches project metadata and keeps sessions visible when directory lookup fails', async () => {
+  peer.projectPaths.mockResolvedValue(['/repo-root']);
+  await service.refresh(server.id); await service.refresh(server.id);
+  expect(peer.projectPaths).toHaveBeenCalledTimes(1);
+  expect(service.monitor().servers[0].sessions[0].projectPath).toBe('/repo-root');
+  service.sync([{ ...server, name: 'Changed connection' }]);
+  peer.projectPaths.mockRejectedValue(new Error('Git unavailable'));
+  await service.refresh(server.id);
+  expect(service.monitor().servers[0]).toMatchObject({ state: 'connected', sessions: [{ projectPath: '/repo' }] });
+});
+
+it('does not report stale running status when SSH disconnects during project lookup', async () => {
+  await service.refresh(server.id);
+  peer.request.mockResolvedValueOnce({ data: [{ ...native, cwd: '/new-directory' }], nextCursor: null });
+  peer.projectPaths.mockImplementation(async () => { peer.emit('disconnected'); throw new Error('SSH closed'); });
+  await service.refresh(server.id);
+  expect(service.monitor().servers[0]).toMatchObject({ state: 'error', sessions: [{ cwd: '/repo', state: 'unknown' }] });
 });

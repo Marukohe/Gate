@@ -1,12 +1,14 @@
 # Gate
 
-Gate is a simple Server → Codex sessions panel. Keep it simple.
+Gate is a simple Server → repository groups → Codex sessions panel. Keep it simple.
 The only execution backend is Codex's native shared app-server daemon, reached through SSH Unix socket forwarding.
 Do not add task/project workflows, a Gate remote runtime, transcript scanners, hook observers, or per-message CLI execution.
 
 ## Architecture
 
 - React browser → HTTP actions and WebSocket events → Gate → SSH → Codex shared backend.
+- Repository groups are derived from read-only Git metadata over the existing SSH connection, with cwd fallback.
+  They are display groups, not persisted project workflows. Past sessions are collapsed; search reveals matches.
 - Codex owns sessions, history, approvals, and execution. Gate only stores SSH connection settings.
 - Opening a session subscribes to the existing native thread. Sending messages uses `turn/start` or `turn/steer`.
 - Backend disconnect/restart must never restart a turn, resend an uncertain input, or stop Codex.

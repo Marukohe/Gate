@@ -29,7 +29,7 @@ export function itemFromCodex(item: any): Item | null {
 }
 
 type Entry = { settings: Server; signature: string; controller: AbortController; rpc?: CodexRpc; connecting?: Promise<CodexRpc>;
-  sessions: Session[]; hasMore: boolean; error?: string; checkedAt: number; refreshing?: Promise<void>;
+  projects: Map<string, string>; projectsCheckedAt: number; sessions: Session[]; hasMore: boolean; error?: string; checkedAt: number; refreshing?: Promise<void>;
   subscriptions: Map<string, Promise<void>>; requests: Map<string, { request: Request; message: RpcMessage }> };
 type Connector = typeof connectCodex;
 
@@ -46,7 +46,7 @@ export class CodexService extends EventEmitter {
       if (old?.signature === signature) continue;
       old?.controller.abort(); old?.rpc?.close();
       this.entries.set(settings.id, { settings, signature, controller: new AbortController(), sessions: [], hasMore: false,
-        checkedAt: 0, subscriptions: new Map(), requests: new Map() });
+        checkedAt: 0, projects: new Map(), projectsCheckedAt: 0, subscriptions: new Map(), requests: new Map() });
     }
   }
   private entry(id: string) {
@@ -98,7 +98,16 @@ export class CodexService extends EventEmitter {
       try {
         const rpc = await this.connection(entry);
         const response = await rpc.request('thread/list', { limit: 100, sortKey: 'updated_at' });
-        entry.sessions = response.data.filter((t: any) => !t.parentThreadId).map(sessionFromThread);
+        const sessions: Session[] = response.data.filter((t: any) => !t.parentThreadId).map(sessionFromThread);
+        const directories = [...new Set(sessions.map((s) => s.cwd).filter((cwd) => cwd.startsWith('/') && !cwd.includes('\0')))];
+        if (Date.now() - entry.projectsCheckedAt > 60_000 || directories.some((cwd) => !entry.projects.has(cwd))) {
+          // Metadata failure must not hide native sessions or change their execution state.
+          const paths = await rpc.projectPaths(directories).catch(() => directories.map((cwd) => entry.projects.get(cwd) ?? cwd));
+          entry.projects = new Map(directories.map((cwd, i) => [cwd, paths[i] ?? cwd]));
+          entry.projectsCheckedAt = Date.now();
+        }
+        if (entry.rpc !== rpc) throw new Error('Disconnected from Codex; reconnecting automatically.');
+        entry.sessions = sessions.map((session) => ({ ...session, projectPath: entry.projects.get(session.cwd) ?? session.cwd }));
         entry.hasMore = !!response.nextCursor; entry.error = undefined;
       } catch (error) { entry.error = (error as Error).message; }
       finally { entry.checkedAt = Date.now(); entry.refreshing = undefined; }

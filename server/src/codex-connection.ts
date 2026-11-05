@@ -15,11 +15,25 @@ export interface RpcMessage {
 }
 export const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 
+export function projectPathsCommand(directories: string[]) {
+  // Common Git directories identify linked worktrees without merging unrelated clones by name or URL.
+  return `for directory in ${directories.map(quote).join(' ')}; do
+    root="$directory"
+    common=$(git -C "$directory" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || common=''
+    case "$common" in
+      */.git) root="\${common%/.git}" ;;
+      ?*) root=$(git -C "$directory" rev-parse --show-toplevel 2>/dev/null) || root="$directory" ;;
+    esac
+    printf '%s\\0' "$root"
+  done`;
+}
+
 export class CodexRpc extends EventEmitter {
   private sequence = 0;
   private pending = new Map<string, { resolve: (value: any) => void; reject: (error: Error) => void;
     timer: ReturnType<typeof setTimeout> }>();
-  constructor(private socket: WebSocket, private timeout = 30_000) {
+  constructor(private socket: WebSocket, private timeout = 30_000,
+    readonly projectPaths: (directories: string[]) => Promise<string[]> = async (directories) => directories) {
     super();
     socket.on('message', (data) => {
       let message: RpcMessage;
@@ -133,7 +147,12 @@ export async function connectCodex(settings: ConnectionSettings, signal: AbortSi
     // SSH carries the Unix socket; there is no public Codex port or Gate runtime on the remote host.
     const socket = new WebSocket('ws://localhost/', { createConnection: () => channel as any,
       handshakeTimeout: 10_000, maxPayload: 32 * 1024 * 1024 });
-    const rpc = new CodexRpc(socket);
+    const rpc = new CodexRpc(socket, 30_000, async (directories) => {
+      if (!directories.length) return [];
+      const output = await exec(ssh, `sh -c ${quote(projectPathsCommand(directories))}`);
+      const paths = output.split('\0');
+      return directories.map((directory, i) => paths[i]?.startsWith('/') ? paths[i] : directory);
+    });
     ssh.once('close', () => rpc.close());
     rpc.once('disconnected', () => ssh.end());
     await new Promise<void>((resolve, reject) => {

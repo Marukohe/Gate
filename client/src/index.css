@@ -241,3 +241,6 @@
   .monitor-session { padding: 1rem; gap: 0.65rem; }
 }
 @media (prefers-reduced-motion: reduce) { .monitor-session { transition: none; } }
+
+.project-group { border-top: 1px solid var(--border); }
+.project-group .monitor-session { border-top: 0; padding-left: 2.75rem; }

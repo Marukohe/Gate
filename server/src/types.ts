@@ -6,7 +6,7 @@ export interface Server {
 export type PublicServer = Omit<Server, 'password'> & { hasPassword: boolean };
 export type SessionState = 'running' | 'waiting' | 'idle' | 'saved' | 'error' | 'unknown';
 export interface Session {
-  id: string; name: string; cwd: string; preview: string; updatedAt: number;
+  id: string; name: string; cwd: string; projectPath?: string; preview: string; updatedAt: number;
   state: SessionState; canInput: boolean;
 }
 export interface MonitorServer {

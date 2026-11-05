@@ -14,6 +14,10 @@ const session = (id, name, state, preview) => ({ id, name, state, preview, cwd: 
 const sessions = [session('api', 'api', 'waiting', 'The migration is ready. May I run the database tests?'),
   session('website', 'website', 'running', 'Updating the settings page and checking mobile layouts.'),
   session('gate', 'gate', 'idle', 'All checks passed. The change is ready to review.')];
+sessions.push({ ...session('api-worktree', 'Validate migrations', 'running', 'Checking the migration on a feature branch.'),
+  cwd: '/home/alex/worktrees/api-fix', projectPath: '/home/alex/projects/api' });
+for (let i = 0; i < 12; i++) sessions.push({ ...session(`past-${i}`, `Past API session ${i}`, 'saved', `Migration notes ${i}`),
+  cwd: '/home/alex/projects/api/src', projectPath: '/home/alex/projects/api' });
 const monitor = { servers: [{ ...server, state: 'connected', sessions, hasMore: false },
   { id: 'build', name: 'Build server', host: 'build.local', username: 'alex', state: 'connected', hasMore: false,
     sessions: [session('compiler', 'compiler', 'running', 'Running the compiler regression suite.'),
@@ -50,7 +54,7 @@ app.post('/api/servers/:id/sessions/:thread/requests/:request', (req, res) => {
 app.use(express.static(fileURLToPath(new URL('../client/dist/', import.meta.url))));
 await new Promise(resolve => http.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
-const page = await browser.newPage({ viewport: { width: 1365, height: 900 }, serviceWorkers: 'block' });
+const page = await browser.newPage({ viewport: { width: 1365, height: 1200 }, serviceWorkers: 'block' });
 page.setDefaultTimeout(10000);
 const errors = []; page.on('pageerror', error => errors.push(error.message));
 const shotDir = process.env.GATE_SCREENSHOT_DIR;
@@ -67,6 +71,23 @@ try {
   await page.goto(`http://127.0.0.1:${http.address().port}`);
   await page.getByRole('button', { name: /api The migration/ }).waitFor();
   assert.equal(await page.getByRole('navigation').count(), 0);
+  const project = page.getByRole('group', { name: 'Project /home/alex/projects/api', exact: true });
+  assert.equal(await page.getByRole('group', { name: 'Project /home/alex/worktrees/api-fix', exact: true }).count(), 0);
+  await project.getByRole('button', { name: /Validate migrations/ }).waitFor();
+  assert.equal(await page.getByRole('button', { name: /gate All checks/ }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: /Past API session/ }).count(), 0);
+  assert.match(await page.getByRole('group').first().getAttribute('aria-label'), /projects\/api$/);
+  await project.getByRole('button', { name: 'Show 12 past sessions' }).click();
+  assert.equal(await project.getByRole('button', { name: /Past API session/ }).count(), 12);
+  await page.waitForResponse(response => response.url().endsWith('/api/monitor'));
+  assert.equal(await project.getByRole('button', { name: /Past API session/ }).count(), 12);
+  await project.getByRole('button', { name: 'Hide past sessions' }).click();
+  await page.getByLabel('Search sessions').fill('Migration notes 7');
+  await page.getByRole('button', { name: /Past API session 7/ }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Show 12 past sessions' }).count(), 0);
+  await page.getByLabel('Search sessions').fill('');
+  assert.equal(await page.getByRole('button', { name: /Past API session/ }).count(), 0);
+  await page.getByLabel('Search sessions').blur();
   await shot('session-monitor');
   for (const width of [390, 320]) { await page.setViewportSize({ width, height: 844 }); await bounded(); }
   await shot('monitor-mobile');
@@ -112,7 +133,7 @@ try {
   assert.match(page.url(), /#session\/dev\/created$/);
   await bounded();
   assert.deepEqual(errors, []);
-  console.log('Browser smoke passed: monitor, history, create, send, steer, interrupt, approvals, questions, reconnect, 320/390/1365px.');
+  console.log('Browser smoke passed: project grouping, collapsed history, search, monitor, history, create, send, steer, interrupt, approvals, questions, reconnect, 320/390/1365px.');
 } finally {
   await browser.close(); for (const socket of wss.clients) socket.terminate();
   await new Promise(resolve => wss.close(resolve)); await new Promise(resolve => http.close(resolve));
