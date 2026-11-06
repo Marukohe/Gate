@@ -13,6 +13,7 @@ export function SessionFilters({ serverId, serverName, onClose, onChanged }: {
   const [settings, setSettings] = useState<VisibilityOptions | null>(null);
   const [directories, setDirectories] = useState<string[]>([]);
   const [query, setQuery] = useState('');
+  const [customDirectory, setCustomDirectory] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -22,11 +23,26 @@ export function SessionFilters({ serverId, serverName, onClose, onChanged }: {
     }).catch((e) => { if (!controller.signal.aborted) setError(e.message); });
     return () => controller.abort();
   }, [base]);
+  function selectedDirectories() {
+    const path = customDirectory.trim();
+    if (!path) return directories;
+    if (!path.startsWith('/') || path.length > 4096 || /[\0\r\n]/.test(path)) throw new Error('Use an absolute directory path.');
+    return [...new Set([...directories, path.replace(/\/+$/, '') || '/'])];
+  }
+  function addDirectory() {
+    setError('');
+    try {
+      const next = selectedDirectories();
+      setDirectories(next);
+      setSettings((previous) => previous ? { ...previous, directories: [...new Set([...previous.directories, ...next])].sort() } : previous);
+      setCustomDirectory(''); setQuery('');
+    } catch (e) { setError((e as Error).message); }
+  }
   async function save(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError('');
     try {
       await api(`${base}/visibility`, { method: 'PUT', body: JSON.stringify({
-        excludedDirectories: directories,
+        excludedDirectories: selectedDirectories(),
       }) });
       onChanged(); onClose();
     } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
@@ -50,7 +66,7 @@ export function SessionFilters({ serverId, serverName, onClose, onChanged }: {
             <legend className="text-sm font-medium">Choose directories to hide</legend>
             <Input aria-label="Search directories" placeholder="Find a directory…" value={query} onChange={(e) => setQuery(e.target.value)} />
             <p className="text-xs text-muted-foreground">Checked directories and their subdirectories are hidden.</p>
-            <div className="max-h-64 overflow-y-auto rounded-lg border">
+            <div className="max-h-48 overflow-y-auto rounded-lg border">
               {settings.directories.filter((path) => path.toLowerCase().includes(query.trim().toLowerCase())).map((path) => {
                 const parent = directories.find((directory) => path !== directory && path.startsWith(directory === '/' ? '/' : `${directory}/`));
                 return <label key={path} className="flex min-h-11 cursor-pointer items-center gap-3 px-3 py-2 hover:bg-accent">
@@ -66,6 +82,17 @@ export function SessionFilters({ serverId, serverName, onClose, onChanged }: {
                 <p className="px-3 py-4 text-xs text-muted-foreground">{query ? 'No matching directories.' : 'No session directories discovered yet.'}</p>}
             </div>
           </fieldset>
+          <div className="space-y-2">
+            <label htmlFor="custom-filter-directory" className="text-sm font-medium">Add another directory</label>
+            <div className="flex gap-2">
+              <Input id="custom-filter-directory" className="min-w-0 flex-1" value={customDirectory} disabled={busy} maxLength={4096}
+                placeholder="/path/to/parent" onChange={(e) => setCustomDirectory(e.target.value)} onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); addDirectory(); }
+                }} />
+              <Button type="button" variant="outline" disabled={busy || !customDirectory.trim()} onClick={addDirectory}>Add</Button>
+            </div>
+            <p className="text-xs text-muted-foreground">A parent path also hides future subdirectories.</p>
+          </div>
           <Button className="w-full" disabled={busy}>{busy ? 'Saving…' : 'Save filters'}</Button>
         </form>
         <details className="border-t pt-3">

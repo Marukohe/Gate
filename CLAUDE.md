@@ -24,7 +24,7 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - `server/src/routes.ts` / `index.ts`: HTTP API and browser event delivery.
 - `client/src/components/monitor/SessionMonitor.tsx`: the single server/session panel and creation form.
 - `client/src/components/chat/SessionView.tsx`: conversation history, live events, input, and approvals.
-- `client/src/components/monitor/SessionFilters.tsx`: selectable discovered directories, saved exclusions, and Gate archive restoration.
+- `client/src/components/monitor/SessionFilters.tsx`: selectable discovered directories, custom parent paths, saved exclusions, and Gate archive restoration.
 - `server/src/visibility.ts`: path-boundary matching and session visibility.
 - `client/src/components/server/ServerDialog.tsx`: SSH connection settings.
 
