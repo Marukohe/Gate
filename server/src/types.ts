@@ -31,3 +31,4 @@ export interface ServerEvent {
 
 export interface ArchivedSession { id: string; name: string; cwd: string; archivedAt: number }
 export interface VisibilitySettings { excludedDirectories: string[]; archivedSessions: ArchivedSession[] }
+export interface VisibilityOptions extends VisibilitySettings { directories: string[] }

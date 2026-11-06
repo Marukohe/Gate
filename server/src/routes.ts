@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { excludedDirectories, visibleSessions } from './visibility.js';
+import { availableDirectories, excludedDirectories, visibleSessions } from './visibility.js';
 import type { Database } from './db.js';
 import { publicServer } from './db.js';
 import type { CodexService } from './codex.js';
@@ -44,7 +44,11 @@ export function routes(db: Database, codex: CodexService) {
     if (!db.getServer(req.params.id)) return res.status(404).json({ error: 'Server not found' });
     next();
   });
-  router.get('/servers/:id/visibility', (req, res) => res.json(db.getVisibility(req.params.id)));
+  router.get('/servers/:id/visibility', (req, res) => {
+    const settings = db.getVisibility(req.params.id);
+    const sessions = codex.monitor().servers.find((server) => server.id === req.params.id)?.sessions ?? [];
+    res.json({ ...settings, directories: availableDirectories(sessions, settings) });
+  });
   router.put('/servers/:id/visibility', (req, res) => {
     db.setExcludedDirectories(req.params.id, excludedDirectories(req.body.excludedDirectories));
     res.json(db.getVisibility(req.params.id));

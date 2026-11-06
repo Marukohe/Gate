@@ -59,6 +59,9 @@ it('applies persistent filters and archives to monitor responses without invokin
   const archive = `/servers/${a.id}/sessions/outside/archive`;
   expect((await send(archive, { name: 'Outside', cwd: '/repo-other' })).status).toBe(200);
   expect((await snapshot())[0]).toMatchObject({ sessions: [], hasFilters: true });
+  expect(await (await fetch(origin + visibility)).json()).toMatchObject({
+    directories: ['/repo', '/repo-other', '/repo/src'], excludedDirectories: ['/repo'], archivedSessions: [{ id: 'outside' }],
+  });
   await send(visibility, { excludedDirectories: [] }, 'PUT');
   expect((await snapshot())[0].sessions.map((s: any) => s.id)).toEqual(['inside']);
   expect((await fetch(origin + archive, { method: 'DELETE' })).status).toBe(204);

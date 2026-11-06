@@ -19,3 +19,5 @@
   alone can merge unrelated clones. Directory lookup failure must not hide sessions or change their native status.
 - Persist display filters on the Gate server, match directories at path boundaries, and scope archives by server and native
   session ID. Hiding a session must not stop it or invoke native archive/delete operations.
+- Build filter choices from the unfiltered session snapshot plus saved rules, so hidden or missing directories can still
+  be unblocked. Prefer selecting discovered paths over making users type paths already known to Gate.

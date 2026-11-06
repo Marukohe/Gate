@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { excludedDirectories, visibleSessions } from '../visibility.js';
+import { availableDirectories, excludedDirectories, visibleSessions } from '../visibility.js';
 import type { Session } from '../types.js';
 
 it('normalizes directory rules and respects path component boundaries', () => {
@@ -13,4 +13,15 @@ it('normalizes directory rules and respects path component boundaries', () => {
   for (const invalid of [['relative'], ['~/repo'], ['/repo\n/other'], [null], null, Array(101).fill('/repo')]) {
     expect(() => excludedDirectories(invalid)).toThrow();
   }
+});
+
+
+it('keeps blocked and archived directories selectable even when absent from the current snapshot', () => {
+  const sessions = [{ id: 'one', cwd: '/repo/src', projectPath: '/repo' },
+    { id: 'two', cwd: '/repo/src/', projectPath: '/repo' }, { id: 'unknown', cwd: '' }] as Session[];
+  expect(availableDirectories(sessions, {
+    excludedDirectories: ['/missing', '/repo'],
+    archivedSessions: [{ id: 'archived', name: 'Work', cwd: '/old', archivedAt: 1 }],
+  })).toEqual(['/missing', '/old', '/repo', '/repo/src']);
+  expect(availableDirectories([], { excludedDirectories: ['/missing'], archivedSessions: [] })).toEqual(['/missing']);
 });

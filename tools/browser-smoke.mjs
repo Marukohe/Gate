@@ -113,13 +113,20 @@ try {
   await savedProject.getByRole('button', { name: 'Show active sessions in gate' }).click();
   // Exercise real visibility routes and SQLite through the browser, then reload the page.
   await page.getByRole('button', { name: 'Filter sessions on Development' }).click();
-  await page.getByLabel('Excluded directories', { exact: true }).fill('/home/alex/projects/website');
+  await page.getByRole('checkbox', { name: 'Hide /home/alex/projects/api', exact: true }).check();
+  assert.equal(await page.getByRole('checkbox', { name: 'Hide /home/alex/projects/api/src', exact: true }).isChecked(), true);
+  assert.equal(await page.getByRole('checkbox', { name: 'Hide /home/alex/projects/api/src', exact: true }).isDisabled(), true);
+  await page.getByRole('checkbox', { name: 'Hide /home/alex/projects/api', exact: true }).uncheck();
+  await page.getByLabel('Search directories', { exact: true }).fill('website');
+  await page.getByRole('checkbox', { name: 'Hide /home/alex/projects/website', exact: true }).check();
+  await page.getByLabel('Search directories', { exact: true }).fill('api');
+  await page.getByLabel('Search directories', { exact: true }).fill('');
   await page.getByRole('button', { name: 'Save filters', exact: true }).click();
   await page.getByRole('group', { name: 'Project /home/alex/projects/website', exact: true }).waitFor({ state: 'hidden' });
   assert.deepEqual(db.getVisibility(server.id).excludedDirectories, ['/home/alex/projects/website']);
   await page.reload();
   await page.getByRole('button', { name: 'Filter sessions on Development' }).click();
-  assert.equal(await page.getByLabel('Excluded directories', { exact: true }).inputValue(), '/home/alex/projects/website');
+  assert.equal(await page.getByRole('checkbox', { name: 'Hide /home/alex/projects/website', exact: true }).isChecked(), true);
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByLabel('Search sessions').fill('website');
   await page.getByText('No matching sessions.', { exact: true }).waitFor();
@@ -135,7 +142,7 @@ try {
   await page.getByRole('button', { name: 'Restore Validate migrations', exact: true }).click();
   await page.getByText('Archived sessions (0)', { exact: true }).waitFor();
   assert.equal(db.getVisibility(server.id).archivedSessions.length, 0);
-  await page.getByLabel('Excluded directories', { exact: true }).fill('');
+  await page.getByRole('checkbox', { name: 'Hide /home/alex/projects/website', exact: true }).uncheck();
   await page.getByRole('button', { name: 'Save filters', exact: true }).click();
   await page.getByRole('button', { name: /^Validate migrations/ }).waitFor();
   await page.getByRole('group', { name: 'Project /home/alex/projects/website', exact: true }).waitFor();

@@ -38,7 +38,8 @@ Use the same remote OS user and Codex configuration as your terminal.
 - **Monitor:** one page groups sessions by server and repository. Worktrees share their repository group.
   Projects needing attention come first. Click a project heading to reveal past sessions; active sessions stay visible.
   Full paths appear on hover, with short parent paths shown only for duplicate project names. Search reveals matches.
-- **Filter:** use the filter icon beside a server to exclude directories and their descendants. Rules match session working paths.
+- **Filter:** use the filter icon beside a server and check directories to hide. Search the discovered directory list;
+  existing exclusions remain selectable. Checked directories include descendants and match session working paths.
 - **Archive:** use the archive icon on a session to hide it in Gate. Restore it under **Session filters → Archived sessions**.
   Filtering and archiving affect this Gate only; running Codex sessions continue.
 - **Continue:** open a session to read history and send messages. During a running turn, messages steer that turn.

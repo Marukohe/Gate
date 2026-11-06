@@ -19,3 +19,11 @@ export function visibleSessions(sessions: Session[], settings: VisibilitySetting
     return !settings.excludedDirectories.some((directory) => cwd === directory || cwd.startsWith(directory === '/' ? '/' : `${directory}/`));
   });
 }
+
+export function availableDirectories(sessions: Session[], settings: VisibilitySettings): string[] {
+  // Use the unfiltered snapshot so hidden directories remain available to unblock.
+  const paths = [...settings.excludedDirectories, ...sessions.flatMap((session) => [session.cwd, session.projectPath ?? '']),
+    ...settings.archivedSessions.map((session) => session.cwd)];
+  return [...new Set(paths.filter((path) => path.startsWith('/') && !/[\0\r\n]/.test(path))
+    .map((path) => posix.normalize(path).replace(/\/+$/, '') || '/'))].sort((a, b) => a.localeCompare(b));
+}

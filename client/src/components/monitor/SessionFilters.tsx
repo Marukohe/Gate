@@ -1,23 +1,24 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { ArchiveRestore } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { api } from '@/lib/api';
-import type { VisibilitySettings } from '../../../../server/src/types';
+import type { VisibilityOptions } from '../../../../server/src/types';
 
 export function SessionFilters({ serverId, serverName, onClose, onChanged }: {
   serverId: string; serverName: string; onClose: () => void; onChanged: () => void;
 }) {
   const base = `/servers/${encodeURIComponent(serverId)}`;
-  const [settings, setSettings] = useState<VisibilitySettings | null>(null);
-  const [directories, setDirectories] = useState('');
+  const [settings, setSettings] = useState<VisibilityOptions | null>(null);
+  const [directories, setDirectories] = useState<string[]>([]);
+  const [query, setQuery] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
-    void api<VisibilitySettings>(`${base}/visibility`, { signal: controller.signal }).then((value) => {
-      if (!controller.signal.aborted) { setSettings(value); setDirectories(value.excludedDirectories.join('\n')); }
+    void api<VisibilityOptions>(`${base}/visibility`, { signal: controller.signal }).then((value) => {
+      if (!controller.signal.aborted) { setSettings(value); setDirectories(value.excludedDirectories); }
     }).catch((e) => { if (!controller.signal.aborted) setError(e.message); });
     return () => controller.abort();
   }, [base]);
@@ -25,7 +26,7 @@ export function SessionFilters({ serverId, serverName, onClose, onChanged }: {
     event.preventDefault(); setBusy(true); setError('');
     try {
       await api(`${base}/visibility`, { method: 'PUT', body: JSON.stringify({
-        excludedDirectories: directories.split('\n').map((line) => line.trim()).filter(Boolean),
+        excludedDirectories: directories,
       }) });
       onChanged(); onClose();
     } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
@@ -45,11 +46,26 @@ export function SessionFilters({ serverId, serverName, onClose, onChanged }: {
       {!settings && !error && <p className="text-sm text-muted-foreground">Loading filters…</p>}
       {settings && <>
         <form onSubmit={save} className="space-y-4">
-          <label className="block space-y-2 text-sm">Excluded directories
-            <Textarea aria-label="Excluded directories" value={directories} onChange={(e) => setDirectories(e.target.value)} rows={4} disabled={busy}
-              placeholder={'/home/me/scratch\n/tmp'} />
-          </label>
-          <p className="text-xs text-muted-foreground">One absolute path per line. Hides sessions in that directory and its subdirectories.</p>
+          <fieldset className="min-w-0 space-y-3">
+            <legend className="text-sm font-medium">Choose directories to hide</legend>
+            <Input aria-label="Search directories" placeholder="Find a directory…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <p className="text-xs text-muted-foreground">Checked directories and their subdirectories are hidden.</p>
+            <div className="max-h-64 overflow-y-auto rounded-lg border">
+              {settings.directories.filter((path) => path.toLowerCase().includes(query.trim().toLowerCase())).map((path) => {
+                const parent = directories.find((directory) => path !== directory && path.startsWith(directory === '/' ? '/' : `${directory}/`));
+                return <label key={path} className="flex min-h-11 cursor-pointer items-center gap-3 px-3 py-2 hover:bg-accent">
+                  <input type="checkbox" aria-label={`Hide ${path}`} checked={directories.includes(path) || !!parent} disabled={busy || !!parent}
+                    className="size-4 shrink-0 accent-primary" onChange={(e) => setDirectories((previous) =>
+                      e.target.checked ? [...previous, path] : previous.filter((directory) => directory !== path))} />
+                  <span className="min-w-0 flex-1 break-all text-xs" title={parent ? `Included by ${parent}` : path}>{path}
+                    {parent && <span className="ml-2 text-muted-foreground">(included by parent)</span>}
+                  </span>
+                </label>;
+              })}
+              {!settings.directories.some((path) => path.toLowerCase().includes(query.trim().toLowerCase())) &&
+                <p className="px-3 py-4 text-xs text-muted-foreground">{query ? 'No matching directories.' : 'No session directories discovered yet.'}</p>}
+            </div>
+          </fieldset>
           <Button className="w-full" disabled={busy}>{busy ? 'Saving…' : 'Save filters'}</Button>
         </form>
         <details className="border-t pt-3">
