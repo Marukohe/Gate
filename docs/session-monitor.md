@@ -7,8 +7,10 @@ The Codex executable is resolved through the SSH login shell or an explicit path
 The panel groups sessions by repository under each server. Read-only Git metadata merges repository subdirectories
 and linked worktrees; separate clones remain separate, even with the same name. Non-Git or unavailable directories
 use their working path. This metadata is cached briefly and creates no project records.
-Projects needing attention precede running projects, followed by recent history. Idle and saved sessions are collapsed;
-searching names, paths, or previews reveals matching sessions without changing the collapsed state.
+Projects needing attention precede running projects, followed by recent history. Each project has one clickable heading;
+it reveals idle and saved sessions while active sessions remain visible when collapsed. Inactive projects occupy one row.
+Full directory paths appear on hover; duplicate project names show a short parent path to distinguish them.
+Searching names, paths, or previews reveals matching sessions without changing the collapsed state.
 
 The panel reads native threads without starting turns. Opening a conversation subscribes through `thread/resume`
 and reads paginated history. New sessions use `thread/start`; messages use `turn/start`, or `turn/steer` while a turn

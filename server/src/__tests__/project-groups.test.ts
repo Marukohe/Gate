@@ -35,4 +35,5 @@ it('groups by full project path and prioritizes attention, running work, then re
   ]);
   expect(result.map((group) => group.path)).toEqual(['/repo-a', '/repo-c', '/repo-b', '/other/repo-a']);
   expect(result[0].sessions.map((session) => session.id)).toEqual(['waiting', 'old']);
+  expect(result.map((group) => group.context)).toEqual(['/', undefined, undefined, 'other']);
 });

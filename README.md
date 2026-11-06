@@ -36,7 +36,8 @@ Use the same remote OS user and Codex configuration as your terminal.
 ## Everyday use
 
 - **Monitor:** one page groups sessions by server and repository. Worktrees share their repository group.
-  Projects needing attention come first; past sessions stay collapsed until expanded or found by search.
+  Projects needing attention come first. Click a project heading to reveal past sessions; active sessions stay visible.
+  Full paths appear on hover, with short parent paths shown only for duplicate project names. Search reveals matches.
 - **Continue:** open a session to read history and send messages. During a running turn, messages steer that turn.
 - **Start:** click **+ Session**, enter a working directory and first instruction. This creates a native Codex session.
 - **Respond:** answer questions or allow/decline requested operations in the conversation. Requests unsupported by

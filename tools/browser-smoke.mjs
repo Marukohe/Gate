@@ -18,6 +18,8 @@ sessions.push({ ...session('api-worktree', 'Validate migrations', 'running', 'Ch
   cwd: '/home/alex/worktrees/api-fix', projectPath: '/home/alex/projects/api' });
 for (let i = 0; i < 12; i++) sessions.push({ ...session(`past-${i}`, `Past API session ${i}`, 'saved', `Migration notes ${i}`),
   cwd: '/home/alex/projects/api/src', projectPath: '/home/alex/projects/api' });
+sessions.push({ ...session('archived-api', 'Archived API work', 'saved', 'Older deployment notes.'),
+  cwd: '/home/alex/archive/api', projectPath: '/home/alex/archive/api' });
 const monitor = { servers: [{ ...server, state: 'connected', sessions, hasMore: false },
   { id: 'build', name: 'Build server', host: 'build.local', username: 'alex', state: 'connected', hasMore: false,
     sessions: [session('compiler', 'compiler', 'running', 'Running the compiler regression suite.'),
@@ -77,20 +79,32 @@ try {
   assert.equal(await page.getByRole('button', { name: /gate All checks/ }).count(), 0);
   assert.equal(await page.getByRole('button', { name: /Past API session/ }).count(), 0);
   assert.match(await page.getByRole('group').first().getAttribute('aria-label'), /projects\/api$/);
-  await project.getByRole('button', { name: 'Show 12 past sessions' }).click();
+  await page.getByRole('button', { name: 'Show all sessions in api (archive)' }).waitFor();
+  const heading = project.getByRole('heading', { name: 'Show all sessions in api (projects)' });
+  assert.equal(await heading.getByRole('button').getAttribute('title'), '/home/alex/projects/api');
+  assert.equal(await project.getByText('/home/alex/projects/api', { exact: true }).count(), 0);
+  assert.equal(await project.getByText('Show 12 past sessions', { exact: true }).count(), 0);
+  await heading.getByRole('button').focus();
+  await page.keyboard.press('Enter');
   assert.equal(await project.getByRole('button', { name: /Past API session/ }).count(), 12);
   await page.waitForResponse(response => response.url().endsWith('/api/monitor'));
   assert.equal(await project.getByRole('button', { name: /Past API session/ }).count(), 12);
-  await project.getByRole('button', { name: 'Hide past sessions' }).click();
+  await project.getByRole('button', { name: 'Show active sessions in api (projects)' }).click();
+  await project.getByRole('button', { name: /Validate migrations/ }).waitFor();
   await page.getByLabel('Search sessions').fill('Migration notes 7');
   await page.getByRole('button', { name: /Past API session 7/ }).waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Show 12 past sessions' }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Show all sessions in api (projects)' }).count(), 0);
   await page.getByLabel('Search sessions').fill('');
   assert.equal(await page.getByRole('button', { name: /Past API session/ }).count(), 0);
   await page.getByLabel('Search sessions').blur();
   await shot('session-monitor');
   for (const width of [390, 320]) { await page.setViewportSize({ width, height: 844 }); await bounded(); }
   await shot('monitor-mobile');
+  const savedProject = page.getByRole('group', { name: 'Project /home/alex/projects/gate', exact: true });
+  assert.ok((await savedProject.boundingBox()).height <= 52, 'An inactive project should occupy one row');
+  await savedProject.getByRole('button', { name: 'Show all sessions in gate' }).click();
+  await savedProject.getByRole('button', { name: /gate All checks/ }).waitFor();
+  await savedProject.getByRole('button', { name: 'Show active sessions in gate' }).click();
   await page.getByLabel('Search sessions').fill('gate');
   await page.getByRole('button', { name: /gate All checks/ }).click();
   await page.getByText('The panel now groups sessions by server.').waitFor();

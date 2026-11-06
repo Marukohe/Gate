@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { ArrowUpRight, ChevronDown, Folder, Plus, Search, Server as ServerIcon, Settings2 } from 'lucide-react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
+import { ArrowUpRight, ChevronRight, Plus, Search, Server as ServerIcon, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -79,6 +79,7 @@ function ProjectSessions({ project, searching, stale, onOpen }: {
   project: ProjectGroup; searching: boolean; stale: boolean; onOpen: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const sessionsId = useId();
   const past = project.sessions.filter(isPastSession);
   const visible = searching || expanded ? project.sessions : project.sessions.filter((session) => !isPastSession(session));
   const waiting = project.sessions.filter((session) => session.state === 'waiting').length;
@@ -86,13 +87,22 @@ function ProjectSessions({ project, searching, stale, onOpen }: {
   const errors = project.sessions.filter((session) => session.state === 'error').length;
   const summary = stale ? 'Status unavailable' : [waiting && `${waiting} need you`, errors && `${errors} error`, running && `${running} running`].filter(Boolean).join(' · ');
   return <div className="project-group" role="group" aria-label={`Project ${project.path || project.name}`}>
-    <div className="flex items-start gap-3 px-4 py-3 sm:px-5">
-      <Folder className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-      <div className="min-w-0 flex-1"><div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h3 className="min-w-0 truncate text-sm font-semibold">{project.name}</h3>
-        <span className="text-xs text-muted-foreground">{summary || `${project.sessions.length} ${project.sessions.length === 1 ? 'session' : 'sessions'}`}</span>
-      </div><p className="mt-1 truncate text-xs text-muted-foreground" title={project.path}>{project.path || 'Directory unavailable'}</p></div>
-    </div>
+    <h3>
+      <button type="button" className="project-heading" title={project.path || 'Directory unavailable'}
+        disabled={searching || past.length === 0} aria-controls={sessionsId}
+        aria-expanded={past.length ? searching || expanded : undefined}
+        aria-label={`${searching ? 'Matching sessions in' : expanded ? 'Show active sessions in' : 'Show all sessions in'} ${project.name}${project.context ? ` (${project.context})` : ''}`}
+        onClick={() => setExpanded(!expanded)}>
+        <span className="min-w-0 flex-1 truncate font-semibold">{project.name}
+          {project.context && <span className="ml-2 font-normal text-muted-foreground">· {project.context}</span>}
+        </span>
+        <span className="max-w-[55%] truncate text-xs font-normal text-muted-foreground" title={summary}>
+          {summary || `${project.sessions.length} ${project.sessions.length === 1 ? 'session' : 'sessions'}`}
+        </span>
+        {past.length > 0 && <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 text-muted-foreground ${searching || expanded ? 'rotate-90' : ''}`} />}
+      </button>
+    </h3>
+    <div id={sessionsId}>
     {visible.map((session) => <button key={session.id} className="monitor-session" onClick={() => onOpen(session.id)}>
       <span className={`monitor-dot monitor-${stale ? 'unknown' : session.state}`} aria-hidden="true" />
       <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{session.name}</p>
@@ -101,11 +111,7 @@ function ProjectSessions({ project, searching, stale, onOpen }: {
         <p className="mt-1 text-[11px] text-muted-foreground"><time dateTime={new Date(session.updatedAt).toISOString()}>{age(session.updatedAt)}</time></p></div>
       <ArrowUpRight className="hidden size-3.5 shrink-0 text-muted-foreground sm:block" />
     </button>)}
-    {!searching && past.length > 0 && <button className="flex w-full items-center gap-2 px-4 py-3 text-left text-xs text-muted-foreground hover:bg-accent sm:px-5"
-      aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
-      <ChevronDown className={`size-3.5 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
-      {expanded ? 'Hide past sessions' : `Show ${past.length} past ${past.length === 1 ? 'session' : 'sessions'}`}
-    </button>}
+    </div>
   </div>;
 }
 

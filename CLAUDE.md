@@ -8,7 +8,7 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 
 - React browser → HTTP actions and WebSocket events → Gate → SSH → Codex shared backend.
 - Repository groups are derived from read-only Git metadata over the existing SSH connection, with cwd fallback.
-  They are display groups, not persisted project workflows. Past sessions are collapsed; search reveals matches.
+  They are display groups, not persisted project workflows. Compact project headings toggle past sessions; active sessions stay visible and search reveals matches.
 - Codex owns sessions, history, approvals, and execution. Gate only stores SSH connection settings.
 - Opening a session subscribes to the existing native thread. Sending messages uses `turn/start` or `turn/steer`.
 - Backend disconnect/restart must never restart a turn, resend an uncertain input, or stop Codex.
