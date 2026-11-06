@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { excludedDirectories, visibleSessions } from './visibility.js';
 import type { Database } from './db.js';
 import { publicServer } from './db.js';
 import type { CodexService } from './codex.js';
@@ -31,7 +32,33 @@ export function routes(db: Database, codex: CodexService) {
     db.updateServer(server.id, settings(req.body, server)); sync(); res.json(publicServer(db.getServer(server.id)!));
   });
   router.delete('/servers/:id', (req, res) => { db.deleteServer(req.params.id); sync(); res.sendStatus(204); });
-  router.get('/monitor', (_req, res) => res.json(codex.monitor()));
+  router.get('/monitor', (_req, res) => {
+    const snapshot = codex.monitor();
+    res.json({ servers: snapshot.servers.map((server) => {
+      const visibility = db.getVisibility(server.id);
+      return { ...server, sessions: visibleSessions(server.sessions, visibility),
+        hasFilters: visibility.excludedDirectories.length > 0 || visibility.archivedSessions.length > 0 };
+    }) });
+  });
+  router.use('/servers/:id/visibility', (req, res, next) => {
+    if (!db.getServer(req.params.id)) return res.status(404).json({ error: 'Server not found' });
+    next();
+  });
+  router.get('/servers/:id/visibility', (req, res) => res.json(db.getVisibility(req.params.id)));
+  router.put('/servers/:id/visibility', (req, res) => {
+    db.setExcludedDirectories(req.params.id, excludedDirectories(req.body.excludedDirectories));
+    res.json(db.getVisibility(req.params.id));
+  });
+  router.post('/servers/:id/sessions/:thread/archive', (req, res) => {
+    if (!db.getServer(req.params.id)) return res.status(404).json({ error: 'Server not found' });
+    db.archiveSession(req.params.id, { id: text(req.params.thread, 'session ID', 200),
+      name: text(req.body.name, 'session name', 1000), cwd: typeof req.body.cwd === 'string' ? req.body.cwd.slice(0, 4096) : '' });
+    res.json({ archived: true });
+  });
+  router.delete('/servers/:id/sessions/:thread/archive', (req, res) => {
+    if (!db.getServer(req.params.id)) return res.status(404).json({ error: 'Server not found' });
+    db.restoreSession(req.params.id, req.params.thread); res.sendStatus(204);
+  });
   router.post('/servers/:id/sessions', async (req, res) => {
     const cwd = text(req.body.cwd, 'working directory', 4096);
     if (!cwd.startsWith('/')) throw new Error('Use an absolute working directory');

@@ -11,7 +11,7 @@ export interface Session {
 }
 export interface MonitorServer {
   id: string; name: string; host: string; username: string;
-  state: 'connecting' | 'connected' | 'error'; error?: string; sessions: Session[]; hasMore: boolean;
+  state: 'connecting' | 'connected' | 'error'; error?: string; hasFilters?: boolean; sessions: Session[]; hasMore: boolean;
 }
 export interface Item {
   id: string; kind: 'user' | 'assistant' | 'tool' | 'notice'; text: string; title?: string; status?: string;
@@ -28,3 +28,6 @@ export interface ServerEvent {
   serverId: string; threadId?: string; type: 'changed' | 'item' | 'delta' | 'disconnected';
   item?: Item; itemId?: string; delta?: string;
 }
+
+export interface ArchivedSession { id: string; name: string; cwd: string; archivedAt: number }
+export interface VisibilitySettings { excludedDirectories: string[]; archivedSessions: ArchivedSession[] }
