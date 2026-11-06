@@ -71,12 +71,12 @@ async function bounded() {
 }
 try {
   await page.goto(`http://127.0.0.1:${http.address().port}`);
-  await page.getByRole('button', { name: /api The migration/ }).waitFor();
+  await page.getByRole('button', { name: /^api Needs you/ }).waitFor();
   assert.equal(await page.getByRole('navigation').count(), 0);
   const project = page.getByRole('group', { name: 'Project /home/alex/projects/api', exact: true });
   assert.equal(await page.getByRole('group', { name: 'Project /home/alex/worktrees/api-fix', exact: true }).count(), 0);
   await project.getByRole('button', { name: /Validate migrations/ }).waitFor();
-  assert.equal(await page.getByRole('button', { name: /gate All checks/ }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: /^gate Idle/ }).count(), 0);
   assert.equal(await page.getByRole('button', { name: /Past API session/ }).count(), 0);
   assert.match(await page.getByRole('group').first().getAttribute('aria-label'), /projects\/api$/);
   await page.getByRole('button', { name: 'Show all sessions in api (archive)' }).waitFor();
@@ -103,10 +103,10 @@ try {
   const savedProject = page.getByRole('group', { name: 'Project /home/alex/projects/gate', exact: true });
   assert.ok((await savedProject.boundingBox()).height <= 52, 'An inactive project should occupy one row');
   await savedProject.getByRole('button', { name: 'Show all sessions in gate' }).click();
-  await savedProject.getByRole('button', { name: /gate All checks/ }).waitFor();
+  await savedProject.getByRole('button', { name: /^gate Idle/ }).waitFor();
   await savedProject.getByRole('button', { name: 'Show active sessions in gate' }).click();
   await page.getByLabel('Search sessions').fill('gate');
-  await page.getByRole('button', { name: /gate All checks/ }).click();
+  await page.getByRole('button', { name: /^gate Idle/ }).click();
   await page.getByText('The panel now groups sessions by server.').waitFor();
   await page.getByRole('button', { name: 'Earlier messages' }).click();
   await page.getByText('Earlier context.', { exact: true }).waitFor();

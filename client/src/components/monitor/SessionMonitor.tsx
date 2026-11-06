@@ -105,8 +105,7 @@ function ProjectSessions({ project, searching, stale, onOpen }: {
     <div id={sessionsId}>
     {visible.map((session) => <button key={session.id} className="monitor-session" onClick={() => onOpen(session.id)}>
       <span className={`monitor-dot monitor-${stale ? 'unknown' : session.state}`} aria-hidden="true" />
-      <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{session.name}</p>
-        <p className="mt-1 truncate text-xs text-muted-foreground" title={session.preview}>{session.preview || session.cwd}</p></div>
+      <p className="min-w-0 flex-1 truncate text-sm font-medium">{session.name}</p>
       <div className="shrink-0 text-right"><span className={`monitor-state monitor-${stale ? 'unknown' : session.state}`}>{stale ? 'Unknown' : labels[session.state]}</span>
         <p className="mt-1 text-[11px] text-muted-foreground"><time dateTime={new Date(session.updatedAt).toISOString()}>{age(session.updatedAt)}</time></p></div>
       <ArrowUpRight className="hidden size-3.5 shrink-0 text-muted-foreground sm:block" />
