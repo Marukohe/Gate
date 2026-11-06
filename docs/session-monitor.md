@@ -30,7 +30,9 @@ Paths are literal absolute paths, not glob patterns. Worktrees outside an exclud
 Gate archives persist the native session ID with its name and directory for restoration; they never invoke Codex
 archive/delete/interrupt APIs. Both settings survive Gate restarts and are shared by all browsers using this Gate.
 The filter dialog lists discovered working directories and repository roots, plus saved exclusions and archived-session
-directories. Users can search and check paths or add a custom absolute parent directory.
+directories. Users search the available list and choose Hide, or add a custom absolute parent directory.
+Blocked directories have a separate, initially collapsed list with Show controls to remove exclusions.
+Paths covered by a parent rule are omitted from the available list.
 Saved parent rules cover existing and future descendants without enumerating individual child paths. Hidden or no-longer-discovered paths remain selectable
 so they can be unblocked. Checking a parent covers its descendants. The dialog saves these rules and restores archives. Restoring a session does not override directory rules.
 

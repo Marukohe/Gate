@@ -55,6 +55,10 @@ export function SessionFilters({ serverId, serverName, onClose, onChanged }: {
       onChanged();
     } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
+  const coveredBy = (path: string) => directories.find((directory) =>
+    path !== directory && path.startsWith(directory === '/' ? '/' : `${directory}/`));
+  const available = (settings?.directories ?? []).filter((path) => !directories.includes(path) && !coveredBy(path));
+  const matching = available.filter((path) => path.toLowerCase().includes(query.trim().toLowerCase()));
   return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
     <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
       <DialogHeader><DialogTitle>Session filters</DialogTitle><DialogDescription>{serverName} · Saved for everyone using this Gate.</DialogDescription></DialogHeader>
@@ -63,24 +67,18 @@ export function SessionFilters({ serverId, serverName, onClose, onChanged }: {
       {settings && <>
         <form onSubmit={save} className="space-y-4">
           <fieldset className="min-w-0 space-y-3">
-            <legend className="text-sm font-medium">Choose directories to hide</legend>
+            <legend className="text-sm font-medium">Available directories ({available.length})</legend>
             <Input aria-label="Search directories" placeholder="Find a directory…" value={query} onChange={(e) => setQuery(e.target.value)} />
-            <p className="text-xs text-muted-foreground">Checked directories and their subdirectories are hidden.</p>
-            <div className="max-h-48 overflow-y-auto rounded-lg border">
-              {settings.directories.filter((path) => path.toLowerCase().includes(query.trim().toLowerCase())).map((path) => {
-                const parent = directories.find((directory) => path !== directory && path.startsWith(directory === '/' ? '/' : `${directory}/`));
-                return <label key={path} className="flex min-h-11 cursor-pointer items-center gap-3 px-3 py-2 hover:bg-accent">
-                  <input type="checkbox" aria-label={`Hide ${path}`} checked={directories.includes(path) || !!parent} disabled={busy || !!parent}
-                    className="size-4 shrink-0 accent-primary" onChange={(e) => setDirectories((previous) =>
-                      e.target.checked ? [...previous, path] : previous.filter((directory) => directory !== path))} />
-                  <span className="min-w-0 flex-1 break-all text-xs" title={parent ? `Included by ${parent}` : path}>{path}
-                    {parent && <span className="ml-2 text-muted-foreground">(included by parent)</span>}
-                  </span>
-                </label>;
-              })}
-              {!settings.directories.some((path) => path.toLowerCase().includes(query.trim().toLowerCase())) &&
-                <p className="px-3 py-4 text-xs text-muted-foreground">{query ? 'No matching directories.' : 'No session directories discovered yet.'}</p>}
-            </div>
+            <ul aria-label="Available directories" className="max-h-48 overflow-y-auto rounded-lg border">
+              {matching.map((path) => <li key={path} className="flex min-h-11 items-center gap-3 px-3 py-2">
+                <span className="min-w-0 flex-1 break-words text-xs">{path}</span>
+                <Button type="button" variant="ghost" size="sm" className="shrink-0" disabled={busy}
+                  aria-label={`Hide ${path}`} onClick={() => setDirectories((previous) => [...previous, path])}>Hide</Button>
+              </li>)}
+              {!matching.length && <li className="px-3 py-4 text-xs text-muted-foreground">
+                {query ? 'No matching directories.' : 'No available directories.'}
+              </li>}
+            </ul>
           </fieldset>
           <div className="space-y-2">
             <label htmlFor="custom-filter-directory" className="text-sm font-medium">Add another directory</label>
@@ -93,6 +91,19 @@ export function SessionFilters({ serverId, serverName, onClose, onChanged }: {
             </div>
             <p className="text-xs text-muted-foreground">A parent path also hides future subdirectories.</p>
           </div>
+          <details className="border-t pt-3">
+            <summary className="cursor-pointer text-sm">Blocked directories ({directories.length})</summary>
+            <ul aria-label="Blocked directories" className="mt-3 max-h-48 overflow-y-auto">
+              {directories.map((path) => <li key={path} className="flex min-h-11 items-center gap-3 py-2">
+                <span className="min-w-0 flex-1 break-words text-xs" title={coveredBy(path) ? `Included by ${coveredBy(path)}` : path}>{path}
+                  {coveredBy(path) && <span className="ml-2 text-muted-foreground">(included by parent)</span>}
+                </span>
+                <Button type="button" variant="ghost" size="sm" className="shrink-0" disabled={busy || !!coveredBy(path)}
+                  aria-label={`Show ${path}`} onClick={() => setDirectories((previous) => previous.filter((directory) => directory !== path))}>Show</Button>
+              </li>)}
+              {!directories.length && <li className="py-3 text-xs text-muted-foreground">No blocked directories.</li>}
+            </ul>
+          </details>
           <Button className="w-full" disabled={busy}>{busy ? 'Saving…' : 'Save filters'}</Button>
         </form>
         <details className="border-t pt-3">
