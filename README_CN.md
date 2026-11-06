@@ -37,6 +37,9 @@ SSH 服务器需要允许 Unix socket 转发，无需公开 Codex 网络端口�
 - **监控**：同一页按服务器、仓库归类会话，同仓库的 worktree 合并。需要回应的项目优先显示，
   点击项目标题展开历史，收起时保留活跃会话；搜索直接显示匹配结果。完整路径悬停查看，
   只有重名项目才显示简短父目录。非 Git 目录按工作目录分组。
+- **过滤**：点击服务器旁的过滤图标，填写要排除的绝对目录，每行一个，包含其子目录，按会话实际工作路径匹配。
+- **归档**：点击会话行的归档图标，在 Gate 中隐藏会话；在 **Session filters → Archived sessions** 中可恢复。
+  过滤和归档只影响这个 Gate 的显示，Codex 会话继续运行。
 - **继续**：打开会话查看历史并发消息。当前轮次正在运行时，新消息用于补充指令。
 - **新建**：点击 **+ Session**，填写工作目录和第一条指令，直接创建 Codex 原生会话。
 - **回应**：在对话中回答问题、允许或拒绝操作。Gate 尚不支持的请求仍会显示，可在 Codex 终端处理。
@@ -47,7 +50,8 @@ Gate 只通过所连接的共享后台操作会话，无法接管独立的 `code
 状态与连接细节见 [Session 说明](docs/session-monitor.md)。
 
 Gate 用于可信内网，不提供身份认证。
-SSH 配置保存在 `~/.gate/gate.db`，密码不会返回浏览器。
+SSH 配置、目录过滤和 Gate 归档保存在 `~/.gate/gate.db`，密码不会返回浏览器。
+显示配置在 Gate 重启后仍生效，所有访问此 Gate 的浏览器共用。
 旧数据库中的 Gate 数据保留为不再使用的归档；当前会话历史由 Codex 保存。
 
 ```bash
@@ -67,6 +71,6 @@ npx playwright install chromium
 npm run test:ui       # build first
 ```
 
-前端：React、TypeScript、Vite、Tailwind。后端：Express、ssh2、ws，SQLite 仅保存连接配置。
+前端：React、TypeScript、Vite、Tailwind。后端：Express、ssh2、ws，SQLite 保存连接配置和显示偏好。
 修改前阅读 [AGENTS.md](AGENTS.md) 和 [LESSONS.md](LESSONS.md)。
 文档只保留当前使用方式和架构，不提交实施日志、进度流水或验收报告。

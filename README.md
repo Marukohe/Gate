@@ -38,6 +38,9 @@ Use the same remote OS user and Codex configuration as your terminal.
 - **Monitor:** one page groups sessions by server and repository. Worktrees share their repository group.
   Projects needing attention come first. Click a project heading to reveal past sessions; active sessions stay visible.
   Full paths appear on hover, with short parent paths shown only for duplicate project names. Search reveals matches.
+- **Filter:** use the filter icon beside a server to exclude directories and their descendants. Rules match session working paths.
+- **Archive:** use the archive icon on a session to hide it in Gate. Restore it under **Session filters → Archived sessions**.
+  Filtering and archiving affect this Gate only; running Codex sessions continue.
 - **Continue:** open a session to read history and send messages. During a running turn, messages steer that turn.
 - **Start:** click **+ Session**, enter a working directory and first instruction. This creates a native Codex session.
 - **Respond:** answer questions or allow/decline requested operations in the conversation. Requests unsupported by
@@ -49,7 +52,8 @@ Gate only controls sessions through the connected shared backend. It cannot atta
 See [session behavior](docs/session-monitor.md) for status and connection details.
 
 Gate is intended for trusted internal networks and has no authentication.
-SSH connection settings are stored in `~/.gate/gate.db`; passwords are not returned to the browser.
+SSH settings, directory filters, and Gate archives are stored in `~/.gate/gate.db`; passwords are not returned to the browser.
+Display preferences survive Gate restarts and apply to every browser using this Gate.
 Existing databases retain their older Gate data as inactive archives. Active history lives in Codex.
 
 ```bash
@@ -69,6 +73,6 @@ npx playwright install chromium
 npm run test:ui       # build first
 ```
 
-Client: React, TypeScript, Vite, Tailwind. Server: Express, ssh2, ws, SQLite for connection settings.
+Client: React, TypeScript, Vite, Tailwind. Server: Express, ssh2, ws, SQLite for connection settings and display preferences.
 Read [AGENTS.md](AGENTS.md) and [LESSONS.md](LESSONS.md) before making changes.
 Keep documentation about current usage and architecture; do not commit work journals or validation reports.

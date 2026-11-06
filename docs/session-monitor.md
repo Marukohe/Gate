@@ -24,5 +24,12 @@ Approvals and questions are shared across Gate browser clients. Only provider-of
 answers are sent once, and requests disappear when Codex confirms resolution or the turn completes.
 Unsupported request types remain visible for handling in the native terminal. Gate does not grant permissions automatically.
 
-SQLite contains connection settings. Codex remains the source of conversation history; there is no second Gate message store.
+SQLite contains connection settings and per-server display preferences. Directory exclusions match the session working
+path and its descendants using path boundaries (`/repo` does not match `/repo-old`), not its repository group.
+Paths are literal absolute paths, not glob patterns. Worktrees outside an excluded path remain visible.
+Gate archives persist the native session ID with its name and directory for restoration; they never invoke Codex
+archive/delete/interrupt APIs. Both settings survive Gate restarts and are shared by all browsers using this Gate.
+The filter dialog saves directory rules and restores archived sessions. Restoring a session does not override directory rules.
+
+Codex remains the source of conversation history; there is no second Gate message store.
 When upgrading an older Gate database, legacy tables and their server references are preserved as inactive archives.

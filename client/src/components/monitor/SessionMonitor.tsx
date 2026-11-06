@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type FormEvent } from 'react';
-import { ArrowUpRight, ChevronRight, Plus, Search, Server as ServerIcon, Settings2 } from 'lucide-react';
+import { Archive, Filter, ChevronRight, Plus, Search, Server as ServerIcon, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -8,6 +8,7 @@ import { useServerStore } from '@/stores/server-store';
 import { api, post } from '@/lib/api';
 import type { MonitorServer, Session } from '../../../../server/src/types';
 
+import { SessionFilters } from './SessionFilters';
 import { labels } from '@/lib/session';
 import { groupProjects, isPastSession, type ProjectGroup } from '@/lib/project-groups';
 function age(time: number) {
@@ -22,6 +23,9 @@ export function SessionMonitor({ onOpen, onAddServer, onEditServer }: {
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState<string | null>(null);
+  const [filterServer, setFilterServer] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
+  const refresh = () => setRevision((value) => value + 1);
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
@@ -34,7 +38,7 @@ export function SessionMonitor({ onOpen, onAddServer, onEditServer }: {
     }
     void refresh();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, []);
+  }, [revision]);
   const sessions = servers?.flatMap((s) => s.sessions) ?? [];
   const search = query.trim().toLowerCase();
   const filtered = servers?.map((server) => ({ ...server, sessions: server.sessions.filter((session) =>
@@ -57,14 +61,21 @@ export function SessionMonitor({ onOpen, onAddServer, onEditServer }: {
       <div className="server-group-header"><ServerIcon className="size-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1"><h2 className="truncate text-sm font-semibold">{server.name}<span className="ml-2 font-normal text-muted-foreground">{server.sessions.length}</span></h2>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">{server.username}@{server.host}</p></div>
+        <Button variant="ghost" size="icon-sm" aria-label={`Filter sessions on ${server.name}`} title="Session filters"
+          className={server.hasFilters ? 'text-primary bg-accent' : ''} onClick={() => setFilterServer(server.id)}><Filter /></Button>
         <Button variant="ghost" size="icon-sm" aria-label={`Edit ${server.name}`} onClick={() => onEditServer(server.id)}><Settings2 /></Button>
         <Button variant="outline" size="sm" aria-label={`New session on ${server.name}`} onClick={() => setCreating(server.id)}><Plus /><span className="hidden min-[380px]:inline">Session</span></Button>
       </div>
       {server.error && <p role="alert" className="break-words border-b px-5 py-3 text-xs text-destructive">{server.error}</p>}
       {server.state === 'connecting' && <p className="px-5 py-4 text-sm text-muted-foreground">Connecting to Codex…</p>}
       {groupProjects(server.sessions).map((project) => <ProjectSessions key={project.path} project={project}
-        searching={!!search} stale={!!error} onOpen={(id) => onOpen(server.id, id)} />)}
-      {!server.sessions.length && server.state === 'connected' && <p className="px-5 py-8 text-sm text-muted-foreground">{query ? 'No matching sessions.' : 'No sessions yet. Start one here or in your terminal.'}</p>}
+        searching={!!search} stale={!!error} onOpen={(id) => onOpen(server.id, id)} onArchive={async (session) => {
+          await post(`/servers/${encodeURIComponent(server.id)}/sessions/${encodeURIComponent(session.id)}/archive`, { name: session.name, cwd: session.cwd });
+          setServers((previous) => previous?.map((value) => value.id === server.id
+            ? { ...value, hasFilters: true, sessions: value.sessions.filter((s) => s.id !== session.id) } : value) ?? null);
+          refresh();
+        }} />)}
+      {!server.sessions.length && server.state === 'connected' && <p className="px-5 py-8 text-sm text-muted-foreground">{query ? 'No matching sessions.' : server.hasFilters ? 'No visible sessions. Check your session filters.' : 'No sessions yet. Start one here or in your terminal.'}</p>}
       {server.hasMore && <p className="px-5 py-3 text-xs text-muted-foreground">Showing the most recent sessions.</p>}
     </section>)}
     {servers && query && !filtered?.length && <p className="py-12 text-center text-sm text-muted-foreground">No matching sessions.</p>}
@@ -72,11 +83,14 @@ export function SessionMonitor({ onOpen, onAddServer, onEditServer }: {
   <Dialog open={creating !== null} onOpenChange={(open) => { if (!open) setCreating(null); }}><DialogContent className="rounded-2xl">
     <DialogHeader><DialogTitle>New session</DialogTitle><DialogDescription>{servers?.find((s) => s.id === creating)?.name}</DialogDescription></DialogHeader>
     {creating && <NewSession serverId={creating} onCreated={(session, error) => { setCreating(null); onOpen(creating, session.id, error); }} />}
-  </DialogContent></Dialog></main>;
+  </DialogContent></Dialog>
+  {filterServer && <SessionFilters serverId={filterServer} serverName={servers?.find((s) => s.id === filterServer)?.name ?? 'Server'}
+    onClose={() => setFilterServer(null)} onChanged={refresh} />}
+  </main>;
 }
 
-function ProjectSessions({ project, searching, stale, onOpen }: {
-  project: ProjectGroup; searching: boolean; stale: boolean; onOpen: (id: string) => void;
+function ProjectSessions({ project, searching, stale, onOpen, onArchive }: {
+  project: ProjectGroup; searching: boolean; stale: boolean; onOpen: (id: string) => void; onArchive: (session: Session) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const sessionsId = useId();
@@ -103,14 +117,32 @@ function ProjectSessions({ project, searching, stale, onOpen }: {
       </button>
     </h3>
     <div id={sessionsId}>
-    {visible.map((session) => <button key={session.id} className="monitor-session" onClick={() => onOpen(session.id)}>
-      <span className={`monitor-dot monitor-${stale ? 'unknown' : session.state}`} aria-hidden="true" />
-      <p className="min-w-0 flex-1 truncate text-sm font-medium">{session.name}</p>
-      <div className="shrink-0 text-right"><span className={`monitor-state monitor-${stale ? 'unknown' : session.state}`}>{stale ? 'Unknown' : labels[session.state]}</span>
-        <p className="mt-1 text-[11px] text-muted-foreground"><time dateTime={new Date(session.updatedAt).toISOString()}>{age(session.updatedAt)}</time></p></div>
-      <ArrowUpRight className="hidden size-3.5 shrink-0 text-muted-foreground sm:block" />
-    </button>)}
+    {visible.map((session) => <SessionRow key={session.id} session={session} stale={stale} onOpen={onOpen} onArchive={onArchive} />)}
     </div>
+  </div>;
+}
+
+function SessionRow({ session, stale, onOpen, onArchive }: {
+  session: Session; stale: boolean; onOpen: (id: string) => void; onArchive: (session: Session) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function archive() {
+    setBusy(true); setError('');
+    try { await onArchive(session); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+  }
+  return <div>
+    <div className="flex items-center">
+      <button className="monitor-session min-w-0 flex-1" onClick={() => onOpen(session.id)}>
+        <span className={`monitor-dot monitor-${stale ? 'unknown' : session.state}`} aria-hidden="true" />
+        <p className="min-w-0 flex-1 truncate text-sm font-medium">{session.name}</p>
+        <div className="shrink-0 text-right"><span className={`monitor-state monitor-${stale ? 'unknown' : session.state}`}>{stale ? 'Unknown' : labels[session.state]}</span>
+          <p className="mt-1 text-[11px] text-muted-foreground"><time dateTime={new Date(session.updatedAt).toISOString()}>{age(session.updatedAt)}</time></p></div>
+      </button>
+      <Button variant="ghost" size="icon-sm" className="mr-2 shrink-0 text-muted-foreground" disabled={busy}
+        aria-label={`Archive ${session.name}`} title="Archive in Gate" onClick={() => void archive()}><Archive /></Button>
+    </div>
+    {error && <p role="alert" className="px-4 pb-3 text-xs text-destructive">{error}</p>}
   </div>;
 }
 

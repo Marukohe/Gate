@@ -17,3 +17,5 @@
 - Keep generated output out of Git, and clean the server build directory so removed modules are not shipped in npm packages.
 - Group repositories by their full Git root, sharing the common directory for linked worktrees; names and remote URLs
   alone can merge unrelated clones. Directory lookup failure must not hide sessions or change their native status.
+- Persist display filters on the Gate server, match directories at path boundaries, and scope archives by server and native
+  session ID. Hiding a session must not stop it or invoke native archive/delete operations.

@@ -5,10 +5,14 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { chromium } from 'playwright';
+import { createDb } from '../server/dist/db.js';
+import { routes } from '../server/dist/routes.js';
+const db = createDb(':memory:');
 
 // Isolated native-session fixtures: no SSH connections or real user conversations.
 const server = { id: 'dev', name: 'Development', host: 'dev.local', username: 'alex', port: 22,
   authType: 'privateKey', privateKeyPath: '~/.ssh/id_ed25519', defaultWorkingDir: '/home/alex/projects/gate', hasPassword: false };
+server.id = db.createServer(server).id;
 const session = (id, name, state, preview) => ({ id, name, state, preview, cwd: `/home/alex/projects/${name}`,
   updatedAt: Date.now() - 120000, canInput: true });
 const sessions = [session('api', 'api', 'waiting', 'The migration is ready. May I run the database tests?'),
@@ -31,9 +35,9 @@ const writes = [];
 const app = express(); app.use(express.json());
 const http = createServer(app);
 const wss = new WebSocketServer({ server: http, path: '/ws' });
-const emit = (event = {}) => { for (const socket of wss.clients) socket.send(JSON.stringify({ serverId: 'dev', threadId: detail.session.id, type: 'changed', ...event })); };
+const emit = (event = {}) => { for (const socket of wss.clients) socket.send(JSON.stringify({ serverId: server.id, threadId: detail.session.id, type: 'changed', ...event })); };
 app.get('/api/servers', (_req, res) => res.json([server]));
-app.get('/api/monitor', (_req, res) => res.json(monitor));
+
 app.get('/api/servers/:id/sessions/:thread', (req, res) => res.json(req.query.cursor
   ? { ...detail, items: [{ id: 'old', kind: 'user', text: 'Earlier context.' }], nextCursor: null } : detail));
 app.post('/api/servers/:id/sessions', (req, res) => {
@@ -53,6 +57,8 @@ app.post('/api/servers/:id/sessions/:thread/interrupt', (req, res) => {
 app.post('/api/servers/:id/sessions/:thread/requests/:request', (req, res) => {
   writes.push({ type: 'answer', ...req.body }); detail.requests = []; res.json({}); emit();
 });
+app.use('/api', routes(db, { sync() {}, monitor: () => structuredClone(monitor) }));
+app.use((error, _req, res, _next) => res.status(400).json({ error: error.message }));
 app.use(express.static(fileURLToPath(new URL('../client/dist/', import.meta.url))));
 await new Promise(resolve => http.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
@@ -75,9 +81,9 @@ try {
   assert.equal(await page.getByRole('navigation').count(), 0);
   const project = page.getByRole('group', { name: 'Project /home/alex/projects/api', exact: true });
   assert.equal(await page.getByRole('group', { name: 'Project /home/alex/worktrees/api-fix', exact: true }).count(), 0);
-  await project.getByRole('button', { name: /Validate migrations/ }).waitFor();
+  await project.getByRole('button', { name: /^Validate migrations/ }).waitFor();
   assert.equal(await page.getByRole('button', { name: /^gate Idle/ }).count(), 0);
-  assert.equal(await page.getByRole('button', { name: /Past API session/ }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: /^Past API session/ }).count(), 0);
   assert.match(await page.getByRole('group').first().getAttribute('aria-label'), /projects\/api$/);
   await page.getByRole('button', { name: 'Show all sessions in api (archive)' }).waitFor();
   const heading = project.getByRole('heading', { name: 'Show all sessions in api (projects)' });
@@ -86,16 +92,16 @@ try {
   assert.equal(await project.getByText('Show 12 past sessions', { exact: true }).count(), 0);
   await heading.getByRole('button').focus();
   await page.keyboard.press('Enter');
-  assert.equal(await project.getByRole('button', { name: /Past API session/ }).count(), 12);
+  assert.equal(await project.getByRole('button', { name: /^Past API session/ }).count(), 12);
   await page.waitForResponse(response => response.url().endsWith('/api/monitor'));
-  assert.equal(await project.getByRole('button', { name: /Past API session/ }).count(), 12);
+  assert.equal(await project.getByRole('button', { name: /^Past API session/ }).count(), 12);
   await project.getByRole('button', { name: 'Show active sessions in api (projects)' }).click();
-  await project.getByRole('button', { name: /Validate migrations/ }).waitFor();
+  await project.getByRole('button', { name: /^Validate migrations/ }).waitFor();
   await page.getByLabel('Search sessions').fill('Migration notes 7');
-  await page.getByRole('button', { name: /Past API session 7/ }).waitFor();
+  await page.getByRole('button', { name: /^Past API session 7/ }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Show all sessions in api (projects)' }).count(), 0);
   await page.getByLabel('Search sessions').fill('');
-  assert.equal(await page.getByRole('button', { name: /Past API session/ }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: /^Past API session/ }).count(), 0);
   await page.getByLabel('Search sessions').blur();
   await shot('session-monitor');
   for (const width of [390, 320]) { await page.setViewportSize({ width, height: 844 }); await bounded(); }
@@ -105,6 +111,34 @@ try {
   await savedProject.getByRole('button', { name: 'Show all sessions in gate' }).click();
   await savedProject.getByRole('button', { name: /^gate Idle/ }).waitFor();
   await savedProject.getByRole('button', { name: 'Show active sessions in gate' }).click();
+  // Exercise real visibility routes and SQLite through the browser, then reload the page.
+  await page.getByRole('button', { name: 'Filter sessions on Development' }).click();
+  await page.getByLabel('Excluded directories', { exact: true }).fill('/home/alex/projects/website');
+  await page.getByRole('button', { name: 'Save filters', exact: true }).click();
+  await page.getByRole('group', { name: 'Project /home/alex/projects/website', exact: true }).waitFor({ state: 'hidden' });
+  assert.deepEqual(db.getVisibility(server.id).excludedDirectories, ['/home/alex/projects/website']);
+  await page.reload();
+  await page.getByRole('button', { name: 'Filter sessions on Development' }).click();
+  assert.equal(await page.getByLabel('Excluded directories', { exact: true }).inputValue(), '/home/alex/projects/website');
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByLabel('Search sessions').fill('website');
+  await page.getByText('No matching sessions.', { exact: true }).waitFor();
+  await page.getByLabel('Search sessions').fill('');
+  await page.getByRole('button', { name: 'Archive Validate migrations', exact: true }).click();
+  await page.getByRole('button', { name: /^Validate migrations/ }).waitFor({ state: 'hidden' });
+  assert.equal(db.getVisibility(server.id).archivedSessions[0].id, 'api-worktree');
+  await page.reload();
+  await page.getByRole('button', { name: 'Filter sessions on Development' }).click();
+  await page.getByText('Archived sessions (1)', { exact: true }).click();
+  await page.getByRole('button', { name: 'Restore Validate migrations', exact: true }).waitFor();
+  await bounded(); await shot('session-filters-mobile');
+  await page.getByRole('button', { name: 'Restore Validate migrations', exact: true }).click();
+  await page.getByText('Archived sessions (0)', { exact: true }).waitFor();
+  assert.equal(db.getVisibility(server.id).archivedSessions.length, 0);
+  await page.getByLabel('Excluded directories', { exact: true }).fill('');
+  await page.getByRole('button', { name: 'Save filters', exact: true }).click();
+  await page.getByRole('button', { name: /^Validate migrations/ }).waitFor();
+  await page.getByRole('group', { name: 'Project /home/alex/projects/website', exact: true }).waitFor();
   await page.getByLabel('Search sessions').fill('gate');
   await page.getByRole('button', { name: /^gate Idle/ }).click();
   await page.getByText('The panel now groups sessions by server.').waitFor();
@@ -144,11 +178,16 @@ try {
   await page.getByRole('button', { name: 'Start session', exact: true }).click();
   await page.getByText('Add a focused regression test.', { exact: true }).waitFor();
   assert.deepEqual(writes.at(-1), { type: 'create', cwd: server.defaultWorkingDir, prompt: 'Add a focused regression test.' });
-  assert.match(page.url(), /#session\/dev\/created$/);
+  assert.equal(new URL(page.url()).hash, `#session/${server.id}/created`);
   await bounded();
   assert.deepEqual(errors, []);
-  console.log('Browser smoke passed: project grouping, collapsed history, search, monitor, history, create, send, steer, interrupt, approvals, questions, reconnect, 320/390/1365px.');
+  console.log('Browser smoke passed: persistent filters, archive/restore, project grouping, collapsed history, search, monitor, history, create, send, steer, interrupt, approvals, questions, reconnect, 320/390/1365px.');
+} catch (error) {
+  await shot('failure');
+  console.error(await page.locator('body').innerText());
+  console.error(errors);
+  throw error;
 } finally {
   await browser.close(); for (const socket of wss.clients) socket.terminate();
-  await new Promise(resolve => wss.close(resolve)); await new Promise(resolve => http.close(resolve));
+  await new Promise(resolve => wss.close(resolve)); await new Promise(resolve => http.close(resolve)); db.close();
 }
