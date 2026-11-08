@@ -104,13 +104,13 @@ export function SessionView({ serverId, threadId, serverName, initialError }: {
         <button className="shrink-0 text-xs underline" onClick={() => setError('')}>Dismiss</button></div>}
       {detail && !detail.session.canInput && <p className="text-sm text-muted-foreground">Continue this child session through its parent conversation.</p>}
       <form onSubmit={send} className="flex items-end gap-2">
-        <Textarea aria-label="Message Codex" placeholder={detail?.turnId ? 'Send an update to Codex…' : 'Message Codex…'} value={text}
-          onChange={(e) => setText(e.target.value)} rows={2} className="max-h-40 min-h-16 flex-1 resize-y"
+        <Textarea aria-label="Message Codex" placeholder={detail?.turnId ? 'Update Codex…' : 'Message Codex…'} value={text}
+          onChange={(e) => setText(e.target.value)} rows={1} className="max-h-32 min-h-10 min-w-0 flex-1 resize-none py-[9px] leading-5"
           disabled={!detail?.session.canInput || offline} onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); }
           }} />
-        {detail?.turnId && <Button type="button" size="icon" variant="outline" aria-label="Stop current turn" disabled={busy || offline} onClick={() => void stop()}><Square className="size-4" /></Button>}
-        <Button type="submit" size="icon" aria-label={detail?.turnId ? 'Send update' : 'Send message'} disabled={busy || offline || !detail?.session.canInput || !text.trim()}><ArrowUp /></Button>
+        {detail?.turnId && <Button type="button" size="icon-lg" variant="outline" aria-label="Stop current turn" disabled={busy || offline} onClick={() => void stop()}><Square className="size-4" /></Button>}
+        <Button type="submit" size="icon-lg" aria-label={detail?.turnId ? 'Send update' : 'Send message'} disabled={busy || offline || !detail?.session.canInput || !text.trim()}><ArrowUp /></Button>
       </form>
     </div></div>
   </main>;
