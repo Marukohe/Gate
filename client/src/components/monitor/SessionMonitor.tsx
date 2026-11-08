@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type FormEvent } from 'react';
-import { Archive, Filter, ChevronRight, Plus, Search, Server as ServerIcon, Settings2 } from 'lucide-react';
+import { Activity, Archive, CircleAlert, Filter, ChevronRight, Plus, Search, Server as ServerIcon, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -46,13 +46,23 @@ export function SessionMonitor({ onOpen, onAddServer, onEditServer }: {
     .filter((s) => !search || s.sessions.length || `${s.name} ${s.host}`.toLowerCase().includes(search));
   return <main className="h-full overflow-y-auto bg-muted/20"><div className="mx-auto max-w-6xl space-y-7 px-4 py-6 sm:px-8 sm:py-9">
     <div className="flex flex-wrap items-center justify-between gap-4">
-      <div><h1 className="page-title">Sessions</h1><p className="mt-2 text-sm text-muted-foreground" role="status">
-        {error ? 'Updates paused' : `${sessions.filter((s) => s.state === 'running').length} running · ${sessions.filter((s) => s.state === 'waiting').length} need you · ${servers?.length ?? 0} servers`}
-      </p></div>
+      <h1 className="page-title">Sessions</h1>
       <div className="relative w-full sm:w-64"><Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
         <Input className="pl-9" aria-label="Search sessions" placeholder="Find a project or session…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
     </div>
-    {error && <p role="alert" className="break-words text-sm text-destructive">{error} Retrying automatically.</p>}
+    <div role="status" aria-label="Session summary">
+      <dl className="grid grid-cols-3 gap-2 sm:gap-3">
+        {[
+          { label: 'Needs you', count: sessions.filter((s) => s.state === 'waiting').length, tone: 'waiting', Icon: CircleAlert },
+          { label: 'Running', count: sessions.filter((s) => s.state === 'running').length, tone: 'running', Icon: Activity },
+          { label: 'Servers', count: servers?.length ?? 0, tone: 'unknown', Icon: ServerIcon },
+        ].map(({ label, count, tone, Icon }) => <div key={label} className={`monitor-summary monitor-${error || !servers ? 'unknown' : tone}`}>
+          <dt className="flex items-center gap-1.5 text-xs font-semibold sm:text-sm"><Icon aria-hidden="true" className="hidden size-4 min-[380px]:block" />{label}</dt>
+          <dd className="mt-2 text-3xl font-semibold tracking-tight tabular-nums sm:text-4xl">{error || !servers ? '—' : count}</dd>
+        </div>)}
+      </dl>
+    </div>
+    {error && <p role="alert" className="break-words text-sm text-destructive">Updates paused. {error} Retrying automatically.</p>}
     {!servers && !error && <p className="py-12 text-center text-sm text-muted-foreground">Connecting to your servers…</p>}
     {servers?.length === 0 && <div className="monitor-empty"><ServerIcon className="mx-auto mb-4 size-7 text-muted-foreground" />
       <h2 className="font-medium">Your servers. Your sessions.</h2><p className="mt-2 text-sm text-muted-foreground">Add a server to see your Codex sessions.</p>
