@@ -8,7 +8,8 @@ The panel groups sessions by repository under each server. Read-only Git metadat
 and linked worktrees; separate clones remain separate, even with the same name. Non-Git or unavailable directories
 use their working path. This metadata is cached briefly and creates no project records.
 Projects needing attention precede running projects, followed by recent history. Each project has one clickable heading;
-it reveals idle and saved sessions while active sessions remain visible when collapsed. Inactive projects occupy one row.
+it reveals idle and saved sessions, then collapses all sessions. Running-only groups can also be collapsed.
+Active sessions show by default; inactive projects occupy one row. Polling preserves the chosen collapsed state.
 Full directory paths appear on hover; duplicate project names show a short parent path to distinguish them.
 Searching names, paths, or previews reveals matching sessions without changing the collapsed state.
 

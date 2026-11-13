@@ -84,6 +84,16 @@ try {
   await page.goto(`http://127.0.0.1:${http.address().port}`);
   await page.getByRole('button', { name: /^api Needs you/ }).waitFor();
   assert.equal(await page.getByRole('navigation').count(), 0);
+  const runningProject = page.getByRole('group', { name: 'Project /home/alex/projects/website', exact: true });
+  const collapseRunning = runningProject.getByRole('button', { name: 'Collapse sessions in website' });
+  assert.equal(await collapseRunning.isEnabled(), true);
+  assert.equal(await collapseRunning.getAttribute('aria-expanded'), 'true');
+  await collapseRunning.click();
+  assert.equal(await runningProject.getByRole('button', { name: /^website Running/ }).count(), 0);
+  await page.waitForResponse(response => response.url().endsWith('/api/monitor'));
+  assert.equal(await runningProject.getByRole('button', { name: /^website Running/ }).count(), 0);
+  await runningProject.getByRole('button', { name: 'Show all sessions in website' }).click();
+  await runningProject.getByRole('button', { name: /^website Running/ }).waitFor();
   const project = page.getByRole('group', { name: 'Project /home/alex/projects/api', exact: true });
   assert.equal(await page.getByRole('group', { name: 'Project /home/alex/worktrees/api-fix', exact: true }).count(), 0);
   await project.getByRole('button', { name: /^Validate migrations/ }).waitFor();
@@ -100,13 +110,16 @@ try {
   assert.equal(await project.getByRole('button', { name: /^Past API session/ }).count(), 12);
   await page.waitForResponse(response => response.url().endsWith('/api/monitor'));
   assert.equal(await project.getByRole('button', { name: /^Past API session/ }).count(), 12);
-  await project.getByRole('button', { name: 'Show active sessions in api (projects)' }).click();
-  await project.getByRole('button', { name: /^Validate migrations/ }).waitFor();
+  await project.getByRole('button', { name: 'Collapse sessions in api (projects)' }).click();
+  assert.equal(await project.getByRole('button', { name: /^Validate migrations/ }).count(), 0);
   await page.getByLabel('Search sessions').fill('Migration notes 7');
   await page.getByRole('button', { name: /^Past API session 7/ }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Show all sessions in api (projects)' }).count(), 0);
   await page.getByLabel('Search sessions').fill('');
   assert.equal(await page.getByRole('button', { name: /^Past API session/ }).count(), 0);
+  assert.equal(await project.getByRole('button', { name: /^Validate migrations/ }).count(), 0);
+  await page.reload();
+  await page.getByRole('button', { name: /^api Needs you/ }).waitFor();
   await page.getByLabel('Search sessions').blur();
   await shot('session-monitor');
   for (const width of [390, 320]) { await page.setViewportSize({ width, height: 844 }); await bounded(); }
@@ -115,7 +128,7 @@ try {
   assert.ok((await savedProject.boundingBox()).height <= 52, 'An inactive project should occupy one row');
   await savedProject.getByRole('button', { name: 'Show all sessions in gate' }).click();
   await savedProject.getByRole('button', { name: /^gate Idle/ }).waitFor();
-  await savedProject.getByRole('button', { name: 'Show active sessions in gate' }).click();
+  await savedProject.getByRole('button', { name: 'Collapse sessions in gate' }).click();
   // Exercise real visibility routes and SQLite through the browser, then reload the page.
   await page.getByRole('button', { name: 'Filter sessions on Development' }).click();
   await page.getByRole('button', { name: 'Hide /home/alex/projects/api', exact: true }).click();

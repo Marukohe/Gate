@@ -102,10 +102,12 @@ export function SessionMonitor({ onOpen, onAddServer, onEditServer }: {
 function ProjectSessions({ project, searching, stale, onOpen, onArchive }: {
   project: ProjectGroup; searching: boolean; stale: boolean; onOpen: (id: string) => void; onArchive: (session: Session) => Promise<void>;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [view, setView] = useState<'active' | 'all' | 'collapsed'>('active');
   const sessionsId = useId();
   const past = project.sessions.filter(isPastSession);
-  const visible = searching || expanded ? project.sessions : project.sessions.filter((session) => !isPastSession(session));
+  const visible = searching || view === 'all' ? project.sessions : view === 'collapsed' ? []
+    : project.sessions.filter((session) => !isPastSession(session));
+  const canCollapse = visible.length > 0 && (view === 'all' || past.length === 0);
   const waiting = project.sessions.filter((session) => session.state === 'waiting').length;
   const running = project.sessions.filter((session) => session.state === 'running').length;
   const errors = project.sessions.filter((session) => session.state === 'error').length;
@@ -113,17 +115,17 @@ function ProjectSessions({ project, searching, stale, onOpen, onArchive }: {
   return <div className="project-group" role="group" aria-label={`Project ${project.path || project.name}`}>
     <h3>
       <button type="button" className="project-heading" title={project.path || 'Directory unavailable'}
-        disabled={searching || past.length === 0} aria-controls={sessionsId}
-        aria-expanded={past.length ? searching || expanded : undefined}
-        aria-label={`${searching ? 'Matching sessions in' : expanded ? 'Show active sessions in' : 'Show all sessions in'} ${project.name}${project.context ? ` (${project.context})` : ''}`}
-        onClick={() => setExpanded(!expanded)}>
+        disabled={searching} aria-controls={sessionsId}
+        aria-expanded={visible.length > 0}
+        aria-label={`${searching ? 'Matching sessions in' : canCollapse ? 'Collapse sessions in' : 'Show all sessions in'} ${project.name}${project.context ? ` (${project.context})` : ''}`}
+        onClick={() => setView(canCollapse ? 'collapsed' : 'all')}>
         <span className="min-w-0 flex-1 truncate font-semibold">{project.name}
           {project.context && <span className="ml-2 font-normal text-muted-foreground">· {project.context}</span>}
         </span>
         <span className="max-w-[55%] truncate text-xs font-normal text-muted-foreground" title={summary}>
           {summary || `${project.sessions.length} ${project.sessions.length === 1 ? 'session' : 'sessions'}`}
         </span>
-        {past.length > 0 && <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 text-muted-foreground ${searching || expanded ? 'rotate-90' : ''}`} />}
+        <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 text-muted-foreground ${visible.length ? 'rotate-90' : ''}`} />
       </button>
     </h3>
     <div id={sessionsId}>
