@@ -10,6 +10,7 @@ export function sessionFromThread(thread: any): Session {
   return { id: thread.id, name: thread.name || cwd.split('/').filter(Boolean).at(-1) || 'New session', cwd,
     preview: compact(thread.preview), updatedAt: (thread.updatedAt ?? thread.createdAt ?? Date.now() / 1000) * 1000,
     canInput: thread.canAcceptDirectInput !== false, ...(typeof thread.model === 'string' ? { model: thread.model } : {}),
+    ...(typeof thread.reasoningEffort === 'string' ? { effort: thread.reasoningEffort } : {}),
     state: flags.some((f: string) => ['waitingOnApproval', 'waitingOnUserInput'].includes(f)) ? 'waiting'
       : thread.status?.type === 'active' ? 'running' : thread.status?.type === 'idle' ? 'idle'
         : thread.status?.type === 'notLoaded' ? 'saved' : thread.status?.type === 'systemError' ? 'error' : 'unknown' };
@@ -169,18 +170,20 @@ export class CodexService extends EventEmitter {
       const response: { data: any[]; nextCursor?: string | null } = await rpc.request('model/list', {
         limit: 100, includeHidden: false, ...(cursor ? { cursor } : {}),
       });
-      for (const model of response.data) if (!model.hidden) models.push({ id: model.model, name: model.displayName || model.model });
+      for (const model of response.data) if (!model.hidden) models.push({ id: model.model, name: model.displayName || model.model,
+        efforts: (model.supportedReasoningEfforts ?? []).map((option: any) => ({ id: option.reasoningEffort, description: option.description ?? '' })),
+        ...(model.defaultReasoningEffort ? { defaultEffort: model.defaultReasoningEffort } : {}) });
       cursor = response.nextCursor ?? null;
     } while (cursor);
     return models;
   }
-  async input(serverId: string, threadId: string, text: string, turnId?: string, model?: string) {
-    if (turnId && model) throw new Error('Models can only be changed between turns');
+  async input(serverId: string, threadId: string, text: string, turnId?: string, model?: string, effort?: string) {
+    if (turnId && (model || effort)) throw new Error('Models and reasoning effort can only be changed between turns');
     const entry = this.entry(serverId);
     const rpc = await this.subscribe(entry, threadId);
     // Writes are never replayed on reconnect; the native backend arbitrates concurrent clients.
     return rpc.request(turnId ? 'turn/steer' : 'turn/start', { threadId, input: [{ type: 'text', text }],
-      ...(turnId ? { expectedTurnId: turnId } : {}), ...(model ? { model } : {}) });
+      ...(turnId ? { expectedTurnId: turnId } : {}), ...(model ? { model } : {}), ...(effort ? { effort } : {}) });
   }
   async rename(serverId: string, threadId: string, name: string) {
     const entry = this.entry(serverId);

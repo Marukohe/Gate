@@ -42,7 +42,14 @@ it('lists server models and validates optional model overrides before input', as
   }
   expect(codex.input).not.toHaveBeenCalled();
   expect((await send(path, { text: 'Work', model: 'model-two' })).status).toBe(200);
-  expect(codex.input).toHaveBeenCalledWith('server', 'native', 'Work', undefined, 'model-two');
+  expect(codex.input).toHaveBeenCalledWith('server', 'native', 'Work', undefined, 'model-two', undefined);
+  codex.input.mockClear();
+  for (const effort of ['', ' ', 42, 'bad\0effort', 'x'.repeat(51)]) {
+    expect((await send(path, { text: 'Work', effort })).status).toBe(400);
+  }
+  expect(codex.input).not.toHaveBeenCalled();
+  expect((await send(path, { text: 'Work', effort: 'high' })).status).toBe(200);
+  expect(codex.input).toHaveBeenCalledWith('server', 'native', 'Work', undefined, undefined, 'high');
 });
 
 it('preserves a saved password on edit without exposing it in any settings response', async () => {

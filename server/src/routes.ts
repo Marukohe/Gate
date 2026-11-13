@@ -79,7 +79,8 @@ export function routes(db: Database, codex: CodexService) {
   router.post('/servers/:id/sessions/:thread/input', async (req, res) => {
     res.json(await codex.input(req.params.id, req.params.thread, text(req.body.text, 'message'),
       req.body.turnId ? text(req.body.turnId, 'turn ID', 200) : undefined,
-      req.body.model === undefined ? undefined : text(req.body.model, 'model', 200)));
+      req.body.model === undefined ? undefined : text(req.body.model, 'model', 200),
+      req.body.effort === undefined ? undefined : text(req.body.effort, 'reasoning effort', 50)));
   });
   router.post('/servers/:id/sessions/:thread/rename', async (req, res) => {
     await codex.rename(req.params.id, req.params.thread, text(req.body.name, 'session name', 1000));

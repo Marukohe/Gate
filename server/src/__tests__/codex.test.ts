@@ -63,16 +63,22 @@ it('loads the native model catalog across pages and sends model slugs only on ne
     { id: 'catalog-one', model: 'model-one', displayName: 'Model One', hidden: false },
     { id: 'hidden', model: 'hidden', hidden: true },
   ], nextCursor: 'next-models' }).mockResolvedValueOnce({ data: [
-    { id: 'catalog-two', model: 'model-two', displayName: 'Model Two' },
+    { id: 'catalog-two', model: 'model-two', displayName: 'Model Two', defaultReasoningEffort: 'high',
+      supportedReasoningEfforts: [{ reasoningEffort: 'high', description: 'Think deeply' }] },
   ], nextCursor: null });
-  expect(await service.models(server.id)).toEqual([{ id: 'model-one', name: 'Model One' }, { id: 'model-two', name: 'Model Two' }]);
+  expect(await service.models(server.id)).toEqual([{ id: 'model-one', name: 'Model One', efforts: [] },
+    { id: 'model-two', name: 'Model Two', defaultEffort: 'high', efforts: [{ id: 'high', description: 'Think deeply' }] }]);
   expect(peer.request).toHaveBeenCalledWith('model/list', { limit: 100, includeHidden: false, cursor: 'next-models' });
-  await service.input(server.id, 'native', 'Use another model', undefined, 'model-two');
-  expect(peer.request).toHaveBeenLastCalledWith('turn/start', { threadId: 'native', input: [{ type: 'text', text: 'Use another model' }], model: 'model-two' });
+  await service.input(server.id, 'native', 'Use another model', undefined, 'model-two', 'high');
+  expect(peer.request).toHaveBeenLastCalledWith('turn/start', { threadId: 'native', input: [{ type: 'text', text: 'Use another model' }], model: 'model-two', effort: 'high' });
+  await service.input(server.id, 'native', 'Think harder', undefined, undefined, 'high');
+  expect(peer.request).toHaveBeenLastCalledWith('turn/start', { threadId: 'native', input: [{ type: 'text', text: 'Think harder' }], effort: 'high' });
   peer.request.mockClear();
   await expect(service.input(server.id, 'native', 'Steer', 'turn', 'model-two')).rejects.toThrow('between turns');
+  await expect(service.input(server.id, 'native', 'Steer', 'turn', undefined, 'high')).rejects.toThrow('between turns');
   expect(peer.request).not.toHaveBeenCalled();
   expect(sessionFromThread({ ...native, model: 'model-two' }).model).toBe('model-two');
+  expect(sessionFromThread({ ...native, reasoningEffort: 'high' }).effort).toBe('high');
 });
 
 it('renames through native metadata without starting a turn and reflects other clients', async () => {

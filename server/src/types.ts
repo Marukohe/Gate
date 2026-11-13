@@ -8,9 +8,11 @@ export type SessionState = 'running' | 'waiting' | 'idle' | 'saved' | 'error' | 
 export interface Session {
   id: string; name: string; cwd: string; projectPath?: string; preview: string; updatedAt: number;
   state: SessionState; canInput: boolean;
-  model?: string;
+  model?: string; effort?: string;
 }
-export interface ModelOption { id: string; name: string }
+export interface ModelOption {
+  id: string; name: string; efforts: { id: string; description: string }[]; defaultEffort?: string;
+}
 export interface MonitorServer {
   id: string; name: string; host: string; username: string;
   state: 'connecting' | 'connected' | 'error'; error?: string; hasFilters?: boolean; sessions: Session[]; hasMore: boolean;

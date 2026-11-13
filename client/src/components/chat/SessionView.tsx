@@ -32,6 +32,7 @@ export function SessionView({ serverId, threadId, serverName, initialError }: {
   const [renameError, setRenameError] = useState('');
   const [models, setModels] = useState<ModelOption[]>([]);
   const [model, setModel] = useState('');
+  const [effort, setEffort] = useState('');
   const [modelError, setModelError] = useState('');
   const [modelRevision, setModelRevision] = useState(0);
   const [loadingModels, setLoadingModels] = useState(true);
@@ -41,6 +42,12 @@ export function SessionView({ serverId, threadId, serverName, initialError }: {
   const alive = useRef(true);
   const revision = useRef(0);
   const eventTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const draftModel = detail?.turnId ? '' : model;
+  const selectedModel = models.find((option) => option.id === (draftModel || detail?.session.model));
+  const efforts = selectedModel?.efforts ?? [];
+  const selectedEffort = efforts.some((option) => option.id === effort) ? effort : '';
+  const defaultEffort = draftModel ? selectedModel?.defaultEffort : detail?.session.effort;
+  const effortOverride = selectedEffort || (model && efforts.some((option) => option.id === defaultEffort) ? defaultEffort : undefined);
   useEffect(() => {
     const controller = new AbortController();
     setLoadingModels(true); setModelError('');
@@ -83,8 +90,9 @@ export function SessionView({ serverId, threadId, serverName, initialError }: {
     event.preventDefault(); if (!text.trim() || busy) return;
     setBusy(true); setError('');
     try {
-      await post(`${base}/input`, { text, turnId: detail?.turnId, ...(!detail?.turnId && model ? { model } : {}) });
-      setText(''); setModel(''); follow.current = true; await refresh();
+      await post(`${base}/input`, { text, turnId: detail?.turnId, ...(!detail?.turnId && model ? { model } : {}),
+        ...(!detail?.turnId && effortOverride ? { effort: effortOverride } : {}) });
+      setText(''); setModel(''); setEffort(''); follow.current = true; await refresh();
     }
     catch (e) { setError((e as Error).message); await refresh(); } finally { setBusy(false); }
   }
@@ -142,15 +150,23 @@ export function SessionView({ serverId, threadId, serverName, initialError }: {
         <button className="shrink-0 text-xs underline" onClick={() => setError('')}>Dismiss</button></div>}
       {detail && !detail.session.canInput && <p className="text-sm text-muted-foreground">Continue this child session through its parent conversation.</p>}
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        <select aria-label="Model" value={detail?.turnId ? '' : model} onChange={(e) => setModel(e.target.value)}
+        <select aria-label="Model" value={detail?.turnId ? '' : model} onChange={(e) => { setModel(e.target.value); setEffort(''); }}
           disabled={busy || offline || !detail?.session.canInput || !!detail?.turnId || loadingModels || !!modelError || !models.length}
           title={detail?.turnId ? 'Change model after this turn finishes' : 'Model for your next message'}
           className="h-7 max-w-full min-w-0 rounded-md border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60">
           <option value="">{detail?.session.model || 'Current model'}</option>
           {models.filter((option) => option.id !== detail?.session.model).map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
         </select>
+        <select aria-label="Reasoning effort" value={detail?.turnId ? '' : selectedEffort} onChange={(e) => setEffort(e.target.value)}
+          disabled={busy || offline || !detail?.session.canInput || !!detail?.turnId || loadingModels || !!modelError || !efforts.length}
+          title={detail?.turnId ? 'Change reasoning effort after this turn finishes' : 'Reasoning effort for your next message'}
+          className="h-7 max-w-full min-w-0 rounded-md border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60">
+          <option value="">{defaultEffort ? `${draftModel ? 'Default' : 'Current'}: ${defaultEffort}` : 'Model default'}</option>
+          {efforts.map((option) => <option key={option.id} value={option.id} title={option.description}>
+            {option.id === 'xhigh' ? 'Extra high' : option.id.charAt(0).toUpperCase() + option.id.slice(1)}</option>)}
+        </select>
         {modelError ? <span role="status" className="min-w-0 break-words">Models unavailable. {modelError} <button type="button" className="underline" onClick={() => setModelRevision((value) => value + 1)}>Retry models</button></span>
-          : detail?.turnId ? <span>Change model between turns</span> : model ? <span>Applies to your next message</span> : null}
+          : detail?.turnId ? <span>Change settings between turns</span> : model || selectedEffort ? <span>Applies to your next message</span> : null}
       </div>
       <form onSubmit={send} className="flex items-end gap-2">
         <Textarea aria-label="Message Codex" placeholder={detail?.turnId ? 'Update Codex…' : 'Message Codex…'} value={text}

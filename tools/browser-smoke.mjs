@@ -28,7 +28,7 @@ const monitor = { servers: [{ ...server, state: 'connected', sessions, hasMore: 
   { id: 'build', name: 'Build server', host: 'build.local', username: 'alex', state: 'connected', hasMore: false,
     sessions: [session('compiler', 'compiler', 'running', 'Running the compiler regression suite.'),
       session('tools', 'tools', 'saved', 'Added a small command to inspect build artifacts.')] }] };
-let detail = { session: { ...sessions[2], model: 'fixture-current' }, items: [{ id: 'u1', kind: 'user', text: 'Simplify the session panel.' },
+let detail = { session: { ...sessions[2], model: 'fixture-current', effort: 'high' }, items: [{ id: 'u1', kind: 'user', text: 'Simplify the session panel.' },
   { id: 'a1', kind: 'assistant', text: 'The panel now groups sessions by server.\n\n- Running work stays visible.\n- Questions appear in the conversation.\n- Each session has one place to continue.' }],
   nextCursor: 'older', turnId: null, requests: [] };
 const writes = [];
@@ -40,7 +40,10 @@ const emit = (event = {}) => { for (const socket of wss.clients) socket.send(JSO
 app.get('/api/servers', (_req, res) => res.json([server]));
 app.get('/api/servers/:id/models', (_req, res) => modelsUnavailable
   ? res.status(503).json({ error: 'Catalog unavailable' })
-  : res.json({ models: [{ id: 'fixture-current', name: 'Current' }, { id: 'fixture-other', name: 'Other model' }] }));
+  : res.json({ models: [
+    { id: 'fixture-current', name: 'Current', defaultEffort: 'medium', efforts: [{ id: 'medium', description: '' }, { id: 'high', description: 'Deeper thinking' }] },
+    { id: 'fixture-other', name: 'Other model', defaultEffort: 'low', efforts: [{ id: 'low', description: '' }, { id: 'medium', description: '' }] },
+  ] }));
 
 app.get('/api/servers/:id/sessions/:thread', (req, res) => res.json(req.query.cursor
   ? { ...detail, items: [{ id: 'old', kind: 'user', text: 'Earlier context.' }], nextCursor: null } : detail));
@@ -53,6 +56,7 @@ app.post('/api/servers/:id/sessions', (req, res) => {
 app.post('/api/servers/:id/sessions/:thread/input', (req, res) => {
   writes.push({ type: 'input', ...req.body });
   if (req.body.model) detail.session.model = req.body.model;
+  if (req.body.effort) detail.session.effort = req.body.effort;
   detail.items.push({ id: `message-${writes.length}`, kind: 'user', text: req.body.text });
   detail.turnId = 'turn-two'; detail.session.state = 'running'; res.json({}); emit();
 });
@@ -228,9 +232,15 @@ try {
   assert.deepEqual(writes.at(-1), { type: 'rename', serverId: server.id, threadId: 'gate', name: '修复登录 · Gate' });
   await page.getByRole('button', { name: 'Earlier messages' }).click();
   await page.getByText('Earlier context.', { exact: true }).waitFor();
+  const reasoning = page.getByLabel('Reasoning effort', { exact: true });
+  await reasoning.selectOption('high');
   await page.getByLabel('Model', { exact: true }).selectOption('fixture-other');
+  assert.equal(await reasoning.inputValue(), '', 'Changing models resets the effort draft');
+  assert.equal(await reasoning.getByRole('option', { name: 'High', exact: true }).count(), 0, 'Only show efforts supported by the selected model');
+  await reasoning.selectOption('medium');
   await page.waitForResponse(response => response.url().includes('/sessions/gate') && !response.url().includes('cursor'));
   assert.equal(await page.getByLabel('Model', { exact: true }).inputValue(), 'fixture-other', 'Polling must retain an unsent model selection');
+  assert.equal(await reasoning.inputValue(), 'medium', 'Polling must retain an unsent effort selection');
   const composer = page.getByLabel('Message Codex');
   await composer.fill('english');
   const ime = await composer.evaluate(input => {
@@ -261,15 +271,19 @@ try {
   await page.getByRole('button', { name: 'Stop current turn' }).waitFor();
   assert.equal(writes.at(-1).turnId, null);
   assert.equal(writes.at(-1).model, 'fixture-other');
+  assert.equal(writes.at(-1).effort, 'medium');
   assert.equal(await page.getByLabel('Model', { exact: true }).isDisabled(), true);
+  assert.equal(await reasoning.isDisabled(), true);
   await page.getByLabel('Message Codex').fill('Use the existing theme.');
   await page.getByRole('button', { name: 'Send update', exact: true }).click();
   await page.getByText('Use the existing theme.', { exact: true }).waitFor();
   assert.equal(writes.at(-1).turnId, 'turn-two');
   assert.equal(writes.at(-1).model, undefined, 'Steering must not include a model override');
+  assert.equal(writes.at(-1).effort, undefined, 'Steering must not include an effort override');
   await page.getByRole('button', { name: 'Stop current turn' }).click();
   await page.getByRole('button', { name: 'Send message', exact: true }).waitFor();
   assert.equal(writes.at(-1).type, 'interrupt');
+  assert.equal(await reasoning.getByRole('option', { selected: true }).textContent(), 'Current: medium');
   modelsUnavailable = true;
   await page.reload();
   await page.getByText('Catalog unavailable', { exact: false }).waitFor();
