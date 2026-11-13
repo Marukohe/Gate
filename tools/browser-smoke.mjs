@@ -210,8 +210,33 @@ try {
   assert.deepEqual(writes.at(-1), { type: 'rename', serverId: server.id, threadId: 'gate', name: '修复登录 · Gate' });
   await page.getByRole('button', { name: 'Earlier messages' }).click();
   await page.getByText('Earlier context.', { exact: true }).waitFor();
+  const composer = page.getByLabel('Message Codex');
+  await composer.fill('english');
+  const ime = await composer.evaluate(input => {
+    let submits = 0;
+    const onSubmit = () => { submits++; };
+    input.form.addEventListener('submit', onSubmit);
+    const enter = (options) => {
+      const event = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true, ...options });
+      input.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    const native = enter({ isComposing: true, keyCode: 13 });
+    input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: 'english' }));
+    const composing = enter({ isComposing: false, keyCode: 13 });
+    input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: 'english' }));
+    // Some browsers end composition before delivering the confirming Enter.
+    const confirming = enter({ isComposing: false, keyCode: 229 });
+    input.form.removeEventListener('submit', onSubmit);
+    return { submits, native, composing, confirming, value: input.value };
+  });
+  assert.deepEqual(ime, { submits: 0, native: false, composing: false, confirming: false, value: 'english' });
+  await composer.fill('Line one');
+  await composer.press('Shift+Enter');
+  await composer.press('End');
+  assert.equal(await composer.inputValue(), 'Line one\n');
   await page.getByLabel('Message Codex').fill('Continue from the browser.');
-  await page.getByRole('button', { name: 'Send message', exact: true }).click();
+  await composer.press('Enter');
   await page.getByRole('button', { name: 'Stop current turn' }).waitFor();
   assert.equal(writes.at(-1).turnId, null);
   await page.getByLabel('Message Codex').fill('Use the existing theme.');

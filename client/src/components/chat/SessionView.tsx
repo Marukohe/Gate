@@ -31,6 +31,7 @@ export function SessionView({ serverId, threadId, serverName, initialError }: {
   const [savingName, setSavingName] = useState(false);
   const [renameError, setRenameError] = useState('');
   const viewport = useRef<HTMLDivElement>(null);
+  const composing = useRef(false);
   const follow = useRef(true);
   const alive = useRef(true);
   const revision = useRef(0);
@@ -126,8 +127,12 @@ export function SessionView({ serverId, threadId, serverName, initialError }: {
       <form onSubmit={send} className="flex items-end gap-2">
         <Textarea aria-label="Message Codex" placeholder={detail?.turnId ? 'Update Codex…' : 'Message Codex…'} value={text}
           onChange={(e) => setText(e.target.value)} rows={1} className="max-h-32 min-h-10 min-w-0 flex-1 resize-none py-[9px] leading-5"
+          onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
+          onBlur={() => { composing.current = false; }}
           disabled={!detail?.session.canInput || offline} onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); }
+            // IME confirmation can arrive after compositionend with isComposing already false.
+            if (composing.current || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); }
           }} />
         {detail?.turnId && <Button type="button" size="icon-lg" variant="outline" aria-label="Stop current turn" disabled={busy || offline} onClick={() => void stop()}><Square className="size-4" /></Button>}
         <Button type="submit" size="icon-lg" aria-label={detail?.turnId ? 'Send update' : 'Send message'} disabled={busy || offline || !detail?.session.canInput || !text.trim()}><ArrowUp /></Button>
