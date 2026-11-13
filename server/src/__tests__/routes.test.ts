@@ -8,7 +8,7 @@ import type { CodexService } from '../codex.js';
 let db: ReturnType<typeof createDb>;
 let http: HttpServer;
 let origin: string;
-const codex = { sync: vi.fn(), monitor: vi.fn(), create: vi.fn(), input: vi.fn() };
+const codex = { sync: vi.fn(), monitor: vi.fn(), create: vi.fn(), input: vi.fn(), rename: vi.fn() };
 beforeEach(async () => {
   vi.resetAllMocks(); db = createDb(':memory:');
   const app = express(); app.use(express.json()); app.use(routes(db, codex as unknown as CodexService));
@@ -19,6 +19,18 @@ beforeEach(async () => {
 afterEach(async () => { await new Promise<void>((resolve) => http.close(() => resolve())); db.close(); });
 const send = (path: string, body: object, method = 'POST') => fetch(origin + path,
   { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+it('validates session names before sending a native rename and surfaces failures', async () => {
+  const path = '/servers/server/sessions/native/rename';
+  for (const name of ['', '  ', 'x'.repeat(1001), 'bad\0name', 42]) {
+    expect((await send(path, { name })).status).toBe(400);
+  }
+  expect(codex.rename).not.toHaveBeenCalled();
+  expect((await send(path, { name: '  Fix login  ' })).status).toBe(200);
+  expect(codex.rename).toHaveBeenCalledWith('server', 'native', 'Fix login');
+  codex.rename.mockRejectedValueOnce(new Error('Disconnected'));
+  expect(await (await send(path, { name: 'Retry later' })).json()).toEqual({ error: 'Disconnected' });
+});
 
 it('preserves a saved password on edit without exposing it in any settings response', async () => {
   const fields = { name: 'Local', host: 'localhost', username: 'test', authType: 'password', port: 22 };

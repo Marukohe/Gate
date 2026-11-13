@@ -75,6 +75,9 @@ export class CodexService extends EventEmitter {
     const p = message.params ?? {};
     const serverId = entry.settings.id;
     const threadId = p.threadId ?? p.thread?.id;
+    if (message.method === 'thread/name/updated' && typeof p.threadName === 'string') {
+      for (const session of entry.sessions) if (session.id === threadId) session.name = p.threadName;
+    }
     if (message.id !== undefined) {
       const request = describeRequest(message);
       entry.requests.set(request.id, { request, message });
@@ -164,6 +167,13 @@ export class CodexService extends EventEmitter {
     // Writes are never replayed on reconnect; the native backend arbitrates concurrent clients.
     return rpc.request(turnId ? 'turn/steer' : 'turn/start', { threadId, input: [{ type: 'text', text }],
       ...(turnId ? { expectedTurnId: turnId } : {}) });
+  }
+  async rename(serverId: string, threadId: string, name: string) {
+    const entry = this.entry(serverId);
+    const rpc = await this.connection(entry);
+    await rpc.request('thread/name/set', { threadId, name });
+    for (const session of entry.sessions) if (session.id === threadId) session.name = name;
+    this.publish({ serverId, threadId, type: 'changed' });
   }
   async interrupt(serverId: string, threadId: string, turnId: string) {
     const rpc = await this.connection(this.entry(serverId));

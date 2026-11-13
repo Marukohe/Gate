@@ -58,6 +58,19 @@ it('opens the existing thread once and reads paginated native history', async ()
   expect(peer.request.mock.calls.some(([m]) => m === 'turn/start')).toBe(false);
 });
 
+it('renames through native metadata without starting a turn and reflects other clients', async () => {
+  await service.refresh(server.id);
+  peer.request.mockClear();
+  await service.rename(server.id, 'native', 'Fix login');
+  expect(peer.request.mock.calls).toEqual([['thread/name/set', { threadId: 'native', name: 'Fix login' }]]);
+  expect(service.monitor().servers[0].sessions[0].name).toBe('Fix login');
+  peer.emit('event', { method: 'thread/name/updated', params: { threadId: 'native', threadName: 'From terminal' } });
+  expect(service.monitor().servers[0].sessions[0].name).toBe('From terminal');
+  peer.request.mockRejectedValueOnce(new Error('Connection lost'));
+  await expect(service.rename(server.id, 'native', 'Unconfirmed')).rejects.toThrow('Connection lost');
+  expect(service.monitor().servers[0].sessions[0].name).toBe('From terminal');
+});
+
 it('arbitrates browser answers and clears decisions resolved by another native client', async () => {
   await service.refresh(server.id);
   peer.emit('event', { id: 1, method: 'item/commandExecution/requestApproval', params: { threadId: 'native', turnId: 'turn', command: 'make test', availableDecisions: ['accept', 'decline'] } });

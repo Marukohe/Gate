@@ -57,7 +57,12 @@ app.post('/api/servers/:id/sessions/:thread/interrupt', (req, res) => {
 app.post('/api/servers/:id/sessions/:thread/requests/:request', (req, res) => {
   writes.push({ type: 'answer', ...req.body }); detail.requests = []; res.json({}); emit();
 });
-app.use('/api', routes(db, { sync() {}, monitor: () => structuredClone(monitor) }));
+app.use('/api', routes(db, { sync() {}, monitor: () => structuredClone(monitor), async rename(serverId, threadId, name) {
+  writes.push({ type: 'rename', serverId, threadId, name });
+  detail.session.name = name;
+  for (const s of sessions) if (s.id === threadId) s.name = name;
+  emit();
+} }));
 app.use((error, _req, res, _next) => res.status(400).json({ error: error.message }));
 app.use(express.static(fileURLToPath(new URL('../client/dist/', import.meta.url))));
 await new Promise(resolve => http.listen(0, '127.0.0.1', resolve));
@@ -191,6 +196,18 @@ try {
   await page.getByLabel('Search sessions').fill('gate');
   await page.getByRole('button', { name: /^gate Idle/ }).click();
   await page.getByText('The panel now groups sessions by server.').waitFor();
+  await page.getByRole('button', { name: 'Rename session', exact: true }).click();
+  await page.getByLabel('Session name', { exact: true }).fill('Do not save');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  assert.equal(writes.some(w => w.type === 'rename'), false);
+  await page.getByRole('button', { name: 'Rename session', exact: true }).click();
+  await page.getByLabel('Session name', { exact: true }).fill('修复登录 · Gate');
+  await bounded(); await shot('rename-mobile');
+  await page.getByRole('button', { name: 'Save name', exact: true }).click();
+  await page.getByRole('heading', { name: '修复登录 · Gate', exact: true }).waitFor();
+  await page.reload();
+  await page.getByRole('heading', { name: '修复登录 · Gate', exact: true }).waitFor();
+  assert.deepEqual(writes.at(-1), { type: 'rename', serverId: server.id, threadId: 'gate', name: '修复登录 · Gate' });
   await page.getByRole('button', { name: 'Earlier messages' }).click();
   await page.getByText('Earlier context.', { exact: true }).waitFor();
   await page.getByLabel('Message Codex').fill('Continue from the browser.');

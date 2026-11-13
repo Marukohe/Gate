@@ -9,6 +9,7 @@
   Approval IDs belong to their connection. Do not replay inputs or decisions after timeout/disconnection.
 - Subscribe to a native thread before reading its paginated history; sharing a socket backend alone is not a subscription.
 - Monitoring uses native thread status and must not start agent turns. Mark retained snapshots unknown on connection loss.
+- Rename sessions through `thread/name/set` and handle `thread/name/updated`; keep native names shared across clients.
 - Non-interactive SSH can have a different PATH. Support an explicit Codex executable and its adjacent Node.js binary.
 - Native addons follow the active Node.js ABI. For `ERR_DLOPEN_FAILED`, rebuild `better-sqlite3` with that Node installation.
 - Inspect port ownership before stopping development services. Never stop an unrelated project or a shared Codex daemon.

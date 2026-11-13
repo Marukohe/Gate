@@ -79,6 +79,10 @@ export function routes(db: Database, codex: CodexService) {
     res.json(await codex.input(req.params.id, req.params.thread, text(req.body.text, 'message'),
       req.body.turnId ? text(req.body.turnId, 'turn ID', 200) : undefined));
   });
+  router.post('/servers/:id/sessions/:thread/rename', async (req, res) => {
+    await codex.rename(req.params.id, req.params.thread, text(req.body.name, 'session name', 1000));
+    res.json({ renamed: true });
+  });
   router.post('/servers/:id/sessions/:thread/interrupt', async (req, res) => {
     res.json(await codex.interrupt(req.params.id, req.params.thread, text(req.body.turnId, 'turn ID', 200)));
   });
