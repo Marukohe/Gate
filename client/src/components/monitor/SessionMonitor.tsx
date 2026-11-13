@@ -16,8 +16,10 @@ function age(time: number) {
   return seconds < 60 ? 'Just now' : seconds < 3600 ? `${Math.floor(seconds / 60)}m ago`
     : seconds < 86400 ? `${Math.floor(seconds / 3600)}h ago` : `${Math.floor(seconds / 86400)}d ago`;
 }
-export function SessionMonitor({ onOpen, onAddServer, onEditServer }: {
+export type MonitorFilter = 'running' | 'waiting' | null;
+export function SessionMonitor({ onOpen, onAddServer, onEditServer, statusFilter, onStatusFilter }: {
   onOpen: (serverId: string, sessionId: string, error?: string) => void; onAddServer: () => void; onEditServer: (id: string) => void;
+  statusFilter: MonitorFilter; onStatusFilter: (filter: MonitorFilter) => void;
 }) {
   const [servers, setServers] = useState<MonitorServer[] | null>(null);
   const [error, setError] = useState('');
@@ -42,25 +44,29 @@ export function SessionMonitor({ onOpen, onAddServer, onEditServer }: {
   const sessions = servers?.flatMap((s) => s.sessions) ?? [];
   const search = query.trim().toLowerCase();
   const filtered = servers?.map((server) => ({ ...server, sessions: server.sessions.filter((session) =>
+    (!statusFilter || (!error && session.state === statusFilter)) &&
     `${server.name} ${server.host} ${session.name} ${session.cwd} ${session.projectPath ?? ''} ${session.preview}`.toLowerCase().includes(search)) }))
-    .filter((s) => !search || s.sessions.length || `${s.name} ${s.host}`.toLowerCase().includes(search));
+    .filter((s) => statusFilter ? s.sessions.length || s.error : !search || s.sessions.length || `${s.name} ${s.host}`.toLowerCase().includes(search));
   return <main className="h-full overflow-y-auto bg-muted/20"><div className="mx-auto max-w-6xl space-y-7 px-4 py-6 sm:px-8 sm:py-9">
     <div className="flex flex-wrap items-center justify-between gap-4">
       <h1 className="page-title">Sessions</h1>
       <div className="relative w-full sm:w-64"><Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
         <Input className="pl-9" aria-label="Search sessions" placeholder="Find a project or session…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
     </div>
-    <div role="status" aria-label="Session summary">
-      <dl className="grid grid-cols-3 gap-2 sm:gap-3">
-        {[
+    <div role="group" aria-label="Session summary" className="grid grid-cols-3 gap-2 sm:gap-3">
+        {([
           { label: 'Needs you', count: sessions.filter((s) => s.state === 'waiting').length, tone: 'waiting', Icon: CircleAlert },
           { label: 'Running', count: sessions.filter((s) => s.state === 'running').length, tone: 'running', Icon: Activity },
           { label: 'Servers', count: servers?.length ?? 0, tone: 'unknown', Icon: ServerIcon },
-        ].map(({ label, count, tone, Icon }) => <div key={label} className={`monitor-summary monitor-${error || !servers ? 'unknown' : tone}`}>
-          <dt className="flex items-center gap-1.5 text-xs font-semibold sm:text-sm"><Icon aria-hidden="true" className="hidden size-4 min-[380px]:block" />{label}</dt>
-          <dd className="mt-2 text-3xl font-semibold tracking-tight tabular-nums sm:text-4xl">{error || !servers ? '—' : count}</dd>
-        </div>)}
-      </dl>
+        ] as const).map(({ label, count, tone, Icon }) => {
+          const className = `monitor-summary monitor-${error || !servers ? 'unknown' : tone}`;
+          const content = <><span className="flex items-center gap-1.5 text-xs font-semibold sm:text-sm"><Icon aria-hidden="true" className="hidden size-4 min-[380px]:block" />{label}</span>
+            <span className="mt-2 block text-3xl font-semibold tracking-tight tabular-nums sm:text-4xl">{error || !servers ? '—' : count}</span></>;
+          return tone === 'unknown' ? <div key={label} className={className}>{content}</div>
+            : <button key={label} type="button" className={className} aria-label={label} aria-pressed={statusFilter === tone}
+              title={statusFilter === tone ? 'Show all sessions' : `Show ${label.toLowerCase()} sessions`}
+              onClick={() => onStatusFilter(statusFilter === tone ? null : tone)}>{content}</button>;
+        })}
     </div>
     {error && <p role="alert" className="break-words text-sm text-destructive">Updates paused. {error} Retrying automatically.</p>}
     {!servers && !error && <p className="py-12 text-center text-sm text-muted-foreground">Connecting to your servers…</p>}
@@ -79,7 +85,7 @@ export function SessionMonitor({ onOpen, onAddServer, onEditServer }: {
       {server.error && <p role="alert" className="break-words border-b px-5 py-3 text-xs text-destructive">{server.error}</p>}
       {server.state === 'connecting' && <p className="px-5 py-4 text-sm text-muted-foreground">Connecting to Codex…</p>}
       {groupProjects(server.sessions).map((project) => <ProjectSessions key={project.path} project={project}
-        searching={!!search} stale={!!error} onOpen={(id) => onOpen(server.id, id)} onArchive={async (session) => {
+        searching={!!search || !!statusFilter} stale={!!error} onOpen={(id) => onOpen(server.id, id)} onArchive={async (session) => {
           await post(`/servers/${encodeURIComponent(server.id)}/sessions/${encodeURIComponent(session.id)}/archive`, { name: session.name, cwd: session.cwd });
           setServers((previous) => previous?.map((value) => value.id === server.id
             ? { ...value, hasFilters: true, sessions: value.sessions.filter((s) => s.id !== session.id) } : value) ?? null);
@@ -88,7 +94,9 @@ export function SessionMonitor({ onOpen, onAddServer, onEditServer }: {
       {!server.sessions.length && server.state === 'connected' && <p className="px-5 py-8 text-sm text-muted-foreground">{query ? 'No matching sessions.' : server.hasFilters ? 'No visible sessions. Check your session filters.' : 'No sessions yet. Start one here or in your terminal.'}</p>}
       {server.hasMore && <p className="px-5 py-3 text-xs text-muted-foreground">Showing the most recent sessions.</p>}
     </section>)}
-    {servers && query && !filtered?.length && <p className="py-12 text-center text-sm text-muted-foreground">No matching sessions.</p>}
+    {servers && !error && (search || statusFilter) && !filtered?.length && <p role="status" className="py-12 text-center text-sm text-muted-foreground">
+      {search ? 'No matching sessions.' : statusFilter === 'running' ? 'No sessions are running.' : 'No sessions need your attention.'}
+    </p>}
   </div>
   <Dialog open={creating !== null} onOpenChange={(open) => { if (!open) setCreating(null); }}><DialogContent className="rounded-2xl">
     <DialogHeader><DialogTitle>New session</DialogTitle><DialogDescription>{servers?.find((s) => s.id === creating)?.name}</DialogDescription></DialogHeader>

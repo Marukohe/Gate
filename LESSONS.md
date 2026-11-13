@@ -4,6 +4,8 @@
   hiding task menus while retaining multiple execution systems does not reduce complexity.
 - Keep each project heading to one row and use it to reveal history or collapse sessions, including running-only groups.
   Paths and history controls should not add extra rows. Polling must preserve the user's collapsed state.
+- Keep quick status filters above the monitor's component lifetime so returning from chat preserves the choice.
+  Summary counts use the visible server snapshot before quick status/search filtering; filtered results expand automatically.
 - A saved conversation ID does not identify a live process. Use the same Codex shared backend as the terminal;
   a fresh `exec resume` process cannot take over an in-flight turn.
 - Correlate JSON-RPC responses by ID. Server requests with IDs are approvals/questions, not ordinary responses.

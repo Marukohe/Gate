@@ -10,6 +10,8 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - Repository groups are derived from read-only Git metadata over the existing SSH connection, with cwd fallback.
   They are display groups, not persisted project workflows. Project headings reveal history and collapse sessions, including running-only groups.
   Active sessions show by default; search reveals matches without changing the chosen collapsed state.
+- Running and Needs you cards filter the monitor in place and reveal matching sessions. App owns this transient filter
+  so it survives navigation into a conversation and back. Summary counts remain independent of status/search filters.
 - Codex owns sessions, history, approvals, and execution. Gate stores SSH settings and per-server display preferences.
 - Opening a session subscribes to the existing native thread. Sending messages uses `turn/start` or `turn/steer`.
 - Session renaming uses native `thread/name/set`; names belong to Codex and are shared with terminal clients.

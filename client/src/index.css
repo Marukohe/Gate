@@ -231,9 +231,15 @@
 .monitor-idle { color: #388163; }
 .monitor-unknown, .monitor-saved { color: var(--muted-foreground); }
 .monitor-summary {
-  padding: 1rem; border-radius: 0.9rem;
+  padding: 1rem; border-radius: 0.9rem; text-align: left;
   border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
   background: color-mix(in srgb, currentColor 7%, var(--card));
+}
+button.monitor-summary:hover { background: color-mix(in srgb, currentColor 12%, var(--card)); }
+button.monitor-summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+.monitor-summary[aria-pressed="true"] {
+  border-color: currentColor; box-shadow: 0 0 0 1px currentColor;
+  background: color-mix(in srgb, currentColor 13%, var(--card));
 }
 .monitor-state {
   display: inline-block; padding: 0.2rem 0.55rem; border-radius: 999px;

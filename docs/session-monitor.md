@@ -13,6 +13,11 @@ Active sessions show by default; inactive projects occupy one row. Polling prese
 Full directory paths appear on hover; duplicate project names show a short parent path to distinguish them.
 Searching names, paths, or previews reveals matching sessions without changing the collapsed state.
 
+Click Running or Needs you to filter this same panel by native session state. Matches expand automatically under
+their server and repository, and search further narrows them. The selected card stays highlighted; click it again
+to restore all sessions. Summary counts stay global to the visible snapshot, respecting directory filters and archives.
+Status changes update the results automatically. Returning from a conversation keeps the quick filter; reloading resets it.
+
 The panel reads native threads without starting turns. Opening a conversation subscribes through `thread/resume`
 and reads paginated history. New sessions use `thread/start`; messages use `turn/start`, or `turn/steer` while a turn
 is active. Stop interrupts the current turn. Closing Gate only disconnects its client; Codex continues running.

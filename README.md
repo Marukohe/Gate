@@ -39,6 +39,8 @@ Use the same remote OS user and Codex configuration as your terminal.
   Projects needing attention come first. Active sessions show by default. Click a project heading to reveal history
   or collapse its sessions; running-only projects can also be collapsed.
   Full paths appear on hover, with short parent paths shown only for duplicate project names. Search reveals matches.
+- **Quick filters:** click **Running** or **Needs you** to show matching sessions, grouped by server and repository.
+  Click the selected card again to show all sessions. The filter stays selected when returning from a conversation.
 - **Filter:** use the filter icon beside a server. Search **Available directories** and click **Hide**.
   **Blocked directories** stays collapsed; expand it and click **Show** to unblock a path.
   Use **Add another directory** for a custom parent path.

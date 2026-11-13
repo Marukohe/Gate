@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ServerDialog } from '@/components/server/ServerDialog';
 import { AppHeader } from '@/components/layout/AppHeader';
-import { SessionMonitor } from '@/components/monitor/SessionMonitor';
+import { SessionMonitor, type MonitorFilter } from '@/components/monitor/SessionMonitor';
 import { SessionView } from '@/components/chat/SessionView';
 import { useUIStore } from '@/stores/ui-store';
 import { useServerStore, type Server } from '@/stores/server-store';
@@ -13,6 +13,7 @@ function route() {
 }
 export default function App() {
   const [selected, setSelected] = useState(route);
+  const [monitorFilter, setMonitorFilter] = useState<MonitorFilter>(null);
   const [dialog, setDialog] = useState(false);
   const [editing, setEditing] = useState<Server | null>(null);
   const [error, setError] = useState('');
@@ -40,7 +41,7 @@ export default function App() {
     <div className="min-h-0 flex-1">
       {selected ? <SessionView key={`${selected.serverId}:${selected.threadId}`} {...selected} initialError={error}
         serverName={servers.find((s) => s.id === selected.serverId)?.name ?? 'Server'} />
-        : <SessionMonitor onOpen={open} onAddServer={add} onEditServer={(id) => {
+        : <SessionMonitor statusFilter={monitorFilter} onStatusFilter={setMonitorFilter} onOpen={open} onAddServer={add} onEditServer={(id) => {
           setEditing(servers.find((s) => s.id === id) ?? null); setDialog(true);
         }} />}
     </div>
