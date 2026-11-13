@@ -17,6 +17,10 @@ The panel reads native threads without starting turns. Opening a conversation su
 and reads paginated history. New sessions use `thread/start`; messages use `turn/start`, or `turn/steer` while a turn
 is active. Stop interrupts the current turn. Closing Gate only disconnects its client; Codex continues running.
 
+The model picker above the message input reads the connected server's native model catalog. Choosing a model changes
+the next new turn when its message is sent; Codex retains that model for subsequent turns. During a running turn the
+picker is disabled, since steering cannot change its model. A failed catalog request can be retried without disabling chat.
+
 Status comes from Codex: running, waiting for input/approval, idle, saved but not loaded, or error.
 Connection failures retain the last list with unknown status. Reconnection reloads state and history, never user input.
 A saved thread can be resumed on this backend; Gate cannot attach to a separate `--no-daemon` process.

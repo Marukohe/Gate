@@ -9,7 +9,7 @@ import { useEvents } from '@/hooks/use-events';
 import { MessageBubble } from './MessageBubble';
 import { ApprovalRequest } from './ApprovalRequest';
 import { labels } from '@/lib/session';
-import type { SessionDetail, Item } from '../../../../server/src/types';
+import type { SessionDetail, Item, ModelOption } from '../../../../server/src/types';
 
 function mergeItems(old: Item[], incoming: Item[]) {
   const result = new Map(old.map((item) => [item.id, item]));
@@ -30,12 +30,26 @@ export function SessionView({ serverId, threadId, serverName, initialError }: {
   const [name, setName] = useState('');
   const [savingName, setSavingName] = useState(false);
   const [renameError, setRenameError] = useState('');
+  const [models, setModels] = useState<ModelOption[]>([]);
+  const [model, setModel] = useState('');
+  const [modelError, setModelError] = useState('');
+  const [modelRevision, setModelRevision] = useState(0);
+  const [loadingModels, setLoadingModels] = useState(true);
   const viewport = useRef<HTMLDivElement>(null);
   const composing = useRef(false);
   const follow = useRef(true);
   const alive = useRef(true);
   const revision = useRef(0);
   const eventTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoadingModels(true); setModelError('');
+    void api<{ models: ModelOption[] }>(`/servers/${encodeURIComponent(serverId)}/models`, { signal: controller.signal })
+      .then((result) => { if (!controller.signal.aborted) setModels(result.models); })
+      .catch((e: Error) => { if (!controller.signal.aborted) setModelError(e.message); })
+      .finally(() => { if (!controller.signal.aborted) setLoadingModels(false); });
+    return () => controller.abort();
+  }, [serverId, modelRevision]);
   const refresh = useCallback(async () => {
     const current = ++revision.current;
     try {
@@ -68,7 +82,10 @@ export function SessionView({ serverId, threadId, serverName, initialError }: {
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!text.trim() || busy) return;
     setBusy(true); setError('');
-    try { await post(`${base}/input`, { text, turnId: detail?.turnId }); setText(''); follow.current = true; await refresh(); }
+    try {
+      await post(`${base}/input`, { text, turnId: detail?.turnId, ...(!detail?.turnId && model ? { model } : {}) });
+      setText(''); setModel(''); follow.current = true; await refresh();
+    }
     catch (e) { setError((e as Error).message); await refresh(); } finally { setBusy(false); }
   }
   async function stop() {
@@ -124,6 +141,17 @@ export function SessionView({ serverId, threadId, serverName, initialError }: {
       {error && <div role="alert" className="flex items-start gap-2 text-sm text-destructive"><p className="min-w-0 flex-1 break-words">{error}</p>
         <button className="shrink-0 text-xs underline" onClick={() => setError('')}>Dismiss</button></div>}
       {detail && !detail.session.canInput && <p className="text-sm text-muted-foreground">Continue this child session through its parent conversation.</p>}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        <select aria-label="Model" value={detail?.turnId ? '' : model} onChange={(e) => setModel(e.target.value)}
+          disabled={busy || offline || !detail?.session.canInput || !!detail?.turnId || loadingModels || !!modelError || !models.length}
+          title={detail?.turnId ? 'Change model after this turn finishes' : 'Model for your next message'}
+          className="h-7 max-w-full min-w-0 rounded-md border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60">
+          <option value="">{detail?.session.model || 'Current model'}</option>
+          {models.filter((option) => option.id !== detail?.session.model).map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+        </select>
+        {modelError ? <span role="status" className="min-w-0 break-words">Models unavailable. {modelError} <button type="button" className="underline" onClick={() => setModelRevision((value) => value + 1)}>Retry models</button></span>
+          : detail?.turnId ? <span>Change model between turns</span> : model ? <span>Applies to your next message</span> : null}
+      </div>
       <form onSubmit={send} className="flex items-end gap-2">
         <Textarea aria-label="Message Codex" placeholder={detail?.turnId ? 'Update Codex…' : 'Message Codex…'} value={text}
           onChange={(e) => setText(e.target.value)} rows={1} className="max-h-32 min-h-10 min-w-0 flex-1 resize-none py-[9px] leading-5"

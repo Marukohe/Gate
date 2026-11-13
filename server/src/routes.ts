@@ -15,6 +15,7 @@ export function routes(db: Database, codex: CodexService) {
   sync();
   router.get('/health', (_req, res) => res.json({ status: 'ok' }));
   router.get('/servers', (_req, res) => res.json(db.listServers().map(publicServer)));
+  router.get('/servers/:id/models', async (req, res) => res.json({ models: await codex.models(req.params.id) }));
   const settings = (body: any, existing?: Server) => {
     const port = Number(body.port ?? 22);
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid SSH port');
@@ -77,7 +78,8 @@ export function routes(db: Database, codex: CodexService) {
   });
   router.post('/servers/:id/sessions/:thread/input', async (req, res) => {
     res.json(await codex.input(req.params.id, req.params.thread, text(req.body.text, 'message'),
-      req.body.turnId ? text(req.body.turnId, 'turn ID', 200) : undefined));
+      req.body.turnId ? text(req.body.turnId, 'turn ID', 200) : undefined,
+      req.body.model === undefined ? undefined : text(req.body.model, 'model', 200)));
   });
   router.post('/servers/:id/sessions/:thread/rename', async (req, res) => {
     await codex.rename(req.params.id, req.params.thread, text(req.body.name, 'session name', 1000));

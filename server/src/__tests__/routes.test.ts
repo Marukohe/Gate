@@ -8,7 +8,7 @@ import type { CodexService } from '../codex.js';
 let db: ReturnType<typeof createDb>;
 let http: HttpServer;
 let origin: string;
-const codex = { sync: vi.fn(), monitor: vi.fn(), create: vi.fn(), input: vi.fn(), rename: vi.fn() };
+const codex = { sync: vi.fn(), monitor: vi.fn(), create: vi.fn(), input: vi.fn(), rename: vi.fn(), models: vi.fn() };
 beforeEach(async () => {
   vi.resetAllMocks(); db = createDb(':memory:');
   const app = express(); app.use(express.json()); app.use(routes(db, codex as unknown as CodexService));
@@ -30,6 +30,19 @@ it('validates session names before sending a native rename and surfaces failures
   expect(codex.rename).toHaveBeenCalledWith('server', 'native', 'Fix login');
   codex.rename.mockRejectedValueOnce(new Error('Disconnected'));
   expect(await (await send(path, { name: 'Retry later' })).json()).toEqual({ error: 'Disconnected' });
+});
+
+it('lists server models and validates optional model overrides before input', async () => {
+  codex.models.mockResolvedValue([{ id: 'model-two', name: 'Model Two' }]);
+  expect(await (await fetch(origin + '/servers/server/models')).json()).toEqual({ models: [{ id: 'model-two', name: 'Model Two' }] });
+  expect(codex.models).toHaveBeenCalledWith('server');
+  const path = '/servers/server/sessions/native/input';
+  for (const model of ['', ' ', 42, 'bad\0model', 'x'.repeat(201)]) {
+    expect((await send(path, { text: 'Work', model })).status).toBe(400);
+  }
+  expect(codex.input).not.toHaveBeenCalled();
+  expect((await send(path, { text: 'Work', model: 'model-two' })).status).toBe(200);
+  expect(codex.input).toHaveBeenCalledWith('server', 'native', 'Work', undefined, 'model-two');
 });
 
 it('preserves a saved password on edit without exposing it in any settings response', async () => {

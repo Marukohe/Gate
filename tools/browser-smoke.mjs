@@ -28,15 +28,19 @@ const monitor = { servers: [{ ...server, state: 'connected', sessions, hasMore: 
   { id: 'build', name: 'Build server', host: 'build.local', username: 'alex', state: 'connected', hasMore: false,
     sessions: [session('compiler', 'compiler', 'running', 'Running the compiler regression suite.'),
       session('tools', 'tools', 'saved', 'Added a small command to inspect build artifacts.')] }] };
-let detail = { session: sessions[2], items: [{ id: 'u1', kind: 'user', text: 'Simplify the session panel.' },
+let detail = { session: { ...sessions[2], model: 'fixture-current' }, items: [{ id: 'u1', kind: 'user', text: 'Simplify the session panel.' },
   { id: 'a1', kind: 'assistant', text: 'The panel now groups sessions by server.\n\n- Running work stays visible.\n- Questions appear in the conversation.\n- Each session has one place to continue.' }],
   nextCursor: 'older', turnId: null, requests: [] };
 const writes = [];
+let modelsUnavailable = false;
 const app = express(); app.use(express.json());
 const http = createServer(app);
 const wss = new WebSocketServer({ server: http, path: '/ws' });
 const emit = (event = {}) => { for (const socket of wss.clients) socket.send(JSON.stringify({ serverId: server.id, threadId: detail.session.id, type: 'changed', ...event })); };
 app.get('/api/servers', (_req, res) => res.json([server]));
+app.get('/api/servers/:id/models', (_req, res) => modelsUnavailable
+  ? res.status(503).json({ error: 'Catalog unavailable' })
+  : res.json({ models: [{ id: 'fixture-current', name: 'Current' }, { id: 'fixture-other', name: 'Other model' }] }));
 
 app.get('/api/servers/:id/sessions/:thread', (req, res) => res.json(req.query.cursor
   ? { ...detail, items: [{ id: 'old', kind: 'user', text: 'Earlier context.' }], nextCursor: null } : detail));
@@ -48,6 +52,7 @@ app.post('/api/servers/:id/sessions', (req, res) => {
 });
 app.post('/api/servers/:id/sessions/:thread/input', (req, res) => {
   writes.push({ type: 'input', ...req.body });
+  if (req.body.model) detail.session.model = req.body.model;
   detail.items.push({ id: `message-${writes.length}`, kind: 'user', text: req.body.text });
   detail.turnId = 'turn-two'; detail.session.state = 'running'; res.json({}); emit();
 });
@@ -223,6 +228,9 @@ try {
   assert.deepEqual(writes.at(-1), { type: 'rename', serverId: server.id, threadId: 'gate', name: '修复登录 · Gate' });
   await page.getByRole('button', { name: 'Earlier messages' }).click();
   await page.getByText('Earlier context.', { exact: true }).waitFor();
+  await page.getByLabel('Model', { exact: true }).selectOption('fixture-other');
+  await page.waitForResponse(response => response.url().includes('/sessions/gate') && !response.url().includes('cursor'));
+  assert.equal(await page.getByLabel('Model', { exact: true }).inputValue(), 'fixture-other', 'Polling must retain an unsent model selection');
   const composer = page.getByLabel('Message Codex');
   await composer.fill('english');
   const ime = await composer.evaluate(input => {
@@ -252,13 +260,23 @@ try {
   await composer.press('Enter');
   await page.getByRole('button', { name: 'Stop current turn' }).waitFor();
   assert.equal(writes.at(-1).turnId, null);
+  assert.equal(writes.at(-1).model, 'fixture-other');
+  assert.equal(await page.getByLabel('Model', { exact: true }).isDisabled(), true);
   await page.getByLabel('Message Codex').fill('Use the existing theme.');
   await page.getByRole('button', { name: 'Send update', exact: true }).click();
   await page.getByText('Use the existing theme.', { exact: true }).waitFor();
   assert.equal(writes.at(-1).turnId, 'turn-two');
+  assert.equal(writes.at(-1).model, undefined, 'Steering must not include a model override');
   await page.getByRole('button', { name: 'Stop current turn' }).click();
   await page.getByRole('button', { name: 'Send message', exact: true }).waitFor();
   assert.equal(writes.at(-1).type, 'interrupt');
+  modelsUnavailable = true;
+  await page.reload();
+  await page.getByText('Catalog unavailable', { exact: false }).waitFor();
+  assert.equal(await page.getByLabel('Message Codex').isEnabled(), true, 'Catalog failure must not disable chat');
+  modelsUnavailable = false;
+  await page.getByRole('button', { name: 'Retry models', exact: true }).click();
+  await page.getByLabel('Model', { exact: true }).selectOption('fixture-current');
   detail.requests = [{ id: 'approval', threadId: 'gate', kind: 'approval', title: 'Allow this command?', detail: 'npm test', choices: ['accept', 'decline'], questions: [], answering: false }]; emit();
   await page.getByRole('button', { name: 'Allow once' }).click();
   await page.getByText('Allow this command?', { exact: true }).waitFor({ state: 'hidden' });

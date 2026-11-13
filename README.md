@@ -46,6 +46,8 @@ Use the same remote OS user and Codex configuration as your terminal.
 - **Archive:** use the archive icon on a session to hide it in Gate. Restore it under **Session filters → Archived sessions**.
   Filtering and archiving affect this Gate only; running Codex sessions continue.
 - **Continue:** open a session to read history and send messages. During a running turn, messages steer that turn.
+- **Model:** select a model above the message input before sending a new turn. Choices come from that server's Codex
+  catalog; the current turn keeps its model. The chosen model becomes the session's model when the message is sent.
 - **Rename:** use the pencil beside the conversation title. Names are saved in Codex and shared with the terminal.
 - **Start:** click **+ Session**, enter a working directory and first instruction. This creates a native Codex session.
 - **Respond:** answer questions or allow/decline requested operations in the conversation. Requests unsupported by

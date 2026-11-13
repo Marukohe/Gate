@@ -13,6 +13,7 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - Codex owns sessions, history, approvals, and execution. Gate stores SSH settings and per-server display preferences.
 - Opening a session subscribes to the existing native thread. Sending messages uses `turn/start` or `turn/steer`.
 - Session renaming uses native `thread/name/set`; names belong to Codex and are shared with terminal clients.
+- The chat model picker reads native `model/list` and passes an optional `model` to `turn/start`; `turn/steer` cannot change models.
 - Backend disconnect/restart must never restart a turn, resend an uncertain input, or stop Codex.
 - Gate is for trusted internal networks and has no authentication.
 

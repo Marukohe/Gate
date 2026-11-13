@@ -58,6 +58,23 @@ it('opens the existing thread once and reads paginated native history', async ()
   expect(peer.request.mock.calls.some(([m]) => m === 'turn/start')).toBe(false);
 });
 
+it('loads the native model catalog across pages and sends model slugs only on new turns', async () => {
+  peer.request.mockResolvedValueOnce({ data: [
+    { id: 'catalog-one', model: 'model-one', displayName: 'Model One', hidden: false },
+    { id: 'hidden', model: 'hidden', hidden: true },
+  ], nextCursor: 'next-models' }).mockResolvedValueOnce({ data: [
+    { id: 'catalog-two', model: 'model-two', displayName: 'Model Two' },
+  ], nextCursor: null });
+  expect(await service.models(server.id)).toEqual([{ id: 'model-one', name: 'Model One' }, { id: 'model-two', name: 'Model Two' }]);
+  expect(peer.request).toHaveBeenCalledWith('model/list', { limit: 100, includeHidden: false, cursor: 'next-models' });
+  await service.input(server.id, 'native', 'Use another model', undefined, 'model-two');
+  expect(peer.request).toHaveBeenLastCalledWith('turn/start', { threadId: 'native', input: [{ type: 'text', text: 'Use another model' }], model: 'model-two' });
+  peer.request.mockClear();
+  await expect(service.input(server.id, 'native', 'Steer', 'turn', 'model-two')).rejects.toThrow('between turns');
+  expect(peer.request).not.toHaveBeenCalled();
+  expect(sessionFromThread({ ...native, model: 'model-two' }).model).toBe('model-two');
+});
+
 it('renames through native metadata without starting a turn and reflects other clients', async () => {
   await service.refresh(server.id);
   peer.request.mockClear();
