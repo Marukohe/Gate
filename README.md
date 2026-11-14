@@ -41,7 +41,8 @@ Use the same remote OS user and Codex configuration as your terminal.
   Full paths appear on hover, with short parent paths shown only for duplicate project names. Search reveals matches.
 - **Quick filters:** click **Running** or **Needs you** to show matching sessions, grouped by server and repository.
   Click the selected card again to show all sessions. The filter stays selected when returning from a conversation.
-- **Other sessions:** while chatting, the header shows other sessions needing attention or running. Click either count
+- **Session status:** while chatting, the header shows other sessions needing attention and all running sessions,
+  including the current conversation. The running list marks it **Current**. Click either count
   to switch sessions. New waits and native session errors show a brief notice with the server and reason.
   Opening or dismissing a notice leaves pending work in the list until its state changes.
   Use **Return to …** or **Next needs you** after switching. Drafts, model/effort choices, and reading positions stay

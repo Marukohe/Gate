@@ -20,7 +20,7 @@ export function SessionAttention({ current, onOpen }: {
   }
   const candidates = error ? [] : otherSessions(servers, current);
   const waiting = candidates.filter(({ session }) => needsAttention(session));
-  const running = candidates.filter(({ session }) => session.state === 'running');
+  const running = error ? [] : otherSessions(servers, null).filter(({ session }) => session.state === 'running');
   useEffect(() => {
     for (const item of otherSessions(useMonitorStore.getState().servers, null)) {
       const key = sessionKey(item.serverId, item.threadId);
@@ -60,26 +60,29 @@ export function SessionAttention({ current, onOpen }: {
   };
   if (!current) return null;
   return <>
-    <div className="ml-auto flex shrink-0 items-center gap-1" aria-label="Other session status">
+    <div className="ml-auto flex shrink-0 items-center gap-1" aria-label="Session status">
       {(['waiting', 'running'] as const).map((kind) => {
         const items = kind === 'waiting' ? waiting : running;
         const label = kind === 'waiting' ? 'Needs you' : 'Running';
+        const listLabel = kind === 'waiting' ? 'Other sessions: Needs you' : 'Running sessions';
         return <Popover.Root key={kind} open={panel === kind} onOpenChange={(value) => setPanel(value ? kind : null)}>
-          <Popover.Trigger asChild><button type="button" aria-label={`Other sessions: ${label}`} title="Other sessions"
+          <Popover.Trigger asChild><button type="button" aria-label={listLabel} title={listLabel}
             className={`rounded-md px-1.5 py-1.5 text-[11px] font-semibold hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring sm:px-2 sm:text-xs monitor-${kind}`}>
             {label}<span className="ml-1 tabular-nums">{error || !servers ? '—' : items.length}</span>
           </button></Popover.Trigger>
           <Popover.Portal><Popover.Content align="end" sideOffset={12} collisionPadding={16}
-            aria-label={`Other sessions: ${label}`} className="z-50 w-[min(24rem,calc(100vw-2rem))] rounded-xl border bg-popover p-2 text-popover-foreground shadow-lg outline-none">
-            <div className="flex items-center justify-between px-2 py-2"><h2 className="text-sm font-semibold">Other sessions · {label}</h2>
+            aria-label={listLabel} className="z-50 w-[min(24rem,calc(100vw-2rem))] rounded-xl border bg-popover p-2 text-popover-foreground shadow-lg outline-none">
+            <div className="flex items-center justify-between px-2 py-2"><h2 className="text-sm font-semibold">{kind === 'waiting' ? 'Other sessions · Needs you' : listLabel}</h2>
               <Popover.Close aria-label="Close session list" className="rounded p-1 hover:bg-accent"><X className="size-4" /></Popover.Close></div>
             {error ? <p role="status" className="break-words p-2 text-xs text-destructive">Updates paused. {error}</p>
               : <div className="max-h-[50dvh] overflow-y-auto">{items.map((item) => <button key={sessionKey(item.serverId, item.threadId)}
-                type="button" onClick={() => open(item)} className="block w-full rounded-lg px-2 py-3 text-left hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring">
-                <span className="block truncate text-sm font-medium">{item.session.name}</span>
+                type="button" onClick={() => open(item)} disabled={item.serverId === current.serverId && item.threadId === current.threadId}
+                className="block w-full rounded-lg px-2 py-3 text-left hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring">
+                <span className="flex items-center gap-2 text-sm font-medium"><span className="min-w-0 flex-1 truncate">{item.session.name}</span>
+                  {item.serverId === current.serverId && item.threadId === current.threadId && <span className="text-xs font-normal text-muted-foreground">Current</span>}</span>
                 <span className="mt-1 block truncate text-xs text-muted-foreground">{item.serverName} · {item.session.attentionReason || (kind === 'waiting' ? item.session.state === 'error' ? 'Session error' : 'Waiting for you' : 'Running')}</span>
               </button>)}
-              {!items.length && <p className="p-2 text-sm text-muted-foreground">{kind === 'waiting' ? 'No other sessions need you.' : 'No other sessions are running.'}</p>}
+              {!items.length && <p className="p-2 text-sm text-muted-foreground">{kind === 'waiting' ? 'No other sessions need you.' : 'No sessions are running.'}</p>}
             </div>}
             {servers?.some((server) => server.state !== 'connected') && <p className="border-t px-2 py-2 text-xs text-muted-foreground">Some servers are unavailable; their status is unknown.</p>}
           </Popover.Content></Popover.Portal>

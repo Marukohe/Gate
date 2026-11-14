@@ -12,7 +12,8 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
   Active sessions show by default; search reveals matches without changing the chosen collapsed state.
 - Running and Needs you cards filter the monitor in place and reveal matching sessions. App owns this transient filter
   so it survives navigation into a conversation and back. Summary counts remain independent of status/search filters.
-- App polls one shared monitor store across navigation. The chat header exposes other running/waiting/error sessions;
+- App polls one shared monitor store across navigation. Header Running includes the current thread and marks it Current;
+  Needs you lists other waiting/error sessions. Both respect visibility preferences and known connection state;
   transition notices use only known native status, exclude the current thread, and do not open additional conversations.
 - Session view state is keyed by server and native thread in browser memory: drafts, model/effort, in-flight actions,
   cached history, and scroll position. Cached approval requests are discarded and native state is refreshed before input.

@@ -172,6 +172,11 @@ try {
   await page.getByRole('button', { name: /^api Running/ }).waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: /^Validate migrations Running/ }).click();
   await page.getByText('The panel now groups sessions by server.').waitFor();
+  const headerRunning = page.getByRole('button', { name: 'Running sessions', exact: true });
+  assert.match(await headerRunning.innerText(), /Running\s*3/, 'Running count includes the current running conversation');
+  await headerRunning.click();
+  assert.equal(await page.getByRole('button', { name: /^Validate migrations Current/ }).isDisabled(), true);
+  await page.getByRole('button', { name: 'Close session list', exact: true }).click();
   await page.getByRole('button', { name: 'All sessions', exact: true }).click();
   await page.getByRole('button', { name: /^Validate migrations Running/ }).waitFor();
   assert.equal(await runningCard.getAttribute('aria-pressed'), 'true', 'Returning from chat must keep the status filter');
