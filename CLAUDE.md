@@ -17,6 +17,8 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
   transition notices use only known native status, exclude the current thread, and do not open additional conversations.
 - Session view state is keyed by server and native thread in browser memory: drafts, model/effort, in-flight actions,
   cached history, and scroll position. Cached approval requests are discarded and native state is refreshed before input.
+- Chats use one compact header. SessionView portals its title/details into AppHeader so live metadata and rename state
+  stay with the conversation; return/next attention navigation shares the same row. Directory and theme controls are on demand.
 - Codex owns sessions, history, approvals, and execution. Gate stores SSH settings and per-server display preferences.
 - Opening a session subscribes to the existing native thread. Sending messages uses `turn/start` or `turn/steer`.
 - Session renaming uses native `thread/name/set`; names belong to Codex and are shared with terminal clients.

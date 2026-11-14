@@ -172,6 +172,14 @@ try {
   await page.getByRole('button', { name: /^api Running/ }).waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: /^Validate migrations Running/ }).click();
   await page.getByText('The panel now groups sessions by server.').waitFor();
+  for (const width of [1365, 390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    const header = await page.locator('header').boundingBox();
+    const conversation = await page.getByRole('region', { name: 'Conversation', exact: true }).boundingBox();
+    assert.ok(header.height <= 52, 'Chat header should occupy one compact row');
+    assert.ok(Math.abs(conversation.y - header.y - header.height) < 1, 'Conversation should start directly below the header');
+    await bounded();
+  }
   const headerRunning = page.getByRole('button', { name: 'Running sessions', exact: true });
   assert.match(await headerRunning.innerText(), /Running\s*3/, 'Running count includes the current running conversation');
   await headerRunning.click();
@@ -264,10 +272,12 @@ try {
   await page.getByLabel('Search sessions').fill('gate');
   await page.getByRole('button', { name: /^gate Idle/ }).click();
   await page.getByText('The panel now groups sessions by server.').waitFor();
+  await page.getByRole('button', { name: 'Session details', exact: true }).click();
   await page.getByRole('button', { name: 'Rename session', exact: true }).click();
   await page.getByLabel('Session name', { exact: true }).fill('Do not save');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   assert.equal(writes.some(w => w.type === 'rename'), false);
+  await page.getByRole('button', { name: 'Session details', exact: true }).click();
   await page.getByRole('button', { name: 'Rename session', exact: true }).click();
   await page.getByLabel('Session name', { exact: true }).fill('修复登录 · Gate');
   await bounded(); await shot('rename-mobile');
@@ -333,7 +343,7 @@ try {
   await page.getByLabel('Message Codex').fill('Unsaved original draft');
   await page.getByLabel('Model', { exact: true }).selectOption('fixture-current');
   await reasoning.selectOption('high');
-  const viewport = page.locator('main > div').nth(1);
+  const viewport = page.getByRole('region', { name: 'Conversation', exact: true });
   await viewport.evaluate(node => { node.scrollTop = 0; node.dispatchEvent(new Event('scroll')); });
   assert.equal(await page.getByRole('button', { name: 'Dismiss session notice' }).count(), 0, 'Existing pending work must not toast on entry');
   sessions[1].state = 'waiting'; sessions[1].attentionReason = 'Waiting for approval';
@@ -418,8 +428,10 @@ try {
   await bounded(); await shot('chat-mobile');
   const beforeReconnect = writes.length;
   for (const socket of wss.clients) socket.close();
+  await page.getByRole('button', { name: 'Session details', exact: true }).click();
   await page.getByText('Reconnecting…', { exact: true }).waitFor();
   await page.getByText('Idle', { exact: true }).waitFor();
+  await page.keyboard.press('Escape');
   assert.equal(writes.length, beforeReconnect, 'Reconnect must never replay writes');
   await page.getByRole('button', { name: 'All sessions' }).click();
   await page.getByRole('button', { name: 'New session on Development' }).click();

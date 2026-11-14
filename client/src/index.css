@@ -198,6 +198,7 @@
   font-weight: 650;
   letter-spacing: -0.04em;
 }
+.gate-chat-header { gap: 0; padding-block: max(0.5rem, env(safe-area-inset-top)) 0.5rem; }
 .gate-mark {
   display: grid;
   place-items: center;

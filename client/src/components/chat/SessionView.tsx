@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowUp, Pencil, Square } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Popover } from 'radix-ui';
+import { ArrowUp, ChevronDown, Moon, Pencil, Square, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -10,6 +12,7 @@ import { MessageBubble } from './MessageBubble';
 import { ApprovalRequest } from './ApprovalRequest';
 import { labels } from '@/lib/session';
 import { emptyView, sessionKey, useSessionViewStore } from '@/stores/session-view-store';
+import { useUIStore } from '@/stores/ui-store';
 import type { SessionDetail, Item, ModelOption } from '../../../../server/src/types';
 
 function mergeItems(old: Item[], incoming: Item[]) {
@@ -17,8 +20,9 @@ function mergeItems(old: Item[], incoming: Item[]) {
   for (const item of incoming) result.set(item.id, item);
   return [...result.values()];
 }
-export function SessionView({ serverId, threadId, serverName, initialError }: {
+export function SessionView({ serverId, threadId, serverName, initialError, headerTarget, onHome }: {
   serverId: string; threadId: string; serverName: string; initialError: string;
+  headerTarget: HTMLElement | null; onHome: () => void;
 }) {
   const base = `/servers/${encodeURIComponent(serverId)}/sessions/${encodeURIComponent(threadId)}`;
   const key = sessionKey(serverId, threadId);
@@ -37,6 +41,9 @@ export function SessionView({ serverId, threadId, serverName, initialError }: {
   const [name, setName] = useState('');
   const [savingName, setSavingName] = useState(false);
   const [renameError, setRenameError] = useState('');
+  const [showDetails, setShowDetails] = useState(false);
+  const dark = useUIStore((state) => state.darkMode);
+  const toggleDark = useUIStore((state) => state.toggleDarkMode);
   const [models, setModels] = useState<ModelOption[]>([]);
   const [modelError, setModelError] = useState('');
   const [modelRevision, setModelRevision] = useState(0);
@@ -140,14 +147,29 @@ export function SessionView({ serverId, threadId, serverName, initialError }: {
     } catch (e) { setError((e as Error).message); } finally { setLoadingOlder(false); }
   }
   return <main className="flex h-full min-h-0 flex-col">
-    <div className="border-b px-4 py-3 sm:px-8"><div className="mx-auto flex max-w-3xl items-center gap-3">
-      <div className="min-w-0 flex-1"><div className="flex items-center gap-1"><h1 className="truncate text-sm font-semibold">{detail?.session.name ?? 'Session'}</h1>
-        <Button variant="ghost" size="icon-sm" aria-label="Rename session" title="Rename session" disabled={!detail || offline}
-          className="text-muted-foreground" onClick={() => { setName(detail!.session.name); setRenameError(''); setRenaming(true); }}><Pencil className="size-3.5" /></Button></div>
-        <p className="mt-1 truncate text-xs text-muted-foreground" title={detail?.session.cwd}>{serverName} · {detail?.session.cwd}</p></div>
-      <span className="shrink-0 text-xs text-muted-foreground">{offline ? 'Reconnecting…' : detail ? labels[detail.session.state] : 'Loading…'}</span>
-    </div></div>
-    <div className="min-h-0 flex-1 overflow-y-auto" ref={viewport} onScroll={() => {
+    {headerTarget && createPortal(<Popover.Root open={showDetails} onOpenChange={setShowDetails}>
+      <div className="relative flex min-w-0 items-center gap-1.5 rounded-md px-1 py-1.5">
+        <span aria-hidden="true" className={`monitor-dot monitor-${offline ? 'unknown' : detail?.session.state ?? 'unknown'}`} />
+        <h1 className="min-w-0 truncate text-sm font-semibold">{detail?.session.name ?? 'Session'}</h1>
+        <ChevronDown aria-hidden="true" className="size-3 shrink-0 text-muted-foreground" />
+        <Popover.Trigger asChild><button type="button" aria-label="Session details" title={`${serverName} · ${detail?.session.cwd ?? ''}`}
+          className="absolute inset-0 rounded-md hover:bg-muted/30 focus-visible:outline-2 focus-visible:outline-ring" /></Popover.Trigger>
+      </div>
+      <Popover.Portal><Popover.Content align="start" sideOffset={10} collisionPadding={16} aria-label="Session details"
+        className="z-50 w-[min(24rem,calc(100vw-2rem))] space-y-3 rounded-xl border bg-popover p-4 text-popover-foreground shadow-lg outline-none">
+        <p className="break-words text-sm font-semibold">{detail?.session.name ?? 'Session'}</p>
+        <dl className="space-y-2 text-xs"><div><dt className="text-muted-foreground">Server</dt><dd className="mt-1 break-words">{serverName}</dd></div>
+          <div><dt className="text-muted-foreground">Working directory</dt><dd className="mt-1 break-all">{detail?.session.cwd || 'Loading…'}</dd></div>
+          <div><dt className="text-muted-foreground">Status</dt><dd className="mt-1">{offline ? 'Reconnecting…' : detail ? labels[detail.session.state] : 'Loading…'}</dd></div></dl>
+        <div className="flex flex-wrap gap-2 border-t pt-3">
+          <Button variant="outline" size="sm" aria-label="Rename session" disabled={!detail || offline}
+            onClick={() => { setName(detail!.session.name); setRenameError(''); setShowDetails(false); setRenaming(true); }}><Pencil />Rename</Button>
+          <Button variant="ghost" size="sm" aria-label="Toggle theme" onClick={toggleDark}>{dark ? <Sun /> : <Moon />}Theme</Button>
+          <Button variant="ghost" size="sm" aria-label="All sessions" onClick={() => { setShowDetails(false); onHome(); }}>All sessions</Button>
+        </div>
+      </Popover.Content></Popover.Portal>
+    </Popover.Root>, headerTarget)}
+    <div role="region" aria-label="Conversation" className="min-h-0 flex-1 overflow-y-auto" ref={viewport} onScroll={() => {
       const node = viewport.current; if (node) follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100;
     }}><div className="mx-auto max-w-3xl px-4 py-4 sm:px-6">
       {detail?.nextCursor && <div className="text-center"><Button variant="ghost" size="sm" disabled={loadingOlder} onClick={() => void older()}>{loadingOlder ? 'Loading…' : 'Earlier messages'}</Button></div>}

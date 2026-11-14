@@ -17,6 +17,7 @@ export default function App() {
   const [selected, setSelected] = useState(route);
   const [monitorFilter, setMonitorFilter] = useState<MonitorFilter>(null);
   const [returnTo, setReturnTo] = useState<SessionTarget | null>(null);
+  const [sessionTitleTarget, setSessionTitleTarget] = useState<HTMLDivElement | null>(null);
   const [dialog, setDialog] = useState(false);
   const [editing, setEditing] = useState<Server | null>(null);
   const [error, setError] = useState('');
@@ -52,18 +53,16 @@ export default function App() {
     if (selected && !returnTo) setReturnTo(selected);
     open(serverId, threadId);
   };
+  const canReturn = selected && returnTo && (selected.serverId !== returnTo.serverId || selected.threadId !== returnTo.threadId);
+  const home = () => { setReturnTo(null); location.hash = 'sessions'; };
   return <div className="flex h-full min-h-0 flex-col">
     <AppHeader home={!selected} current={selected} onOpen={attentionOpen}
-      onHome={() => { setReturnTo(null); location.hash = 'sessions'; }} onAddServer={add} />
-    {selected && returnTo && (selected.serverId !== returnTo.serverId || selected.threadId !== returnTo.threadId) &&
-      <div className="flex items-center justify-between gap-3 border-b bg-muted/20 px-4 py-2 text-xs">
-        <button type="button" className="min-w-0 truncate text-left underline" title={`Return to ${returnName}`}
-          onClick={() => { open(returnTo.serverId, returnTo.threadId); setReturnTo(null); }}>Return to {returnName}</button>
-        {pending[0] && <button type="button" className="shrink-0 font-medium" onClick={() => open(pending[0].serverId, pending[0].threadId)}>Next needs you · {pending.length}</button>}
-      </div>}
+      onHome={home} onAddServer={add} sessionTitleRef={setSessionTitleTarget}
+      back={canReturn && returnTo ? { label: `Return to ${returnName}`, run: () => { open(returnTo.serverId, returnTo.threadId); setReturnTo(null); } } : undefined}
+      next={canReturn && pending[0] ? { count: pending.length, run: () => open(pending[0].serverId, pending[0].threadId) } : undefined} />
     <div className="min-h-0 flex-1">
       {selected ? <SessionView key={`${selected.serverId}:${selected.threadId}`} {...selected} initialError={error}
-        serverName={servers.find((s) => s.id === selected.serverId)?.name ?? 'Server'} />
+        serverName={servers.find((s) => s.id === selected.serverId)?.name ?? 'Server'} headerTarget={sessionTitleTarget} onHome={home} />
         : <SessionMonitor statusFilter={monitorFilter} onStatusFilter={setMonitorFilter} onOpen={open} onAddServer={add} onEditServer={(id) => {
           setEditing(servers.find((s) => s.id === id) ?? null); setDialog(true);
         }} />}
