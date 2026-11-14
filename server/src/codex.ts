@@ -11,6 +11,9 @@ export function sessionFromThread(thread: any): Session {
     preview: compact(thread.preview), updatedAt: (thread.updatedAt ?? thread.createdAt ?? Date.now() / 1000) * 1000,
     canInput: thread.canAcceptDirectInput !== false, ...(typeof thread.model === 'string' ? { model: thread.model } : {}),
     ...(typeof thread.reasoningEffort === 'string' ? { effort: thread.reasoningEffort } : {}),
+    attentionReason: flags.includes('waitingOnApproval') ? 'Waiting for approval'
+      : flags.includes('waitingOnUserInput') ? 'Waiting for your answer'
+        : thread.status?.type === 'systemError' ? 'Session error' : undefined,
     state: flags.some((f: string) => ['waitingOnApproval', 'waitingOnUserInput'].includes(f)) ? 'waiting'
       : thread.status?.type === 'active' ? 'running' : thread.status?.type === 'idle' ? 'idle'
         : thread.status?.type === 'notLoaded' ? 'saved' : thread.status?.type === 'systemError' ? 'error' : 'unknown' };

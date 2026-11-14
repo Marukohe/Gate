@@ -121,6 +121,9 @@ it('retains unknown snapshots after a disconnect and never replays user input', 
 
 it('shows waiting state, caps tool output, and omits reasoning from messages', () => {
   expect(sessionFromThread({ ...native, status: { type: 'active', activeFlags: ['waitingOnApproval'] } }).state).toBe('waiting');
+  expect(sessionFromThread({ ...native, status: { type: 'active', activeFlags: ['waitingOnApproval'] } }).attentionReason).toBe('Waiting for approval');
+  expect(sessionFromThread({ ...native, status: { type: 'active', activeFlags: ['waitingOnUserInput'] } }).attentionReason).toBe('Waiting for your answer');
+  expect(sessionFromThread({ ...native, status: { type: 'systemError' } }).attentionReason).toBe('Session error');
   expect(itemFromCodex({ type: 'reasoning', id: 'hidden', content: ['private'] })).toBeNull();
   expect(itemFromCodex({ type: 'commandExecution', id: 'tool', command: 'test', aggregatedOutput: 'x'.repeat(100_000) })?.text).toHaveLength(32_000);
 });

@@ -6,6 +6,7 @@ import { SessionView } from '@/components/chat/SessionView';
 import { useUIStore } from '@/stores/ui-store';
 import { useServerStore, type Server } from '@/stores/server-store';
 import { api } from '@/lib/api';
+import { useMonitorStore } from '@/stores/monitor-store';
 
 function route() {
   const parts = location.hash.slice(1).split('/');
@@ -20,6 +21,11 @@ export default function App() {
   const dark = useUIStore((s) => s.darkMode);
   const servers = useServerStore((s) => s.servers);
   const setServers = useServerStore((s) => s.setServers);
+  useEffect(() => {
+    const poll = () => { void useMonitorStore.getState().refresh(); };
+    poll(); const timer = setInterval(poll, 3000);
+    return () => clearInterval(timer);
+  }, []);
   const refresh = () => api<Server[]>('/servers').then(setServers).catch((e) => setError(e.message));
   useEffect(() => { void api<Server[]>('/servers').then(setServers).catch((e) => setError(e.message)); }, [setServers]);
   useEffect(() => {

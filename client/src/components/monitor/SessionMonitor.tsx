@@ -1,12 +1,13 @@
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { Activity, Archive, CircleAlert, Filter, ChevronRight, Plus, Search, Server as ServerIcon, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useServerStore } from '@/stores/server-store';
-import { api, post } from '@/lib/api';
-import type { MonitorServer, Session } from '../../../../server/src/types';
+import { post } from '@/lib/api';
+import type { Session } from '../../../../server/src/types';
+import { useMonitorStore } from '@/stores/monitor-store';
 
 import { SessionFilters } from './SessionFilters';
 import { labels } from '@/lib/session';
@@ -21,26 +22,10 @@ export function SessionMonitor({ onOpen, onAddServer, onEditServer, statusFilter
   onOpen: (serverId: string, sessionId: string, error?: string) => void; onAddServer: () => void; onEditServer: (id: string) => void;
   statusFilter: MonitorFilter; onStatusFilter: (filter: MonitorFilter) => void;
 }) {
-  const [servers, setServers] = useState<MonitorServer[] | null>(null);
-  const [error, setError] = useState('');
+  const { servers, error, refresh } = useMonitorStore();
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState<string | null>(null);
   const [filterServer, setFilterServer] = useState<string | null>(null);
-  const [revision, setRevision] = useState(0);
-  const refresh = () => setRevision((value) => value + 1);
-  useEffect(() => {
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    async function refresh() {
-      try {
-        const result = await api<{ servers: MonitorServer[] }>('/monitor', { signal: controller.signal });
-        if (!controller.signal.aborted) { setServers(result.servers); setError(''); }
-      } catch (e) { if (!controller.signal.aborted) setError((e as Error).message); }
-      finally { if (!controller.signal.aborted) timer = setTimeout(() => void refresh(), 3000); }
-    }
-    void refresh();
-    return () => { controller.abort(); clearTimeout(timer); };
-  }, [revision]);
   const sessions = servers?.flatMap((s) => s.sessions) ?? [];
   const search = query.trim().toLowerCase();
   const filtered = servers?.map((server) => ({ ...server, sessions: server.sessions.filter((session) =>
@@ -87,9 +72,7 @@ export function SessionMonitor({ onOpen, onAddServer, onEditServer, statusFilter
       {groupProjects(server.sessions).map((project) => <ProjectSessions key={project.path} project={project}
         searching={!!search || !!statusFilter} stale={!!error} onOpen={(id) => onOpen(server.id, id)} onArchive={async (session) => {
           await post(`/servers/${encodeURIComponent(server.id)}/sessions/${encodeURIComponent(session.id)}/archive`, { name: session.name, cwd: session.cwd });
-          setServers((previous) => previous?.map((value) => value.id === server.id
-            ? { ...value, hasFilters: true, sessions: value.sessions.filter((s) => s.id !== session.id) } : value) ?? null);
-          refresh();
+          await refresh();
         }} />)}
       {!server.sessions.length && server.state === 'connected' && <p className="px-5 py-8 text-sm text-muted-foreground">{query ? 'No matching sessions.' : server.hasFilters ? 'No visible sessions. Check your session filters.' : 'No sessions yet. Start one here or in your terminal.'}</p>}
       {server.hasMore && <p className="px-5 py-3 text-xs text-muted-foreground">Showing the most recent sessions.</p>}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowUp, Pencil, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -9,6 +9,7 @@ import { useEvents } from '@/hooks/use-events';
 import { MessageBubble } from './MessageBubble';
 import { ApprovalRequest } from './ApprovalRequest';
 import { labels } from '@/lib/session';
+import { emptyView, sessionKey, useSessionViewStore } from '@/stores/session-view-store';
 import type { SessionDetail, Item, ModelOption } from '../../../../server/src/types';
 
 function mergeItems(old: Item[], incoming: Item[]) {
@@ -20,25 +21,37 @@ export function SessionView({ serverId, threadId, serverName, initialError }: {
   serverId: string; threadId: string; serverName: string; initialError: string;
 }) {
   const base = `/servers/${encodeURIComponent(serverId)}/sessions/${encodeURIComponent(threadId)}`;
-  const [detail, setDetail] = useState<SessionDetail | null>(null);
+  const key = sessionKey(serverId, threadId);
+  const saved = useSessionViewStore((state) => state.views[key] ?? emptyView);
+  const update = useSessionViewStore((state) => state.update);
+  const { text, model, effort, busy } = saved;
+  const setText = (text: string) => update(key, { text });
+  const setModel = (model: string) => update(key, { model });
+  const setEffort = (effort: string) => update(key, { effort });
+  const setBusy = (busy: boolean) => update(key, { busy });
+  const [detail, setDetail] = useState<SessionDetail | null>(() => saved.detail ? { ...saved.detail, requests: [] } : null);
   const [error, setError] = useState(initialError);
-  const [offline, setOffline] = useState(false);
-  const [text, setText] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [offline, setOffline] = useState(!!saved.detail);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState('');
   const [savingName, setSavingName] = useState(false);
   const [renameError, setRenameError] = useState('');
   const [models, setModels] = useState<ModelOption[]>([]);
-  const [model, setModel] = useState('');
-  const [effort, setEffort] = useState('');
   const [modelError, setModelError] = useState('');
   const [modelRevision, setModelRevision] = useState(0);
   const [loadingModels, setLoadingModels] = useState(true);
   const viewport = useRef<HTMLDivElement>(null);
   const composing = useRef(false);
-  const follow = useRef(true);
+  const follow = useRef(saved.follow);
+  const latestDetail = useRef(detail);
+  useEffect(() => { latestDetail.current = detail; }, [detail]);
+  useLayoutEffect(() => {
+    const node = viewport.current;
+    const cached = useSessionViewStore.getState().views[key];
+    if (node && cached) node.scrollTop = cached.scrollTop;
+    return () => update(key, { detail: latestDetail.current, scrollTop: node?.scrollTop ?? 0, follow: follow.current });
+  }, [key, update]);
   const alive = useRef(true);
   const revision = useRef(0);
   const eventTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);

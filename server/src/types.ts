@@ -8,7 +8,7 @@ export type SessionState = 'running' | 'waiting' | 'idle' | 'saved' | 'error' | 
 export interface Session {
   id: string; name: string; cwd: string; projectPath?: string; preview: string; updatedAt: number;
   state: SessionState; canInput: boolean;
-  model?: string; effort?: string;
+  model?: string; effort?: string; attentionReason?: string;
 }
 export interface ModelOption {
   id: string; name: string; efforts: { id: string; description: string }[]; defaultEffort?: string;
