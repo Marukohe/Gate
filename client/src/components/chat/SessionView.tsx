@@ -182,7 +182,7 @@ export function SessionView({ serverId, threadId, serverName, initialError }: {
           : detail?.turnId ? <span>Change settings between turns</span> : model || selectedEffort ? <span>Applies to your next message</span> : null}
       </div>
       <form onSubmit={send} className="flex items-end gap-2">
-        <Textarea aria-label="Message Codex" placeholder={detail?.turnId ? 'Update Codex…' : 'Message Codex…'} value={text}
+        <Textarea aria-label="Message Codex" placeholder="Send a message…" value={text}
           onChange={(e) => setText(e.target.value)} rows={1} className="max-h-32 min-h-10 min-w-0 flex-1 resize-none py-[9px] leading-5"
           onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
           onBlur={() => { composing.current = false; }}
