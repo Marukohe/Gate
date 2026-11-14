@@ -33,6 +33,8 @@ let detail = { session: { ...sessions[2], model: 'fixture-current', effort: 'hig
   nextCursor: 'older', turnId: null, requests: [] };
 const writes = [];
 let modelsUnavailable = false;
+let holdInput = false;
+let releaseInput;
 const app = express(); app.use(express.json());
 const http = createServer(app);
 const wss = new WebSocketServer({ server: http, path: '/ws' });
@@ -45,16 +47,22 @@ app.get('/api/servers/:id/models', (_req, res) => modelsUnavailable
     { id: 'fixture-other', name: 'Other model', defaultEffort: 'low', efforts: [{ id: 'low', description: '' }, { id: 'medium', description: '' }] },
   ] }));
 
-app.get('/api/servers/:id/sessions/:thread', (req, res) => res.json(req.query.cursor
-  ? { ...detail, items: [{ id: 'old', kind: 'user', text: 'Earlier context.' }], nextCursor: null } : detail));
+app.get('/api/servers/:id/sessions/:thread', (req, res) => {
+  const target = monitor.servers.find(s => s.id === req.params.id)?.sessions.find(s => s.id === req.params.thread);
+  const value = req.params.thread === detail.session.id || !target ? detail : { ...detail,
+    session: { ...target, model: 'fixture-current', effort: 'high' }, turnId: target.state === 'running' ? `turn-${target.id}` : null,
+    items: [{ id: 'intro', kind: 'assistant', text: 'The panel now groups sessions by server.' }], nextCursor: null, requests: [] };
+  res.json(req.query.cursor ? { ...value, items: [{ id: 'old', kind: 'user', text: 'Earlier context.' }], nextCursor: null } : value);
+});
 app.post('/api/servers/:id/sessions', (req, res) => {
   writes.push({ type: 'create', ...req.body });
   detail = { ...detail, session: { ...session('created', 'gate', 'running', req.body.prompt), cwd: req.body.cwd },
     items: [{ id: 'first', kind: 'user', text: req.body.prompt }], turnId: 'turn-one', nextCursor: null };
   res.status(201).json({ session: detail.session });
 });
-app.post('/api/servers/:id/sessions/:thread/input', (req, res) => {
+app.post('/api/servers/:id/sessions/:thread/input', async (req, res) => {
   writes.push({ type: 'input', ...req.body });
+  if (holdInput) await new Promise(resolve => { releaseInput = resolve; });
   if (req.body.model) detail.session.model = req.body.model;
   if (req.body.effort) detail.session.effort = req.body.effort;
   detail.items.push({ id: `message-${writes.length}`, kind: 'user', text: req.body.text });
@@ -316,7 +324,75 @@ try {
   await page.getByRole('button', { name: 'Stop current turn' }).click();
   await page.getByRole('button', { name: 'Send message', exact: true }).waitFor();
   assert.equal(writes.at(-1).type, 'interrupt');
+  // The monitor and all conversations share snapshots; switching preserves local work.
+  await page.getByLabel('Message Codex').fill('Unsaved original draft');
+  await page.getByLabel('Model', { exact: true }).selectOption('fixture-current');
+  await reasoning.selectOption('high');
+  const viewport = page.locator('main > div').nth(1);
+  await viewport.evaluate(node => { node.scrollTop = 0; node.dispatchEvent(new Event('scroll')); });
+  assert.equal(await page.getByRole('button', { name: 'Dismiss session notice' }).count(), 0, 'Existing pending work must not toast on entry');
+  sessions[1].state = 'waiting'; sessions[1].attentionReason = 'Waiting for approval';
+  await page.getByRole('button', { name: 'View session', exact: true }).waitFor();
+  assert.match(await page.getByRole('status').innerText(), /website/);
+  await bounded(); await shot('attention-notice-mobile');
+  await page.getByRole('button', { name: 'View session', exact: true }).click();
+  await page.getByRole('heading', { name: 'website', exact: true }).waitFor();
+  await page.getByLabel('Message Codex').fill('Separate website draft');
+  await page.getByRole('button', { name: /^Return to 修复登录/ }).click();
+  await page.getByRole('heading', { name: '修复登录 · Gate', exact: true }).waitFor();
+  assert.equal(await page.getByLabel('Message Codex').inputValue(), 'Unsaved original draft');
+  await page.waitForFunction(() => !document.querySelector('select[aria-label="Model"]').disabled);
+  assert.equal(await page.getByLabel('Model', { exact: true }).inputValue(), 'fixture-current');
+  assert.equal(await reasoning.inputValue(), 'high');
+  assert.equal(await viewport.evaluate(node => node.scrollTop), 0);
+  const attentionButton = page.getByRole('button', { name: 'Other sessions: Needs you', exact: true });
+  await attentionButton.click();
+  await page.getByRole('button', { name: /website Development · Waiting for approval/ }).waitFor();
+  assert.equal(await page.getByRole('button', { name: /修复登录 · Gate Development/ }).count(), 0, 'Exclude the current session');
+  for (const width of [1365, 390, 320]) { await page.setViewportSize({ width, height: 844 }); await bounded(); }
+  await shot('attention-list-mobile');
+  await page.getByRole('button', { name: /website Development · Waiting for approval/ }).click();
+  assert.equal(await page.getByLabel('Message Codex').inputValue(), 'Separate website draft');
+  await page.getByRole('button', { name: /^Next needs you/ }).click();
+  await page.getByRole('heading', { name: 'api', exact: true }).waitFor();
+  await page.getByRole('button', { name: /^Return to 修复登录/ }).click();
+  await page.getByRole('heading', { name: '修复登录 · Gate', exact: true }).waitFor();
+  await page.waitForResponse(response => response.url().endsWith('/api/monitor'));
+  assert.equal(await page.getByRole('button', { name: 'View session', exact: true }).count(), 0, 'Polling must not repeat alerts');
+  monitor.servers[0].state = 'error';
+  await attentionButton.click();
+  await page.getByText('Some servers are unavailable; their status is unknown.', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Close session list' }).click();
+  monitor.servers[0].state = 'connected';
+  await page.waitForResponse(response => response.url().endsWith('/api/monitor'));
+  assert.equal(await page.getByRole('button', { name: 'View session', exact: true }).count(), 0, 'Reconnection must not repeat alerts');
+  sessions[1].state = 'error'; sessions[1].attentionReason = 'Session error';
+  await page.getByRole('button', { name: 'View session', exact: true }).waitFor();
+  assert.match(await page.getByRole('status').innerText(), /Session error/);
+  await page.getByRole('button', { name: 'Dismiss session notice', exact: true }).click();
+  await page.waitForResponse(response => response.url().endsWith('/api/monitor'));
+  assert.equal(await page.getByRole('button', { name: 'View session', exact: true }).count(), 0, 'Dismissed pending work must not toast again');
+  sessions[1].state = 'running'; delete sessions[1].attentionReason;
+  await page.getByLabel('Message Codex').fill('');
+  await reasoning.selectOption('');
+  await page.getByLabel('Model', { exact: true }).selectOption('');
   assert.equal(await reasoning.getByRole('option', { selected: true }).textContent(), 'Current: medium');
+  const writesBeforeSwitch = writes.length;
+  holdInput = true;
+  await page.getByLabel('Message Codex').fill('Pending switch check');
+  await page.getByRole('button', { name: 'Send message', exact: true }).click();
+  await attentionButton.click();
+  await page.getByRole('button', { name: /api Development · Waiting for you/ }).click();
+  await page.getByRole('heading', { name: 'api', exact: true }).waitFor();
+  await page.getByRole('button', { name: /^Return to 修复登录/ }).click();
+  await page.getByRole('heading', { name: '修复登录 · Gate', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Send message', exact: true }).isDisabled(), true, 'A pending send stays pending across switches');
+  holdInput = false; releaseInput();
+  await page.getByRole('button', { name: 'Stop current turn', exact: true }).waitFor();
+  assert.equal(await page.getByLabel('Message Codex').inputValue(), '', 'Confirmed send clears the original draft');
+  assert.equal(writes.slice(writesBeforeSwitch).filter(w => w.type === 'input').length, 1, 'Switching must not replay pending sends');
+  await page.getByRole('button', { name: 'Stop current turn', exact: true }).click();
+  await page.getByRole('button', { name: 'Send message', exact: true }).waitFor();
   modelsUnavailable = true;
   await page.reload();
   await page.getByText('Catalog unavailable', { exact: false }).waitFor();

@@ -12,6 +12,10 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
   Active sessions show by default; search reveals matches without changing the chosen collapsed state.
 - Running and Needs you cards filter the monitor in place and reveal matching sessions. App owns this transient filter
   so it survives navigation into a conversation and back. Summary counts remain independent of status/search filters.
+- App polls one shared monitor store across navigation. The chat header exposes other running/waiting/error sessions;
+  transition notices use only known native status, exclude the current thread, and do not open additional conversations.
+- Session view state is keyed by server and native thread in browser memory: drafts, model/effort, in-flight actions,
+  cached history, and scroll position. Cached approval requests are discarded and native state is refreshed before input.
 - Codex owns sessions, history, approvals, and execution. Gate stores SSH settings and per-server display preferences.
 - Opening a session subscribes to the existing native thread. Sending messages uses `turn/start` or `turn/steer`.
 - Session renaming uses native `thread/name/set`; names belong to Codex and are shared with terminal clients.
@@ -30,6 +34,8 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - `server/src/routes.ts` / `index.ts`: HTTP API and browser event delivery.
 - `client/src/components/monitor/SessionMonitor.tsx`: the single server/session panel and creation form.
 - `client/src/components/chat/SessionView.tsx`: conversation history, live events, input, and approvals.
+- `client/src/components/layout/SessionAttention.tsx`: cross-session status, transient notices, and quick switching.
+- `client/src/stores/monitor-store.ts` / `session-view-store.ts`: shared polling and per-conversation view state.
 - `client/src/components/monitor/SessionFilters.tsx`: available directories, collapsed blocked-directory list, custom parent paths, and Gate archive restoration.
 - `server/src/visibility.ts`: path-boundary matching and session visibility.
 - `client/src/components/server/ServerDialog.tsx`: SSH connection settings.

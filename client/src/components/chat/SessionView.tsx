@@ -186,7 +186,7 @@ export function SessionView({ serverId, threadId, serverName, initialError }: {
           onChange={(e) => setText(e.target.value)} rows={1} className="max-h-32 min-h-10 min-w-0 flex-1 resize-none py-[9px] leading-5"
           onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
           onBlur={() => { composing.current = false; }}
-          disabled={!detail?.session.canInput || offline} onKeyDown={(e) => {
+          disabled={busy || !detail?.session.canInput || offline} onKeyDown={(e) => {
             // IME confirmation can arrive after compositionend with isComposing already false.
             if (composing.current || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); }

@@ -18,6 +18,19 @@ their server and repository, and search further narrows them. The selected card 
 to restore all sessions. Summary counts stay global to the visible snapshot, respecting directory filters and archives.
 Status changes update the results automatically. Returning from a conversation keeps the quick filter; reloading resets it.
 
+Inside a conversation the header shows other sessions that need attention (waiting or native session error), and those
+running. Click a count for names, servers, and native waiting reasons, then choose a conversation. The same shared
+monitor snapshot respects directory filters and Gate archives. This does not subscribe to or resume other threads.
+Unavailable servers are excluded from known counts and identified in the list.
+
+While a conversation is open, observed transitions to waiting or native error trigger an eight-second notice.
+Initial observations and unchanged snapshots do not alert. Viewing or dismissing the notice leaves the pending session
+in the header list until its status changes. The current conversation is excluded from notices and counts.
+After switching through this list or a notice, Return to … takes you back; Next needs you opens another pending session.
+Draft text, model/effort selections, loaded history and reading positions are preserved in browser memory across switches.
+In-flight actions are not replayed; cached approval IDs are dropped and the thread is refreshed before further input.
+These view preferences last until page reload; they are not written to the Gate database or browser storage.
+
 The panel reads native threads without starting turns. Opening a conversation subscribes through `thread/resume`
 and reads paginated history. New sessions use `thread/start`; messages use `turn/start`, or `turn/steer` while a turn
 is active. Stop interrupts the current turn. Closing Gate only disconnects its client; Codex continues running.

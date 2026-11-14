@@ -6,6 +6,10 @@
   Paths and history controls should not add extra rows. Polling must preserve the user's collapsed state.
 - Keep quick status filters above the monitor's component lifetime so returning from chat preserves the choice.
   Summary counts use the visible server snapshot before quick status/search filtering; filtered results expand automatically.
+- Keep monitoring alive while viewing a session, with one shared poller. Notify on observed waiting/error transitions,
+  excluding the current thread; initial snapshots, unchanged polls, and reconnects must not repeat old notices.
+- Preserve drafts and reading positions by server plus thread ID. Carry in-flight action state across navigation,
+  never replay a send, and refresh native state before acting on cached history. Do not restore cached approval IDs.
 - A saved conversation ID does not identify a live process. Use the same Codex shared backend as the terminal;
   a fresh `exec resume` process cannot take over an in-flight turn.
 - Correlate JSON-RPC responses by ID. Server requests with IDs are approvals/questions, not ordinary responses.
