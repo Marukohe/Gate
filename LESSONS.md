@@ -15,6 +15,8 @@
   popover and verify the conversation starts directly below the header at 320px, 390px, and desktop widths.
 - Auto-load history only on upward scrolling near the top, with a synchronous in-flight guard. Anchor the visible message
   when prepending so simultaneous output below does not move the reading position; preserve the cursor on failure.
+- Keep Markdown renderer components stable and skip unchanged message renders. Inline component definitions remount code
+  blocks and tables on loading/poll updates, causing flicker and losing local table state; verify node identity as well as scroll.
 - A saved conversation ID does not identify a live process. Use the same Codex shared backend as the terminal;
   a fresh `exec resume` process cannot take over an in-flight turn.
 - Correlate JSON-RPC responses by ID. Server requests with IDs are approvals/questions, not ordinary responses.

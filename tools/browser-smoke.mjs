@@ -39,7 +39,9 @@ let historyProbe = false;
 let releaseHistory;
 let failHistory = true;
 const historyRequests = [];
-const probeMessages = (prefix, count) => Array.from({ length: count }, (_, i) => ({ id: `${prefix}-${i}`, kind: 'assistant', text: `${prefix} message ${i}\n\nA paragraph to make this conversation scroll.` }));
+const probeMessages = (prefix, count) => Array.from({ length: count }, (_, i) => ({ id: `${prefix}-${i}`, kind: 'assistant',
+  text: `${prefix} message ${i}\n\nA paragraph to make this conversation scroll.` + (prefix === 'current' && i === 39
+    ? '\n\n```ts\nconst answer = 42;\n```\n\n| Name | Value |\n| --- | --- |\n| answer | 42 |' : '') }));
 const app = express(); app.use(express.json());
 const http = createServer(app);
 const wss = new WebSocketServer({ server: http, path: '/ws' });
@@ -305,11 +307,16 @@ try {
   await page.reload();
   await page.getByText('current message 39', { exact: false }).waitFor();
   const historyViewport = page.getByRole('region', { name: 'Conversation', exact: true });
+  const richMessage = page.locator('[data-message-id="current-39"]');
+  await richMessage.getByRole('button', { name: 'Wrap', exact: true }).click();
+  const originalCodeControl = await richMessage.getByRole('button', { name: 'Copy code', exact: true }).elementHandle();
   assert.equal(historyRequests.length, 0, 'Opening history must not automatically drain older pages');
   const firstHistoryRequest = page.waitForRequest(request => request.url().includes('cursor=probe-1'));
   await historyViewport.evaluate(node => { node.scrollTop = 0; });
   await firstHistoryRequest;
   await page.getByRole('button', { name: 'Loading…', exact: true }).waitFor();
+  assert.equal(await originalCodeControl.evaluate(node => node.isConnected), true, 'Loading history must not remount existing code blocks');
+  assert.equal(await richMessage.getByRole('button', { name: 'Scroll', exact: true }).count(), 1, 'Loading must preserve table wrapping');
   await historyViewport.evaluate(node => {
     for (let i = 0; i < 4; i++) {
       node.scrollTop = 80; node.dispatchEvent(new Event('scroll'));
@@ -318,12 +325,15 @@ try {
   });
   emit({ type: 'delta', itemId: 'current-39', delta: '\n\n' + 'Streaming content below.\n\n'.repeat(40) });
   await page.getByText('Streaming content below.', { exact: false }).first().waitFor();
+  assert.equal(await originalCodeControl.evaluate(node => node.isConnected), true, 'Streaming must retain existing code blocks');
+  assert.equal(await richMessage.getByRole('button', { name: 'Scroll', exact: true }).count(), 1, 'Streaming must preserve table wrapping');
   const firstCurrent = page.locator('[data-message-id="current-0"]');
   const anchorBefore = await firstCurrent.boundingBox();
   assert.deepEqual(historyRequests, ['probe-1'], 'Rapid scrolls must share the pending history request');
   releaseHistory();
   await page.getByText('older message 0', { exact: false }).waitFor();
   assert.ok(Math.abs((await firstCurrent.boundingBox()).y - anchorBefore.y) < 2, 'Prepending must preserve the visible message despite streaming below');
+  assert.equal(await originalCodeControl.evaluate(node => node.isConnected), true, 'Prepending must retain mounted rich content');
   assert.deepEqual(historyRequests, ['probe-1'], 'Restoring the anchor must not automatically fetch another page');
   await historyViewport.evaluate(node => { node.scrollTop = 0; });
   await page.getByText('Could not load older messages. Please retry.', { exact: true }).waitFor();
