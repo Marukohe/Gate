@@ -15,6 +15,8 @@
   popover and verify the conversation starts directly below the header at 320px, 390px, and desktop widths.
 - Auto-load history only on upward scrolling near the top, with a synchronous in-flight guard. Anchor the visible message
   when prepending so simultaneous output below does not move the reading position; preserve the cursor on failure.
+  Trigger once on entering the top zone, not on every scroll tick inside it. Failed pages require manual retry;
+  test residual top-edge scrolling after both failure and empty pages, not just while a request is pending.
   Ignore events from programmatic positioning; upward user scroll disables bottom-follow even within the bottom threshold.
   Verify the anchor again after the next periodic refresh, not only immediately after inserting a page.
 - Keep Markdown renderer components stable and skip unchanged message renders. Inline component definitions remount code

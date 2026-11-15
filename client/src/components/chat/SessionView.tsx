@@ -197,9 +197,11 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
       // Ignore scroll events from our own positioning; they must not turn follow back on.
       if (Math.abs(node.scrollTop - lastScrollTop.current) < 1) return;
       const scrollingUp = node.scrollTop < lastScrollTop.current;
+      const enteredTop = lastScrollTop.current > 48 && node.scrollTop <= 48;
       lastScrollTop.current = node.scrollTop;
       follow.current = !scrollingUp && node.scrollHeight - node.scrollTop - node.clientHeight < 100;
-      if (scrollingUp && node.scrollTop <= 48) void older();
+      // One request per entry, not per scroll tick. Failed pages require explicit retry.
+      if (scrollingUp && enteredTop && !historyError) void older();
     }}><div className="mx-auto max-w-3xl px-4 py-4 sm:px-6">
       {detail?.nextCursor && <div className="text-center"><Button variant="ghost" size="sm" disabled={loadingOlder || offline} onClick={() => void older()}>{loadingOlder ? 'Loading…' : 'Earlier messages'}</Button>
         {historyError && <p role="alert" className="mt-1 break-words text-xs text-destructive">{historyError}</p>}</div>}

@@ -36,6 +36,7 @@ let modelsUnavailable = false;
 let holdInput = false;
 let releaseInput;
 let historyProbe = false;
+let sparseHistory = false;
 let probeStream = '';
 let releaseHistory;
 let failHistory = true;
@@ -63,6 +64,7 @@ app.get('/api/servers/:id/sessions/:thread', async (req, res) => {
     if (!req.query.cursor) return res.json({ ...detail, items: probeMessages('current', 40), nextCursor: 'probe-1' });
     historyRequests.push(req.query.cursor);
     if (req.query.cursor === 'probe-1') {
+      if (sparseHistory) return res.json({ ...detail, items: [], nextCursor: 'probe-2' });
       await new Promise(resolve => { releaseHistory = resolve; });
       return res.json({ ...detail, items: probeMessages('older', 20), nextCursor: 'probe-2' });
     }
@@ -351,6 +353,21 @@ try {
   await historyViewport.evaluate(node => { node.scrollTop = 0; });
   await page.getByText('Could not load older messages. Please retry.', { exact: true }).waitFor();
   assert.equal(await page.locator('[data-message-id]').count(), 60, 'Failure must retain already-loaded messages');
+  // Residual scrolling at the top must not repeatedly toggle Loading / Earlier messages.
+  for (let i = 0; i < 3; i++) {
+    await historyViewport.evaluate(node => {
+      node.scrollTop = 24; node.dispatchEvent(new Event('scroll'));
+      node.scrollTop = 12; node.dispatchEvent(new Event('scroll'));
+    });
+    await page.waitForTimeout(100);
+  }
+  assert.deepEqual(historyRequests, ['probe-1', 'probe-2'], 'Top-edge movement after failure must not automatically retry history');
+  await historyViewport.evaluate(node => {
+    node.scrollTop = 120; node.dispatchEvent(new Event('scroll'));
+    node.scrollTop = 12; node.dispatchEvent(new Event('scroll'));
+  });
+  await page.waitForTimeout(100);
+  assert.deepEqual(historyRequests, ['probe-1', 'probe-2'], 'A failed page must wait for explicit retry even on re-entry');
   failHistory = false;
   await page.getByRole('button', { name: 'Earlier messages', exact: true }).click();
   await page.getByText('ancient message 0', { exact: false }).waitFor();
@@ -369,6 +386,29 @@ try {
   emit({ type: 'delta', itemId: 'current-39', delta: '\n\nOutput after returning to the bottom.' });
   await page.getByText('Output after returning to the bottom.', { exact: true }).waitFor();
   assert.ok(await historyViewport.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight) < 2, 'Scrolling back down must resume bottom-follow');
+  // Native pages can contain only reasoning items, which Gate does not display.
+  sparseHistory = true; historyRequests.length = 0;
+  await page.reload();
+  await page.getByText('current message 39', { exact: false }).waitFor();
+  const sparsePage = page.waitForResponse(response => response.url().includes('cursor=probe-1'));
+  await historyViewport.evaluate(node => { node.scrollTop = 40; });
+  await sparsePage;
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  for (let i = 0; i < 3; i++) {
+    await historyViewport.evaluate(node => {
+      node.scrollTop = 24; node.dispatchEvent(new Event('scroll'));
+      node.scrollTop = 12; node.dispatchEvent(new Event('scroll'));
+    });
+    await page.waitForTimeout(100);
+  }
+  assert.deepEqual(historyRequests, ['probe-1'], 'An empty page must not chain more requests while still in the top zone');
+  await historyViewport.evaluate(node => {
+    node.scrollTop = 120; node.dispatchEvent(new Event('scroll'));
+    node.scrollTop = 40; node.dispatchEvent(new Event('scroll'));
+  });
+  await page.getByText('ancient message 0', { exact: false }).waitFor();
+  assert.deepEqual(historyRequests, ['probe-1', 'probe-2'], 'Leaving and re-entering the top zone must load the next page');
+  sparseHistory = false;
   historyProbe = false;
   await page.reload();
   await page.getByRole('button', { name: 'Earlier messages' }).click();
