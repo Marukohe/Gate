@@ -35,6 +35,11 @@ const writes = [];
 let modelsUnavailable = false;
 let holdInput = false;
 let releaseInput;
+let historyProbe = false;
+let releaseHistory;
+let failHistory = true;
+const historyRequests = [];
+const probeMessages = (prefix, count) => Array.from({ length: count }, (_, i) => ({ id: `${prefix}-${i}`, kind: 'assistant', text: `${prefix} message ${i}\n\nA paragraph to make this conversation scroll.` }));
 const app = express(); app.use(express.json());
 const http = createServer(app);
 const wss = new WebSocketServer({ server: http, path: '/ws' });
@@ -47,7 +52,17 @@ app.get('/api/servers/:id/models', (_req, res) => modelsUnavailable
     { id: 'fixture-other', name: 'Other model', defaultEffort: 'low', efforts: [{ id: 'low', description: '' }, { id: 'medium', description: '' }] },
   ] }));
 
-app.get('/api/servers/:id/sessions/:thread', (req, res) => {
+app.get('/api/servers/:id/sessions/:thread', async (req, res) => {
+  if (historyProbe && req.params.thread === 'gate') {
+    if (!req.query.cursor) return res.json({ ...detail, items: probeMessages('current', 40), nextCursor: 'probe-1' });
+    historyRequests.push(req.query.cursor);
+    if (req.query.cursor === 'probe-1') {
+      await new Promise(resolve => { releaseHistory = resolve; });
+      return res.json({ ...detail, items: probeMessages('older', 20), nextCursor: 'probe-2' });
+    }
+    if (failHistory) return res.status(503).json({ error: 'Could not load older messages. Please retry.' });
+    return res.json({ ...detail, items: [...probeMessages('ancient', 20), probeMessages('older', 1)[0]], nextCursor: null });
+  }
   const target = monitor.servers.find(s => s.id === req.params.id)?.sessions.find(s => s.id === req.params.thread);
   const value = req.params.thread === detail.session.id || !target ? detail : { ...detail,
     session: { ...target, model: 'fixture-current', effort: 'high' }, turnId: target.state === 'running' ? `turn-${target.id}` : null,
@@ -286,6 +301,42 @@ try {
   await page.reload();
   await page.getByRole('heading', { name: '修复登录 · Gate', exact: true }).waitFor();
   assert.deepEqual(writes.at(-1), { type: 'rename', serverId: server.id, threadId: 'gate', name: '修复登录 · Gate' });
+  historyProbe = true;
+  await page.reload();
+  await page.getByText('current message 39', { exact: false }).waitFor();
+  const historyViewport = page.getByRole('region', { name: 'Conversation', exact: true });
+  assert.equal(historyRequests.length, 0, 'Opening history must not automatically drain older pages');
+  const firstHistoryRequest = page.waitForRequest(request => request.url().includes('cursor=probe-1'));
+  await historyViewport.evaluate(node => { node.scrollTop = 0; });
+  await firstHistoryRequest;
+  await page.getByRole('button', { name: 'Loading…', exact: true }).waitFor();
+  await historyViewport.evaluate(node => {
+    for (let i = 0; i < 4; i++) {
+      node.scrollTop = 80; node.dispatchEvent(new Event('scroll'));
+      node.scrollTop = 0; node.dispatchEvent(new Event('scroll'));
+    }
+  });
+  emit({ type: 'delta', itemId: 'current-39', delta: '\n\n' + 'Streaming content below.\n\n'.repeat(40) });
+  await page.getByText('Streaming content below.', { exact: false }).first().waitFor();
+  const firstCurrent = page.locator('[data-message-id="current-0"]');
+  const anchorBefore = await firstCurrent.boundingBox();
+  assert.deepEqual(historyRequests, ['probe-1'], 'Rapid scrolls must share the pending history request');
+  releaseHistory();
+  await page.getByText('older message 0', { exact: false }).waitFor();
+  assert.ok(Math.abs((await firstCurrent.boundingBox()).y - anchorBefore.y) < 2, 'Prepending must preserve the visible message despite streaming below');
+  assert.deepEqual(historyRequests, ['probe-1'], 'Restoring the anchor must not automatically fetch another page');
+  await historyViewport.evaluate(node => { node.scrollTop = 0; });
+  await page.getByText('Could not load older messages. Please retry.', { exact: true }).waitFor();
+  assert.equal(await page.locator('[data-message-id]').count(), 60, 'Failure must retain already-loaded messages');
+  failHistory = false;
+  await page.getByRole('button', { name: 'Earlier messages', exact: true }).click();
+  await page.getByText('ancient message 0', { exact: false }).waitFor();
+  assert.equal(await page.locator('[data-message-id]').count(), 80, 'Overlapping pages must not duplicate messages');
+  assert.equal(await page.getByRole('button', { name: 'Earlier messages', exact: true }).count(), 0, 'Stop when native pagination is exhausted');
+  await historyViewport.evaluate(node => { node.scrollTop = 100; node.dispatchEvent(new Event('scroll')); node.scrollTop = 0; node.dispatchEvent(new Event('scroll')); });
+  assert.deepEqual(historyRequests, ['probe-1', 'probe-2', 'probe-2']);
+  historyProbe = false;
+  await page.reload();
   await page.getByRole('button', { name: 'Earlier messages' }).click();
   await page.getByText('Earlier context.', { exact: true }).waitFor();
   const reasoning = page.getByLabel('Reasoning effort', { exact: true });

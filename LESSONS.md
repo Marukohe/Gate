@@ -13,6 +13,8 @@
   never replay a send, and refresh native state before acting on cached history. Do not restore cached approval IDs.
 - Keep chat navigation, title, and status in one header row, including after attention jumps. Move metadata into the title
   popover and verify the conversation starts directly below the header at 320px, 390px, and desktop widths.
+- Auto-load history only on upward scrolling near the top, with a synchronous in-flight guard. Anchor the visible message
+  when prepending so simultaneous output below does not move the reading position; preserve the cursor on failure.
 - A saved conversation ID does not identify a live process. Use the same Codex shared backend as the terminal;
   a fresh `exec resume` process cannot take over an in-flight turn.
 - Correlate JSON-RPC responses by ID. Server requests with IDs are approvals/questions, not ordinary responses.

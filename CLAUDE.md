@@ -21,6 +21,8 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
   stay with the conversation; return/next attention navigation shares the same row. Directory and theme controls are on demand.
 - Codex owns sessions, history, approvals, and execution. Gate stores SSH settings and per-server display preferences.
 - Opening a session subscribes to the existing native thread. Sending messages uses `turn/start` or `turn/steer`.
+- Scrolling upward near the chat top loads one native history page at a time. Prepending anchors the visible message
+  before paint; manual loading/retry remains available. Initial bottom positioning must not drain history pages.
 - Session renaming uses native `thread/name/set`; names belong to Codex and are shared with terminal clients.
 - Model and reasoning pickers read native `model/list`, including supported/default efforts, and pass optional `model`/`effort`
   to `turn/start`. `turn/steer` cannot change either setting. Current values come from native thread metadata.

@@ -37,6 +37,7 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
   const [error, setError] = useState(initialError);
   const [offline, setOffline] = useState(!!saved.detail);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [historyError, setHistoryError] = useState('');
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState('');
   const [savingName, setSavingName] = useState(false);
@@ -49,6 +50,9 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
   const [modelRevision, setModelRevision] = useState(0);
   const [loadingModels, setLoadingModels] = useState(true);
   const viewport = useRef<HTMLDivElement>(null);
+  const lastScrollTop = useRef(0);
+  const olderPending = useRef(false);
+  const prepend = useRef<{ anchor?: HTMLElement; offset: number; top: number; height: number } | null>(null);
   const composing = useRef(false);
   const follow = useRef(saved.follow);
   const latestDetail = useRef(detail);
@@ -56,7 +60,7 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
   useLayoutEffect(() => {
     const node = viewport.current;
     const cached = useSessionViewStore.getState().views[key];
-    if (node && cached) node.scrollTop = cached.scrollTop;
+    if (node && cached) { node.scrollTop = cached.scrollTop; lastScrollTop.current = node.scrollTop; }
     return () => update(key, { detail: latestDetail.current, scrollTop: node?.scrollTop ?? 0, follow: follow.current });
   }, [key, update]);
   const alive = useRef(true);
@@ -105,7 +109,18 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
       eventTimer.current = setTimeout(() => void refresh(), 150);
     }
   });
-  useEffect(() => { if (follow.current && viewport.current) viewport.current.scrollTop = viewport.current.scrollHeight; }, [detail]);
+  useLayoutEffect(() => {
+    const node = viewport.current;
+    if (!node) return;
+    if (prepend.current) {
+      const { anchor, offset, top, height } = prepend.current;
+      // Keep the visible message fixed even if streaming also changed content below it.
+      if (anchor?.isConnected) node.scrollTop += anchor.getBoundingClientRect().top - offset;
+      else node.scrollTop = top + node.scrollHeight - height;
+      prepend.current = null; olderPending.current = false;
+    } else if (follow.current) node.scrollTop = node.scrollHeight;
+    lastScrollTop.current = node.scrollTop;
+  }, [detail]);
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!text.trim() || busy) return;
     setBusy(true); setError('');
@@ -135,16 +150,22 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
     finally { setSavingName(false); }
   }
   async function older() {
-    if (!detail?.nextCursor || loadingOlder) return;
-    setLoadingOlder(true);
+    if (!detail?.nextCursor || olderPending.current || offline) return;
+    olderPending.current = true;
+    setLoadingOlder(true); setHistoryError('');
     const node = viewport.current;
-    const height = node?.scrollHeight ?? 0;
     follow.current = false;
     try {
       const page = await api<SessionDetail>(`${base}?cursor=${encodeURIComponent(detail.nextCursor)}`);
+      if (!alive.current) return;
+      if (node) {
+        const edge = node.getBoundingClientRect().top;
+        const anchor = [...node.querySelectorAll<HTMLElement>('[data-message-id]')].find((item) => item.getBoundingClientRect().bottom > edge);
+        prepend.current = { anchor, offset: anchor?.getBoundingClientRect().top ?? 0, top: node.scrollTop, height: node.scrollHeight };
+      }
       setDetail((previous) => previous ? { ...previous, items: mergeItems(page.items, previous.items), nextCursor: page.nextCursor } : page);
-      requestAnimationFrame(() => { if (node) node.scrollTop += node.scrollHeight - height; });
-    } catch (e) { setError((e as Error).message); } finally { setLoadingOlder(false); }
+    } catch (e) { if (alive.current) setHistoryError((e as Error).message); }
+    finally { if (!prepend.current) olderPending.current = false; if (alive.current) setLoadingOlder(false); }
   }
   return <main className="flex h-full min-h-0 flex-col">
     {headerTarget && createPortal(<Popover.Root open={showDetails} onOpenChange={setShowDetails}>
@@ -170,9 +191,15 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
       </Popover.Content></Popover.Portal>
     </Popover.Root>, headerTarget)}
     <div role="region" aria-label="Conversation" className="min-h-0 flex-1 overflow-y-auto" ref={viewport} onScroll={() => {
-      const node = viewport.current; if (node) follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100;
+      const node = viewport.current;
+      if (!node) return;
+      const scrollingUp = node.scrollTop < lastScrollTop.current;
+      lastScrollTop.current = node.scrollTop;
+      follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100;
+      if (scrollingUp && node.scrollTop <= 48) void older();
     }}><div className="mx-auto max-w-3xl px-4 py-4 sm:px-6">
-      {detail?.nextCursor && <div className="text-center"><Button variant="ghost" size="sm" disabled={loadingOlder} onClick={() => void older()}>{loadingOlder ? 'Loading…' : 'Earlier messages'}</Button></div>}
+      {detail?.nextCursor && <div className="text-center"><Button variant="ghost" size="sm" disabled={loadingOlder || offline} onClick={() => void older()}>{loadingOlder ? 'Loading…' : 'Earlier messages'}</Button>
+        {historyError && <p role="alert" className="mt-1 break-words text-xs text-destructive">{historyError}</p>}</div>}
       {detail?.items.map((item) => <MessageBubble key={item.id} item={item} />)}
       {!detail && !error && <p className="py-12 text-center text-sm text-muted-foreground">Loading conversation…</p>}
       {detail && !detail.items.length && <p className="py-12 text-center text-sm text-muted-foreground">Start with a message below.</p>}

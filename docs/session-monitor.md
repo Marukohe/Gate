@@ -42,6 +42,11 @@ The panel reads native threads without starting turns. Opening a conversation su
 and reads paginated history. New sessions use `thread/start`; messages use `turn/start`, or `turn/steer` while a turn
 is active. Stop interrupts the current turn. Closing Gate only disconnects its client; Codex continues running.
 
+Scrolling upward near the top loads the next older history page automatically, with one request in flight at a time.
+The visible message stays anchored as older content is inserted, including while output streams below it.
+Initial opening still starts at the latest messages. Loading stops at the end of native pagination; the Earlier messages
+button remains a manual fallback and lets you retry failed pages without losing already-loaded history.
+
 Model and reasoning effort pickers above the message input read the connected server's native catalog. Effort options
 follow the selected model; changing models resets the draft effort to that model's default. Both settings take effect
 when the next new turn's message is sent and become native session defaults. Current values are read back from Codex.
