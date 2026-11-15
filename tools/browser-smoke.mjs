@@ -36,16 +36,20 @@ let modelsUnavailable = false;
 let holdInput = false;
 let releaseInput;
 let historyProbe = false;
+let probeStream = '';
 let releaseHistory;
 let failHistory = true;
 const historyRequests = [];
 const probeMessages = (prefix, count) => Array.from({ length: count }, (_, i) => ({ id: `${prefix}-${i}`, kind: 'assistant',
   text: `${prefix} message ${i}\n\nA paragraph to make this conversation scroll.` + (prefix === 'current' && i === 39
-    ? '\n\n```ts\nconst answer = 42;\n```\n\n| Name | Value |\n| --- | --- |\n| answer | 42 |' : '') }));
+    ? '\n\n```ts\nconst answer = 42;\n```\n\n| Name | Value |\n| --- | --- |\n| answer | 42 |' + probeStream : '') }));
 const app = express(); app.use(express.json());
 const http = createServer(app);
 const wss = new WebSocketServer({ server: http, path: '/ws' });
-const emit = (event = {}) => { for (const socket of wss.clients) socket.send(JSON.stringify({ serverId: server.id, threadId: detail.session.id, type: 'changed', ...event })); };
+const emit = (event = {}) => {
+  if (historyProbe && event.type === 'delta' && event.itemId === 'current-39') probeStream += event.delta;
+  for (const socket of wss.clients) socket.send(JSON.stringify({ serverId: server.id, threadId: detail.session.id, type: 'changed', ...event }));
+};
 app.get('/api/servers', (_req, res) => res.json([server]));
 app.get('/api/servers/:id/models', (_req, res) => modelsUnavailable
   ? res.status(503).json({ error: 'Catalog unavailable' })
@@ -335,6 +339,15 @@ try {
   assert.ok(Math.abs((await firstCurrent.boundingBox()).y - anchorBefore.y) < 2, 'Prepending must preserve the visible message despite streaming below');
   assert.equal(await originalCodeControl.evaluate(node => node.isConnected), true, 'Prepending must retain mounted rich content');
   assert.deepEqual(historyRequests, ['probe-1'], 'Restoring the anchor must not automatically fetch another page');
+  const originalViewport = page.viewportSize();
+  const remaining = await historyViewport.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight);
+  await page.setViewportSize({ width: originalViewport.width, height: Math.round(originalViewport.height + remaining - 80) });
+  await historyViewport.evaluate(node => node.dispatchEvent(new Event('scroll')));
+  const beforePoll = await firstCurrent.boundingBox();
+  await page.waitForResponse(response => response.url().includes('/sessions/gate') && !response.url().includes('cursor'));
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.ok(Math.abs((await firstCurrent.boundingBox()).y - beforePoll.y) < 2, 'Pagination correction must not enable bottom-follow on the next poll');
+  await page.setViewportSize(originalViewport);
   await historyViewport.evaluate(node => { node.scrollTop = 0; });
   await page.getByText('Could not load older messages. Please retry.', { exact: true }).waitFor();
   assert.equal(await page.locator('[data-message-id]').count(), 60, 'Failure must retain already-loaded messages');
@@ -345,6 +358,17 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Earlier messages', exact: true }).count(), 0, 'Stop when native pagination is exhausted');
   await historyViewport.evaluate(node => { node.scrollTop = 100; node.dispatchEvent(new Event('scroll')); node.scrollTop = 0; node.dispatchEvent(new Event('scroll')); });
   assert.deepEqual(historyRequests, ['probe-1', 'probe-2', 'probe-2']);
+  await historyViewport.evaluate(node => { node.scrollTop = node.scrollHeight; node.dispatchEvent(new Event('scroll')); });
+  const readingPosition = await historyViewport.evaluate(node => {
+    node.scrollTop -= 40; node.dispatchEvent(new Event('scroll')); return node.scrollTop;
+  });
+  emit({ type: 'delta', itemId: 'current-39', delta: '\n\nOutput arriving while reading above the bottom.' });
+  await page.getByText('Output arriving while reading above the bottom.', { exact: true }).waitFor();
+  assert.ok(Math.abs(await historyViewport.evaluate(node => node.scrollTop) - readingPosition) < 2, 'A small upward scroll must stop bottom-follow during streaming');
+  await historyViewport.evaluate(node => { node.scrollTop = node.scrollHeight; node.dispatchEvent(new Event('scroll')); });
+  emit({ type: 'delta', itemId: 'current-39', delta: '\n\nOutput after returning to the bottom.' });
+  await page.getByText('Output after returning to the bottom.', { exact: true }).waitFor();
+  assert.ok(await historyViewport.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight) < 2, 'Scrolling back down must resume bottom-follow');
   historyProbe = false;
   await page.reload();
   await page.getByRole('button', { name: 'Earlier messages' }).click();

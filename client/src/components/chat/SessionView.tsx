@@ -119,6 +119,7 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
       else node.scrollTop = top + node.scrollHeight - height;
       prepend.current = null; olderPending.current = false;
     } else if (follow.current) node.scrollTop = node.scrollHeight;
+    else return;
     lastScrollTop.current = node.scrollTop;
   }, [detail]);
   async function send(event: FormEvent<HTMLFormElement>) {
@@ -193,9 +194,11 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
     <div role="region" aria-label="Conversation" className="min-h-0 flex-1 overflow-y-auto" ref={viewport} onScroll={() => {
       const node = viewport.current;
       if (!node) return;
+      // Ignore scroll events from our own positioning; they must not turn follow back on.
+      if (Math.abs(node.scrollTop - lastScrollTop.current) < 1) return;
       const scrollingUp = node.scrollTop < lastScrollTop.current;
       lastScrollTop.current = node.scrollTop;
-      follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100;
+      follow.current = !scrollingUp && node.scrollHeight - node.scrollTop - node.clientHeight < 100;
       if (scrollingUp && node.scrollTop <= 48) void older();
     }}><div className="mx-auto max-w-3xl px-4 py-4 sm:px-6">
       {detail?.nextCursor && <div className="text-center"><Button variant="ghost" size="sm" disabled={loadingOlder || offline} onClick={() => void older()}>{loadingOlder ? 'Loading…' : 'Earlier messages'}</Button>

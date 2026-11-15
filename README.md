@@ -59,6 +59,7 @@ Use the same remote OS user and Codex configuration as your terminal.
 - **Continue:** open a session to read history and send messages. During a running turn, messages steer that turn.
   Scroll up to load earlier messages automatically without losing your reading position. **Earlier messages** also
   works for manual loading or retrying a failed page.
+  Scrolling up pauses automatic following; scroll back down near the bottom to follow new output again.
 - **Model and reasoning:** select a model and its supported reasoning effort above the message input before a new turn.
   Choices and default efforts come from that server's Codex catalog. Changes take effect when the message is sent
   and become the session defaults; running turns keep their current settings.

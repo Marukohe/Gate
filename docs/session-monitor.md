@@ -46,6 +46,8 @@ Scrolling upward near the top loads the next older history page automatically, w
 The visible message stays anchored as older content is inserted, including while output streams below it.
 Initial opening still starts at the latest messages. Loading stops at the end of native pagination; the Earlier messages
 button remains a manual fallback and lets you retry failed pages without losing already-loaded history.
+Upward scrolling pauses bottom-follow, including small movements near the bottom. Scroll back down near the bottom
+to resume following output. Programmatic history positioning and periodic refreshes do not re-enable following.
 
 Model and reasoning effort pickers above the message input read the connected server's native catalog. Effort options
 follow the selected model; changing models resets the draft effort to that model's default. Both settings take effect
