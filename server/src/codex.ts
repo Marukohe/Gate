@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { sessionFilePath } from './session-files.js';
 import { connectCodex, type CodexRpc, type RpcMessage } from './codex-connection.js';
 import { describeRequest, decision } from './codex-requests.js';
 import type { Server, Session, MonitorServer, Item, Request, SessionDetail, ServerEvent, ModelOption } from './types.js';
@@ -155,6 +156,12 @@ export class CodexService extends EventEmitter {
     return { session: sessionFromThread(thread.thread), items,
       nextCursor: history.nextCursor, turnId: latest?.status === 'inProgress' ? latest.id : null,
       requests: [...entry.requests.values()].map((v) => v.request).filter((r) => r.threadId === threadId) };
+  }
+  async file(serverId: string, threadId: string, filePath: string) {
+    const rpc = await this.connection(this.entry(serverId));
+    const { thread } = await rpc.request('thread/read', { threadId });
+    const path = sessionFilePath(thread.cwd, filePath);
+    return { path, data: await rpc.readFile(path) };
   }
   async create(serverId: string, cwd: string) {
     const entry = this.entry(serverId);

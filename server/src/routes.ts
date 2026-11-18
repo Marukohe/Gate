@@ -4,6 +4,7 @@ import type { Database } from './db.js';
 import { publicServer } from './db.js';
 import type { CodexService } from './codex.js';
 import type { Server } from './types.js';
+import { sendSessionFile } from './session-files.js';
 
 function text(value: unknown, name: string, max = 200_000): string {
   if (typeof value !== 'string' || !value.trim() || value.length > max || value.includes('\0')) throw new Error(`Invalid ${name}`);
@@ -75,6 +76,13 @@ export function routes(db: Database, codex: CodexService) {
   router.get('/servers/:id/sessions/:thread', async (req, res) => {
     const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
     res.json(await codex.detail(req.params.id, req.params.thread, cursor));
+  });
+  router.get('/servers/:id/sessions/:thread/file', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+      const file = await codex.file(req.params.id, req.params.thread, text(req.query.path, 'file path', 4096));
+      sendSessionFile(res, file.path, file.data);
+    } catch (error) { res.status(400).type('text/plain').send(`Cannot open file. ${(error as Error).message}`); }
   });
   router.post('/servers/:id/sessions/:thread/input', async (req, res) => {
     res.json(await codex.input(req.params.id, req.params.thread, text(req.body.text, 'message'),

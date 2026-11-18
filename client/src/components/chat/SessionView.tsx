@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { api, post } from '@/lib/api';
 import { useEvents } from '@/hooks/use-events';
 import { MessageBubble } from './MessageBubble';
+import { SessionFileContext } from '@/lib/message-url';
 import { ApprovalRequest } from './ApprovalRequest';
 import { labels } from '@/lib/session';
 import { emptyView, sessionKey, useSessionViewStore } from '@/stores/session-view-store';
@@ -205,7 +206,9 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
     }}><div className="mx-auto max-w-3xl px-4 py-4 sm:px-6">
       {detail?.nextCursor && <div className="text-center"><Button variant="ghost" size="sm" disabled={loadingOlder || offline} onClick={() => void older()}>{loadingOlder ? 'Loading…' : 'Earlier messages'}</Button>
         {historyError && <p role="alert" className="mt-1 break-words text-xs text-destructive">{historyError}</p>}</div>}
-      {detail?.items.map((item) => <MessageBubble key={item.id} item={item} />)}
+      <SessionFileContext value={`/api${base}/file`}>
+        {detail?.items.map((item) => <MessageBubble key={item.id} item={item} />)}
+      </SessionFileContext>
       {!detail && !error && <p className="py-12 text-center text-sm text-muted-foreground">Loading conversation…</p>}
       {detail && !detail.items.length && <p className="py-12 text-center text-sm text-muted-foreground">Start with a message below.</p>}
     </div></div>

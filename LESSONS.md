@@ -21,6 +21,8 @@
   Verify the anchor again after the next periodic refresh, not only immediately after inserting a page.
 - Keep Markdown renderer components stable and skip unchanged message renders. Inline component definitions remount code
   blocks and tables on loading/poll updates, causing flicker and losing local table state; verify node identity as well as scroll.
+- Message file paths belong to the session's SSH server, with relative paths based on native thread cwd. Rewrite links
+  and image sources together; preserve URL escaping and line references, and serve file contents without executable scripts.
 - A saved conversation ID does not identify a live process. Use the same Codex shared backend as the terminal;
   a fresh `exec resume` process cannot take over an in-flight turn.
 - Correlate JSON-RPC responses by ID. Server requests with IDs are approvals/questions, not ordinary responses.

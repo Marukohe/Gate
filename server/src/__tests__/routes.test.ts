@@ -8,7 +8,7 @@ import type { CodexService } from '../codex.js';
 let db: ReturnType<typeof createDb>;
 let http: HttpServer;
 let origin: string;
-const codex = { sync: vi.fn(), monitor: vi.fn(), create: vi.fn(), input: vi.fn(), rename: vi.fn(), models: vi.fn() };
+const codex = { sync: vi.fn(), monitor: vi.fn(), create: vi.fn(), input: vi.fn(), rename: vi.fn(), models: vi.fn(), file: vi.fn() };
 beforeEach(async () => {
   vi.resetAllMocks(); db = createDb(':memory:');
   const app = express(); app.use(express.json()); app.use(routes(db, codex as unknown as CodexService));
@@ -103,4 +103,28 @@ it('applies persistent filters and archives to monitor responses without invokin
   expect((await fetch(origin + '/servers/missing/visibility')).status).toBe(404);
   expect(codex.sync).toHaveBeenCalledTimes(1);
   expect(codex.create).not.toHaveBeenCalled(); expect(codex.input).not.toHaveBeenCalled();
+});
+
+it('serves inert text with line anchors, images, downloads, and readable file errors', async () => {
+  const path = '/servers/remote/sessions/native/file?path=src%2Ffile.ts';
+  codex.file.mockResolvedValue({ path: '/remote/src/file.ts', data: Buffer.from('first\n<script>window.bad = true</script>') });
+  const response = await fetch(origin + path);
+  expect(codex.file).toHaveBeenCalledWith('remote', 'native', 'src/file.ts');
+  const html = await response.text();
+  expect(html).toContain('id="L2"');
+  expect(html).toContain('&lt;script&gt;');
+  expect(html).not.toContain('<script>');
+  expect(response.headers.get('content-security-policy')).toContain('sandbox');
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  codex.file.mockResolvedValue({ path: '/tmp/chart.png', data: Buffer.from([137, 80, 78, 71]) });
+  const image = await fetch(origin + path);
+  expect(image.headers.get('content-type')).toBe('image/png');
+  expect(Buffer.from(await image.arrayBuffer())).toEqual(Buffer.from([137, 80, 78, 71]));
+  codex.file.mockResolvedValue({ path: '/tmp/archive.bin', data: Buffer.from([0, 255]) });
+  const download = await fetch(origin + path);
+  expect(download.headers.get('content-disposition')).toContain('attachment');
+  codex.file.mockRejectedValueOnce(new Error('No such file'));
+  const missing = await fetch(origin + path);
+  expect(missing.status).toBe(400);
+  expect(await missing.text()).toContain('Cannot open file. No such file');
 });

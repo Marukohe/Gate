@@ -97,7 +97,12 @@ app.post('/api/servers/:id/sessions/:thread/interrupt', (req, res) => {
 app.post('/api/servers/:id/sessions/:thread/requests/:request', (req, res) => {
   writes.push({ type: 'answer', ...req.body }); detail.requests = []; res.json({}); emit();
 });
-app.use('/api', routes(db, { sync() {}, monitor: () => structuredClone(monitor), async rename(serverId, threadId, name) {
+app.use('/api', routes(db, { sync() {}, monitor: () => structuredClone(monitor), async file(serverId, threadId, path) {
+  assert.equal(serverId, server.id); assert.equal(threadId, detail.session.id);
+  if (path.endsWith('.png')) return { path, data: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64') };
+  if (path === 'missing.txt') throw new Error('No such file');
+  return { path: '/remote/repo/' + path, data: Buffer.from('first line\n<script>window.fileExecuted = true</script>\nthird line') };
+}, async rename(serverId, threadId, name) {
   writes.push({ type: 'rename', serverId, threadId, name });
   detail.session.name = name;
   for (const s of sessions) if (s.id === threadId) s.name = name;
@@ -309,6 +314,31 @@ try {
   await page.reload();
   await page.getByRole('heading', { name: '修复登录 · Gate', exact: true }).waitFor();
   assert.deepEqual(writes.at(-1), { type: 'rename', serverId: server.id, threadId: 'gate', name: '修复登录 · Gate' });
+  const originalItems = detail.items;
+  detail.items = [...originalItems, { id: 'file-links', kind: 'assistant', text:
+    '[Source](src/main.ts:2) · [Absolute](file:///tmp/a%20b.txt#L3) · [Missing](missing.txt) · [Website](https://example.com/)\n\n![Local chart](sandbox:/tmp/chart.png)' }];
+  await page.reload();
+  const chart = page.getByRole('img', { name: 'Local chart', exact: true });
+  await chart.waitFor();
+  await page.waitForFunction(() => document.querySelector('img[alt="Local chart"]')?.naturalWidth === 1);
+  const sourceLink = page.getByRole('link', { name: 'Source', exact: true });
+  const previewPromise = page.waitForEvent('popup');
+  await sourceLink.click();
+  const preview = await previewPromise; await preview.waitForLoadState();
+  assert.equal(new URL(preview.url()).hash, '#L2');
+  assert.ok((await preview.locator('#L2').textContent()).includes('<script>'));
+  assert.equal(await preview.evaluate(() => window.fileExecuted), undefined, 'File content must remain inert');
+  await preview.close();
+  const absoluteURL = new URL(await page.getByRole('link', { name: 'Absolute', exact: true }).getAttribute('href'), page.url());
+  assert.equal(absoluteURL.searchParams.get('path'), '/tmp/a b.txt');
+  assert.equal(absoluteURL.hash, '#L3');
+  assert.equal(await page.getByRole('link', { name: 'Website', exact: true }).getAttribute('href'), 'https://example.com/');
+  const missingPromise = page.waitForEvent('popup');
+  await page.getByRole('link', { name: 'Missing', exact: true }).click();
+  const missing = await missingPromise; await missing.waitForLoadState();
+  assert.match(await missing.locator('body').textContent(), /Cannot open file.*No such file/);
+  await missing.close();
+  detail.items = originalItems;
   historyProbe = true;
   await page.reload();
   await page.getByText('current message 39', { exact: false }).waitFor();

@@ -21,6 +21,8 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
   stay with the conversation; return/next attention navigation shares the same row. Directory and theme controls are on demand.
 - Codex owns sessions, history, approvals, and execution. Gate stores SSH settings and per-server display preferences.
 - Opening a session subscribes to the existing native thread. Sending messages uses `turn/start` or `turn/steer`.
+- Local Markdown file/image URLs use a session-scoped HTTP endpoint and SFTP over the existing SSH connection.
+  Resolve relative paths against native thread cwd; file contents must never execute on Gate's origin.
 - Scrolling upward near the chat top loads one native history page at a time. Prepending anchors the visible message
   before paint; manual loading/retry remains available. Initial bottom positioning must not drain history pages.
   Auto-load once per entry into the top zone; failed requests wait for explicit retry.
@@ -35,6 +37,7 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - `server/src/codex-connection.ts`: SSH, native daemon discovery/start, Unix socket forwarding, JSON-RPC correlation.
 - `server/src/codex.ts`: native session listing, history, subscriptions, messages, decisions, and interruption.
 - `server/src/codex-requests.ts`: offered approval choices and structured question answers.
+- `server/src/session-files.ts`: bounded SFTP reads, inert text previews with line anchors, images, and downloads.
 - `server/src/types.ts`: shared browser/server response types.
 - `server/src/db.ts`: server settings, persistent visibility rules/archives, and one-time preservation of old Gate data.
 - `server/src/routes.ts` / `index.ts`: HTTP API and browser event delivery.

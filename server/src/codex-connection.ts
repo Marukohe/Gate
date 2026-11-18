@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { posix } from 'node:path';
 import { Client, type ClientChannel } from 'ssh2';
 import WebSocket from 'ws';
+import { readRemoteFile } from './session-files.js';
 
 export interface ConnectionSettings {
   host: string; port: number; username: string; authType: 'password' | 'privateKey';
@@ -33,7 +34,8 @@ export class CodexRpc extends EventEmitter {
   private pending = new Map<string, { resolve: (value: any) => void; reject: (error: Error) => void;
     timer: ReturnType<typeof setTimeout> }>();
   constructor(private socket: WebSocket, private timeout = 30_000,
-    readonly projectPaths: (directories: string[]) => Promise<string[]> = async (directories) => directories) {
+    readonly projectPaths: (directories: string[]) => Promise<string[]> = async (directories) => directories,
+    readonly readFile: (path: string) => Promise<Buffer> = async () => { throw new Error('File access unavailable'); }) {
     super();
     socket.on('message', (data) => {
       let message: RpcMessage;
@@ -152,7 +154,7 @@ export async function connectCodex(settings: ConnectionSettings, signal: AbortSi
       const output = await exec(ssh, `sh -c ${quote(projectPathsCommand(directories))}`);
       const paths = output.split('\0');
       return directories.map((directory, i) => paths[i]?.startsWith('/') ? paths[i] : directory);
-    });
+    }, (path) => readRemoteFile(ssh, path));
     ssh.once('close', () => rpc.close());
     rpc.once('disconnected', () => ssh.end());
     await new Promise<void>((resolve, reject) => {

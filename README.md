@@ -60,6 +60,9 @@ Use the same remote OS user and Codex configuration as your terminal.
   Scroll up to load earlier messages automatically without losing your reading position. **Earlier messages** also
   works for manual loading. If loading fails, click it to retry; scrolling does not keep retrying the failed request.
   Scrolling up pauses automatic following; scroll back down near the bottom to follow new output again.
+- **Files and images:** local Markdown links open files from the session's server in a new tab, including line references
+  such as `main.ts:42` or `main.ts#L42`. Relative paths use the session's working directory; local images display inline.
+  Gate reads through the existing SSH connection (SFTP), up to 10 MB per file. Text up to 1 MB is previewed; other files download.
 - **Model and reasoning:** select a model and its supported reasoning effort above the message input before a new turn.
   Choices and default efforts come from that server's Codex catalog. Changes take effect when the message is sent
   and become the session defaults; running turns keep their current settings.
