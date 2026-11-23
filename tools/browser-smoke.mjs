@@ -346,11 +346,40 @@ try {
   const richMessage = page.locator('[data-message-id="current-39"]');
   await richMessage.getByRole('button', { name: 'Wrap', exact: true }).click();
   const originalCodeControl = await richMessage.getByRole('button', { name: 'Copy code', exact: true }).elementHandle();
+  // Reproduce a refresh captured before live output but delivered after that output.
+  let releaseSnapshot;
+  let snapshotReady;
+  const snapshotCaptured = new Promise(resolve => { snapshotReady = resolve; });
+  const snapshotHeld = new Promise(resolve => { releaseSnapshot = resolve; });
+  await page.route(url => url.pathname.endsWith('/sessions/gate') && !url.search, async route => {
+    const response = await route.fetch();
+    snapshotReady();
+    await snapshotHeld;
+    await route.fulfill({ response });
+  }, { times: 1 });
+  emit();
+  await snapshotCaptured;
+  emit({ type: 'delta', itemId: 'current-39', delta: '\n\n' + 'New output while refresh is pending.\n\n'.repeat(20) });
+  await page.getByText('New output while refresh is pending.', { exact: true }).first().waitFor();
+  const streamHeight = await historyViewport.evaluate(node => node.scrollHeight);
+  const staleResponse = page.waitForResponse(response => response.url().endsWith('/sessions/gate'));
+  releaseSnapshot(); await staleResponse;
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.getByText('New output while refresh is pending.', { exact: true }).count(), 20, 'A delayed refresh must not erase live output');
+  assert.equal(await historyViewport.evaluate(node => node.scrollHeight), streamHeight, 'A delayed refresh must not collapse the conversation');
+  probeStream += '\n\nReconciled from the server.';
+  emit();
+  await page.getByText('Reconciled from the server.', { exact: true }).waitFor();
   assert.equal(historyRequests.length, 0, 'Opening history must not automatically drain older pages');
+  const historyButton = page.getByRole('button', { name: 'Earlier messages', exact: true });
+  const historyControlBefore = await historyButton.evaluate(node => ({ width: node.getBoundingClientRect().width, opacity: getComputedStyle(node).opacity }));
   const firstHistoryRequest = page.waitForRequest(request => request.url().includes('cursor=probe-1'));
   await historyViewport.evaluate(node => { node.scrollTop = 0; });
   await firstHistoryRequest;
-  await page.getByRole('button', { name: 'Loading…', exact: true }).waitFor();
+  await page.waitForFunction(() => document.querySelector('[aria-label="Conversation"] button')?.getAttribute('aria-busy') === 'true');
+  assert.equal(await historyButton.isDisabled(), true);
+  assert.deepEqual(await historyButton.evaluate(node => ({ width: node.getBoundingClientRect().width, opacity: getComputedStyle(node).opacity })),
+    historyControlBefore, 'History loading must not change the control width, label, or opacity');
   assert.equal(await originalCodeControl.evaluate(node => node.isConnected), true, 'Loading history must not remount existing code blocks');
   assert.equal(await richMessage.getByRole('button', { name: 'Scroll', exact: true }).count(), 1, 'Loading must preserve table wrapping');
   await historyViewport.evaluate(node => {
@@ -368,6 +397,8 @@ try {
   assert.deepEqual(historyRequests, ['probe-1'], 'Rapid scrolls must share the pending history request');
   releaseHistory();
   await page.getByText('older message 0', { exact: false }).waitFor();
+  assert.equal(await historyButton.getAttribute('aria-busy'), 'false');
+  assert.deepEqual(await historyButton.evaluate(node => ({ width: node.getBoundingClientRect().width, opacity: getComputedStyle(node).opacity })), historyControlBefore);
   assert.ok(Math.abs((await firstCurrent.boundingBox()).y - anchorBefore.y) < 2, 'Prepending must preserve the visible message despite streaming below');
   assert.equal(await originalCodeControl.evaluate(node => node.isConnected), true, 'Prepending must retain mounted rich content');
   assert.deepEqual(historyRequests, ['probe-1'], 'Restoring the anchor must not automatically fetch another page');

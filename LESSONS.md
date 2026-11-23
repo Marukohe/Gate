@@ -11,6 +11,8 @@
   Header Running includes the current session; Needs you and notices concern other sessions.
 - Preserve drafts and reading positions by server plus thread ID. Carry in-flight action state across navigation,
   never replay a send, and refresh native state before acting on cached history. Do not restore cached approval IDs.
+  A refresh response may predate live events received during the request. Preserve those updated items instead of
+  overwriting them with the snapshot; test a delayed response after streamed output, including conversation height.
 - Keep chat navigation, title, and status in one header row, including after attention jumps. Move metadata into the title
   popover and verify the conversation starts directly below the header at 320px, 390px, and desktop widths.
 - Auto-load history only on upward scrolling near the top, with a synchronous in-flight guard. Anchor the visible message
@@ -19,6 +21,8 @@
   test residual top-edge scrolling after both failure and empty pages, not just while a request is pending.
   Ignore events from programmatic positioning; upward user scroll disables bottom-follow even within the bottom threshold.
   Verify the anchor again after the next periodic refresh, not only immediately after inserting a page.
+  Keep the history control's label, dimensions, and opacity stable while loading; delay its reserved progress indicator
+  so fast requests do not flash. Request deduplication alone does not prevent visible loading flicker.
 - Keep Markdown renderer components stable and skip unchanged message renders. Inline component definitions remount code
   blocks and tables on loading/poll updates, causing flicker and losing local table state; verify node identity as well as scroll.
 - Message file paths belong to the session's SSH server, with relative paths based on native thread cwd. Rewrite links

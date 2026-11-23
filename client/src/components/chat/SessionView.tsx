@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Popover } from 'radix-ui';
-import { ArrowUp, ChevronDown, Moon, Pencil, Square, Sun } from 'lucide-react';
+import { ArrowUp, ChevronDown, LoaderCircle, Moon, Pencil, Square, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -84,11 +84,20 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
   }, [serverId, modelRevision]);
   const refresh = useCallback(async () => {
     const current = ++revision.current;
+    const startingItems = new Map(latestDetail.current?.items.map((item) => [item.id, item]));
     try {
       const data = await api<SessionDetail>(base);
       if (!alive.current || current !== revision.current) return;
-      setDetail((previous) => ({ ...data, items: mergeItems(previous?.items ?? [], data.items),
-        nextCursor: previous ? previous.nextCursor : data.nextCursor }));
+      setDetail((previous) => {
+        const currentItems = new Map(previous?.items.map((item) => [item.id, item]));
+        // HTTP can arrive after newer live output. Reconcile only items unchanged since this read began.
+        const items = data.items.map((item) => {
+          const latest = currentItems.get(item.id);
+          return latest && latest !== startingItems.get(item.id) ? latest : item;
+        });
+        return { ...data, items: mergeItems(previous?.items ?? [], items),
+          nextCursor: previous ? previous.nextCursor : data.nextCursor };
+      });
       setOffline(false);
     } catch (e) { if (alive.current && current === revision.current) { setError((e as Error).message); setOffline(true); } }
   }, [base]);
@@ -204,7 +213,11 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
       // One request per entry, not per scroll tick. Failed pages require explicit retry.
       if (scrollingUp && enteredTop && !historyError) void older();
     }}><div className="mx-auto max-w-3xl px-4 py-4 sm:px-6">
-      {detail?.nextCursor && <div className="text-center"><Button variant="ghost" size="sm" disabled={loadingOlder || offline} onClick={() => void older()}>{loadingOlder ? 'Loading…' : 'Earlier messages'}</Button>
+      {detail?.nextCursor && <div className="text-center"><Button variant="ghost" size="sm" className="transition-none disabled:opacity-100"
+        aria-busy={loadingOlder} disabled={loadingOlder || offline} onClick={() => void older()}>
+        <span className="history-loading-indicator" data-loading={loadingOlder} aria-hidden="true">
+          <LoaderCircle className={`size-3.5 ${loadingOlder ? 'motion-safe:animate-spin' : ''}`} />
+        </span>Earlier messages</Button>
         {historyError && <p role="alert" className="mt-1 break-words text-xs text-destructive">{historyError}</p>}</div>}
       <SessionFileContext value={`/api${base}/file`}>
         {detail?.items.map((item) => <MessageBubble key={item.id} item={item} />)}

@@ -17,6 +17,7 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
   transition notices use only known native status, exclude the current thread, and do not open additional conversations.
 - Session view state is keyed by server and native thread in browser memory: drafts, model/effort, in-flight actions,
   cached history, and scroll position. Cached approval requests are discarded and native state is refreshed before input.
+  Refresh snapshots preserve message items updated while the request was in flight.
 - Chats use one compact header. SessionView portals its title/details into AppHeader so live metadata and rename state
   stay with the conversation; return/next attention navigation shares the same row. Directory and theme controls are on demand.
 - Codex owns sessions, history, approvals, and execution. Gate stores SSH settings and per-server display preferences.
@@ -26,6 +27,7 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - Scrolling upward near the chat top loads one native history page at a time. Prepending anchors the visible message
   before paint; manual loading/retry remains available. Initial bottom positioning must not drain history pages.
   Auto-load once per entry into the top zone; failed requests wait for explicit retry.
+  Keep the history control stable during loading, with a delayed progress indicator in reserved space.
 - Session renaming uses native `thread/name/set`; names belong to Codex and are shared with terminal clients.
 - Model and reasoning pickers read native `model/list`, including supported/default efforts, and pass optional `model`/`effort`
   to `turn/start`. `turn/steer` cannot change either setting. Current values come from native thread metadata.

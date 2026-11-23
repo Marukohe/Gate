@@ -92,6 +92,11 @@
     }
 }
 
+/* Reserve progress space and avoid flashing an indicator for fast history reads. */
+.history-loading-indicator { display: inline-flex; opacity: 0; }
+.history-loading-indicator[data-loading="true"] { animation: history-loading-reveal 0s 250ms forwards; }
+@keyframes history-loading-reveal { to { opacity: 1; } }
+
 /* Markdown prose styles for session messages */
 .markdown-prose {
   line-height: 1.625;
