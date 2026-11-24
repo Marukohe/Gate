@@ -7,12 +7,13 @@ import type { Server } from '../types.js';
 const server: Server = { id: 'server', name: 'Local', host: 'localhost', port: 22, username: 'test', authType: 'password', password: 'secret', createdAt: 1 };
 const native = { id: 'native', cwd: '/repo', name: 'Work', preview: 'First message', updatedAt: 1700000000,
   status: { type: 'active', activeFlags: [] }, canAcceptDirectInput: true };
-let peer: EventEmitter & { readFile: ReturnType<typeof vi.fn>; projectPaths: ReturnType<typeof vi.fn>; request: ReturnType<typeof vi.fn>; send: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
+let peer: EventEmitter & { shell: ReturnType<typeof vi.fn>; readFile: ReturnType<typeof vi.fn>; projectPaths: ReturnType<typeof vi.fn>; request: ReturnType<typeof vi.fn>; send: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
 let service: CodexService;
 let connect: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   peer = Object.assign(new EventEmitter(), {
     readFile: vi.fn(async () => Buffer.from('remote content')),
+    shell: vi.fn(async () => ({ stdout: 'done', stderr: '', exitCode: 0, timedOut: false, truncated: false })),
     projectPaths: vi.fn(async (directories: string[]) => directories),
     request: vi.fn(async (method: string) => {
       if (method === 'thread/list') return { data: [native, { ...native, id: 'child', parentThreadId: native.id }], nextCursor: null };
@@ -164,4 +165,13 @@ it('reads files relative to the native session cwd over the existing connection 
   await service.file(server.id, 'native', '/tmp/chart.png');
   expect(peer.readFile).toHaveBeenLastCalledWith('/tmp/chart.png');
   expect(connect).toHaveBeenCalledOnce();
+});
+
+it('executes shell commands using native cwd without starting or steering an LLM turn', async () => {
+  expect(await service.shell(server.id, 'native', 'git status | head')).toMatchObject({ stdout: 'done', exitCode: 0 });
+  expect(peer.shell).toHaveBeenCalledWith('/repo', 'git status | head');
+  expect(peer.request.mock.calls).toEqual([['thread/read', { threadId: 'native' }]]);
+  peer.request.mockResolvedValueOnce({ thread: { ...native, cwd: '' } });
+  await expect(service.shell(server.id, 'native', 'pwd')).rejects.toThrow('working directory');
+  expect(peer.shell).toHaveBeenCalledOnce();
 });

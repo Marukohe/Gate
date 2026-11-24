@@ -8,7 +8,7 @@ import type { CodexService } from '../codex.js';
 let db: ReturnType<typeof createDb>;
 let http: HttpServer;
 let origin: string;
-const codex = { sync: vi.fn(), monitor: vi.fn(), create: vi.fn(), input: vi.fn(), rename: vi.fn(), models: vi.fn(), file: vi.fn() };
+const codex = { sync: vi.fn(), monitor: vi.fn(), create: vi.fn(), input: vi.fn(), rename: vi.fn(), models: vi.fn(), file: vi.fn(), shell: vi.fn() };
 beforeEach(async () => {
   vi.resetAllMocks(); db = createDb(':memory:');
   const app = express(); app.use(express.json()); app.use(routes(db, codex as unknown as CodexService));
@@ -127,4 +127,16 @@ it('serves inert text with line anchors, images, downloads, and readable file er
   const missing = await fetch(origin + path);
   expect(missing.status).toBe(400);
   expect(await missing.text()).toContain('Cannot open file. No such file');
+});
+
+it('validates direct shell commands and never forwards them to model input', async () => {
+  const path = '/servers/server/sessions/native/shell';
+  for (const command of ['', '  ', 42, 'bad\0command', 'x'.repeat(32001)]) {
+    expect((await send(path, { command })).status).toBe(400);
+  }
+  expect(codex.shell).not.toHaveBeenCalled();
+  codex.shell.mockResolvedValue({ stdout: 'ok', stderr: '', exitCode: 0, timedOut: false, truncated: false });
+  expect(await (await send(path, { command: 'pwd | head' })).json()).toMatchObject({ stdout: 'ok', exitCode: 0 });
+  expect(codex.shell).toHaveBeenCalledWith('server', 'native', 'pwd | head');
+  expect(codex.input).not.toHaveBeenCalled(); expect(codex.create).not.toHaveBeenCalled();
 });

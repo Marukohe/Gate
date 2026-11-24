@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Popover } from 'radix-ui';
-import { ArrowUp, ChevronDown, LoaderCircle, Moon, Pencil, Square, Sun } from 'lucide-react';
+import { ArrowUp, ChevronDown, LoaderCircle, Moon, Pencil, Square, Sun, Terminal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -9,12 +9,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { api, post } from '@/lib/api';
 import { useEvents } from '@/hooks/use-events';
 import { MessageBubble } from './MessageBubble';
+import { ShellOutput } from './ShellOutput';
 import { SessionFileContext } from '@/lib/message-url';
 import { ApprovalRequest } from './ApprovalRequest';
 import { labels } from '@/lib/session';
 import { emptyView, sessionKey, useSessionViewStore } from '@/stores/session-view-store';
 import { useUIStore } from '@/stores/ui-store';
-import type { SessionDetail, Item, ModelOption } from '../../../../server/src/types';
+import type { SessionDetail, Item, ModelOption, ShellResult } from '../../../../server/src/types';
 
 function mergeItems(old: Item[], incoming: Item[]) {
   const result = new Map(old.map((item) => [item.id, item]));
@@ -29,7 +30,9 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
   const key = sessionKey(serverId, threadId);
   const saved = useSessionViewStore((state) => state.views[key] ?? emptyView);
   const update = useSessionViewStore((state) => state.update);
-  const { text, model, effort, busy } = saved;
+  const { text, model, effort, busy, shellRuns } = saved;
+  const isShell = text.trimStart().startsWith('!');
+  const command = isShell ? text.trimStart().slice(1).trim() : '';
   const setText = (text: string) => update(key, { text });
   const setModel = (model: string) => update(key, { model });
   const setEffort = (effort: string) => update(key, { effort });
@@ -131,10 +134,20 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
     } else if (follow.current) node.scrollTop = node.scrollHeight;
     else return;
     lastScrollTop.current = node.scrollTop;
-  }, [detail]);
+  }, [detail, shellRuns]);
   async function send(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); if (!text.trim() || busy) return;
+    event.preventDefault();
+    if (!text.trim() || (isShell && !command) || useSessionViewStore.getState().views[key]?.busy) return;
     setBusy(true); setError('');
+    if (isShell) {
+      const run = { id: `shell-${Date.now()}-${Math.random().toString(36).slice(2)}`, command, afterItemId: detail?.items.at(-1)?.id };
+      const record = useSessionViewStore.getState().shellRun;
+      follow.current = true; record(key, run); setText('');
+      try { record(key, { ...run, result: await post<ShellResult>(`${base}/shell`, { command }) }); }
+      catch (e) { record(key, { ...run, error: `${(e as Error).message}. Check the command before running it again.` }); }
+      finally { setBusy(false); }
+      return;
+    }
     try {
       await post(`${base}/input`, { text, turnId: detail?.turnId, ...(!detail?.turnId && model ? { model } : {}),
         ...(!detail?.turnId && effortOverride ? { effort: effortOverride } : {}) });
@@ -220,8 +233,12 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
         </span>Earlier messages</Button>
         {historyError && <p role="alert" className="mt-1 break-words text-xs text-destructive">{historyError}</p>}</div>}
       <SessionFileContext value={`/api${base}/file`}>
-        {detail?.items.map((item) => <MessageBubble key={item.id} item={item} />)}
+        {detail?.items.map((item) => <Fragment key={item.id}>
+          <MessageBubble item={item} />
+          {shellRuns.filter((run) => run.afterItemId === item.id).map((run) => <ShellOutput key={run.id} run={run} />)}
+        </Fragment>)}
       </SessionFileContext>
+      {shellRuns.filter((run) => !detail?.items.some((item) => item.id === run.afterItemId)).map((run) => <ShellOutput key={run.id} run={run} />)}
       {!detail && !error && <p className="py-12 text-center text-sm text-muted-foreground">Loading conversation…</p>}
       {detail && !detail.items.length && <p className="py-12 text-center text-sm text-muted-foreground">Start with a message below.</p>}
     </div></div>
@@ -232,7 +249,9 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
       {error && <div role="alert" className="flex items-start gap-2 text-sm text-destructive"><p className="min-w-0 flex-1 break-words">{error}</p>
         <button className="shrink-0 text-xs underline" onClick={() => setError('')}>Dismiss</button></div>}
       {detail && !detail.session.canInput && <p className="text-sm text-muted-foreground">Continue this child session through its parent conversation.</p>}
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      {isShell ? <p className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"><Terminal className="size-3.5 shrink-0" />
+        <span className="truncate" title={detail?.session.cwd}>Shell · {detail?.session.cwd}</span></p>
+        : <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         <select aria-label="Model" value={detail?.turnId ? '' : model} onChange={(e) => { setModel(e.target.value); setEffort(''); }}
           disabled={busy || offline || !detail?.session.canInput || !!detail?.turnId || loadingModels || !!modelError || !models.length}
           title={detail?.turnId ? 'Change model after this turn finishes' : 'Model for your next message'}
@@ -250,7 +269,7 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
         </select>
         {modelError ? <span role="status" className="min-w-0 break-words">Models unavailable. {modelError} <button type="button" className="underline" onClick={() => setModelRevision((value) => value + 1)}>Retry models</button></span>
           : detail?.turnId ? <span>Change settings between turns</span> : model || selectedEffort ? <span>Applies to your next message</span> : null}
-      </div>
+      </div>}
       <form onSubmit={send} className="flex items-end gap-2">
         <Textarea aria-label="Message Codex" placeholder="Send a message…" value={text}
           onChange={(e) => setText(e.target.value)} rows={1} className="max-h-32 min-h-10 min-w-0 flex-1 resize-none py-[9px] leading-5"
@@ -261,8 +280,9 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
             if (composing.current || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); }
           }} />
-        {detail?.turnId && <Button type="button" size="icon-lg" variant="outline" aria-label="Stop current turn" disabled={busy || offline} onClick={() => void stop()}><Square className="size-4" /></Button>}
-        <Button type="submit" size="icon-lg" aria-label={detail?.turnId ? 'Send update' : 'Send message'} disabled={busy || offline || !detail?.session.canInput || !text.trim()}><ArrowUp /></Button>
+        {!isShell && detail?.turnId && <Button type="button" size="icon-lg" variant="outline" aria-label="Stop current turn" disabled={busy || offline} onClick={() => void stop()}><Square className="size-4" /></Button>}
+        <Button type="submit" size="icon-lg" aria-label={isShell ? 'Run shell command' : detail?.turnId ? 'Send update' : 'Send message'}
+          disabled={busy || offline || !detail?.session.canInput || (isShell ? !command : !text.trim())}>{isShell ? <Terminal /> : <ArrowUp />}</Button>
       </form>
     </div></div>
     <Dialog open={renaming} onOpenChange={(open) => { if (!savingName) setRenaming(open); }}>

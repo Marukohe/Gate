@@ -35,6 +35,8 @@ const writes = [];
 let modelsUnavailable = false;
 let holdInput = false;
 let releaseInput;
+let holdShell = false;
+let releaseShell;
 let historyProbe = false;
 let sparseHistory = false;
 let probeStream = '';
@@ -97,7 +99,12 @@ app.post('/api/servers/:id/sessions/:thread/interrupt', (req, res) => {
 app.post('/api/servers/:id/sessions/:thread/requests/:request', (req, res) => {
   writes.push({ type: 'answer', ...req.body }); detail.requests = []; res.json({}); emit();
 });
-app.use('/api', routes(db, { sync() {}, monitor: () => structuredClone(monitor), async file(serverId, threadId, path) {
+app.use('/api', routes(db, { sync() {}, monitor: () => structuredClone(monitor), async shell(serverId, threadId, command) {
+  writes.push({ type: 'shell', serverId, threadId, command });
+  if (holdShell) await new Promise(resolve => { releaseShell = resolve; });
+  return { stdout: command === 'pwd' ? '/home/alex/projects/gate\n' : 'shell-ok\n', stderr: command === 'pwd' ? '' : 'shell-error\n',
+    exitCode: command === 'pwd' ? 0 : 7, timedOut: false, truncated: false };
+}, async file(serverId, threadId, path) {
   assert.equal(serverId, server.id); assert.equal(threadId, detail.session.id);
   if (path.endsWith('.png')) return { path, data: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64') };
   if (path === 'missing.txt') throw new Error('No such file');
@@ -484,6 +491,33 @@ try {
   assert.equal(await page.getByLabel('Model', { exact: true }).inputValue(), 'fixture-other', 'Polling must retain an unsent model selection');
   assert.equal(await reasoning.inputValue(), 'medium', 'Polling must retain an unsent effort selection');
   const composer = page.getByLabel('Message Codex');
+  await composer.fill('!');
+  assert.equal(await page.getByRole('button', { name: 'Run shell command', exact: true }).isDisabled(), true);
+  const beforeShell = writes.length;
+  const shellCommand = 'printf shell-ok; printf shell-error >&2; exit 7';
+  await composer.fill('!' + shellCommand);
+  assert.equal(await page.getByLabel('Model', { exact: true }).count(), 0, 'Shell mode has no model picker');
+  await composer.press('Enter');
+  await page.getByText('shell-ok', { exact: true }).waitFor();
+  await page.getByLabel('Standard error', { exact: true }).waitFor();
+  await page.getByText('Exit 7', { exact: true }).waitFor();
+  assert.deepEqual(writes.slice(beforeShell), [{ type: 'shell', serverId: server.id, threadId: 'gate', command: shellCommand }]);
+  assert.equal(await page.getByLabel('Model', { exact: true }).inputValue(), 'fixture-other');
+  assert.equal(await reasoning.inputValue(), 'medium', 'Shell execution preserves the next model turn settings');
+  // A pending command belongs to its original session and is never submitted again after navigation.
+  holdShell = true;
+  const originalHash = await page.evaluate(() => location.hash);
+  await composer.fill('!pwd');
+  await page.getByRole('button', { name: 'Run shell command', exact: true }).click();
+  await page.getByText('Running…', { exact: true }).waitFor();
+  await page.evaluate(() => { location.hash = 'sessions'; });
+  await page.getByRole('button', { name: 'Add server', exact: true }).waitFor();
+  releaseShell(); holdShell = false;
+  await page.evaluate(hash => { location.hash = hash; }, originalHash);
+  await page.getByText('/home/alex/projects/gate', { exact: true }).waitFor();
+  await page.getByText('Exit 0', { exact: true }).waitFor();
+  assert.equal(writes.slice(beforeShell).filter(w => w.type === 'shell').length, 2);
+  assert.equal(writes.slice(beforeShell).filter(w => w.type === 'input').length, 0, 'Shell commands must never reach LLM input');
   await composer.fill('english');
   const ime = await composer.evaluate(input => {
     let submits = 0;
@@ -516,6 +550,14 @@ try {
   assert.equal(writes.at(-1).effort, 'medium');
   assert.equal(await page.getByLabel('Model', { exact: true }).isDisabled(), true);
   assert.equal(await reasoning.isDisabled(), true);
+  const beforeRunningShell = writes.length;
+  await composer.fill('!pwd');
+  assert.equal(await page.getByRole('button', { name: 'Stop current turn', exact: true }).count(), 0);
+  await page.getByRole('button', { name: 'Run shell command', exact: true }).click();
+  await page.getByRole('button', { name: 'Stop current turn', exact: true }).waitFor();
+  await page.waitForFunction(() => !document.querySelector('textarea').disabled);
+  assert.equal(writes.length, beforeRunningShell + 1);
+  assert.equal(writes.at(-1).type, 'shell', 'Even during an active turn, shell commands bypass steering');
   await page.getByLabel('Message Codex').fill('Use the existing theme.');
   await page.getByRole('button', { name: 'Send update', exact: true }).click();
   await page.getByText('Use the existing theme.', { exact: true }).waitFor();

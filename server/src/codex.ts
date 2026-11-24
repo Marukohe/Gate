@@ -163,6 +163,14 @@ export class CodexService extends EventEmitter {
     const path = sessionFilePath(thread.cwd, filePath);
     return { path, data: await rpc.readFile(path) };
   }
+  async shell(serverId: string, threadId: string, command: string) {
+    const rpc = await this.connection(this.entry(serverId));
+    const { thread } = await rpc.request('thread/read', { threadId });
+    const cwd = sessionFromThread(thread).cwd;
+    if (!cwd.startsWith('/') || cwd.includes('\0')) throw new Error('Session working directory is unavailable');
+    // Direct SSH execution: no turn, prompt, or command output is sent to the model.
+    return rpc.shell(cwd, command);
+  }
   async create(serverId: string, cwd: string) {
     const entry = this.entry(serverId);
     const rpc = await this.connection(entry);

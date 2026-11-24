@@ -1,7 +1,7 @@
 # Gate
 
 Gate is a simple Server → repository groups → Codex sessions panel. Keep it simple.
-The only execution backend is Codex's native shared app-server daemon, reached through SSH Unix socket forwarding.
+All AI conversations use Codex's native shared app-server daemon, reached through SSH Unix socket forwarding.
 Do not add task/project workflows, a Gate remote runtime, transcript scanners, hook observers, or per-message CLI execution.
 
 ## Architecture
@@ -22,6 +22,9 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
   stay with the conversation; return/next attention navigation shares the same row. Directory and theme controls are on demand.
 - Codex owns sessions, history, approvals, and execution. Gate stores SSH settings and per-server display preferences.
 - Opening a session subscribes to the existing native thread. Sending messages uses `turn/start` or `turn/steer`.
+- Inputs prefixed with `!` run a non-interactive shell command over the existing SSH connection in native thread cwd.
+  They never start/steer a model turn. Output and exit status stay in per-session browser memory, outside Codex history.
+  Commands have a 60-second wait limit and bounded output; uncertain execution is never automatically replayed.
 - Local Markdown file/image URLs use a session-scoped HTTP endpoint and SFTP over the existing SSH connection.
   Resolve relative paths against native thread cwd; file contents must never execute on Gate's origin.
 - Scrolling upward near the chat top loads one native history page at a time. Prepending anchors the visible message

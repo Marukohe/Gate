@@ -90,6 +90,10 @@ export function routes(db: Database, codex: CodexService) {
       req.body.model === undefined ? undefined : text(req.body.model, 'model', 200),
       req.body.effort === undefined ? undefined : text(req.body.effort, 'reasoning effort', 50)));
   });
+  router.post('/servers/:id/sessions/:thread/shell', async (req, res) => {
+    const command = text(req.body.command, 'shell command', 32_000);
+    res.json(await codex.shell(req.params.id, req.params.thread, command));
+  });
   router.post('/servers/:id/sessions/:thread/rename', async (req, res) => {
     await codex.rename(req.params.id, req.params.thread, text(req.body.name, 'session name', 1000));
     res.json({ renamed: true });

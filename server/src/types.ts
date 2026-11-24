@@ -20,6 +20,10 @@ export interface MonitorServer {
 export interface Item {
   id: string; kind: 'user' | 'assistant' | 'tool' | 'notice'; text: string; title?: string; status?: string;
 }
+export interface ShellResult {
+  stdout: string; stderr: string; exitCode: number | null; signal?: string;
+  timedOut: boolean; truncated: boolean; error?: string;
+}
 export interface Question { id: string; text: string; options: string[]; secret: boolean }
 export interface Request {
   id: string; threadId: string; turnId?: string; method: string; title: string; detail: string;

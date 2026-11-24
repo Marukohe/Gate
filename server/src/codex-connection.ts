@@ -5,6 +5,7 @@ import { posix } from 'node:path';
 import { Client, type ClientChannel } from 'ssh2';
 import WebSocket from 'ws';
 import { readRemoteFile } from './session-files.js';
+import type { ShellResult } from './types.js';
 
 export interface ConnectionSettings {
   host: string; port: number; username: string; authType: 'password' | 'privateKey';
@@ -15,6 +16,55 @@ export interface RpcMessage {
   result?: any; error?: { code: number; message: string; data?: unknown };
 }
 export const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
+
+export function shellCommand(cwd: string, command: string) {
+  // Group the whole command so a failed cd cannot run a later pipeline/list in the wrong directory.
+  return `"$SHELL" -lc ${quote(`cd -- ${quote(cwd)} && (\n${command}\n)`)}`;
+}
+
+export function runShell(ssh: Client, cwd: string, command: string, timeout = 60_000): Promise<ShellResult> {
+  return new Promise((resolve) => {
+    let channel: ClientChannel | undefined;
+    let settled = false;
+    let remaining = 128_000;
+    const result: ShellResult = { stdout: '', stderr: '', exitCode: null, timedOut: false, truncated: false };
+    const finish = (error?: string) => {
+      if (settled) return;
+      settled = true; clearTimeout(timer); ssh.off('close', lost);
+      if (error) result.error = error;
+      if (error || result.timedOut) {
+        // Only signal this command's channel, never the shared daemon or another session.
+        try { channel?.signal('TERM'); } catch { /* The connection may already be closed. */ }
+        channel?.close();
+      }
+      resolve(result);
+    };
+    const lost = () => finish('SSH connection lost. The command may still be running; check before running it again.');
+    const timer = setTimeout(() => { result.timedOut = true; finish(); }, timeout);
+    ssh.once('close', lost);
+    ssh.exec(shellCommand(cwd, command), (error, stream) => {
+      if (error) { finish(error.message); return; }
+      channel = stream;
+      if (settled) { try { stream.signal('TERM'); } catch { /* Closed during setup. */ } stream.close(); return; }
+      const append = (target: 'stdout' | 'stderr', chunk: string) => {
+        if (settled) return;
+        result[target] += chunk.slice(0, remaining);
+        if (chunk.length > remaining) result.truncated = true;
+        remaining = Math.max(0, remaining - chunk.length);
+      };
+      stream.setEncoding('utf8'); stream.stderr.setEncoding('utf8');
+      stream.on('data', (chunk: string) => append('stdout', chunk));
+      stream.stderr.on('data', (chunk: string) => append('stderr', chunk));
+      stream.on('error', (error: Error) => finish(`${error.message}. Check the command before running it again.`));
+      stream.on('exit', (code: number | null, signal?: string) => {
+        result.exitCode = typeof code === 'number' ? code : null;
+        if (signal) result.signal = signal;
+      });
+      stream.on('close', () => finish());
+      stream.end(); // One-shot commands have no interactive stdin or PTY.
+    });
+  });
+}
 
 export function projectPathsCommand(directories: string[]) {
   // Common Git directories identify linked worktrees without merging unrelated clones by name or URL.
@@ -35,7 +85,8 @@ export class CodexRpc extends EventEmitter {
     timer: ReturnType<typeof setTimeout> }>();
   constructor(private socket: WebSocket, private timeout = 30_000,
     readonly projectPaths: (directories: string[]) => Promise<string[]> = async (directories) => directories,
-    readonly readFile: (path: string) => Promise<Buffer> = async () => { throw new Error('File access unavailable'); }) {
+    readonly readFile: (path: string) => Promise<Buffer> = async () => { throw new Error('File access unavailable'); },
+    readonly shell: (cwd: string, command: string) => Promise<ShellResult> = async () => { throw new Error('Shell unavailable'); }) {
     super();
     socket.on('message', (data) => {
       let message: RpcMessage;
@@ -154,7 +205,7 @@ export async function connectCodex(settings: ConnectionSettings, signal: AbortSi
       const output = await exec(ssh, `sh -c ${quote(projectPathsCommand(directories))}`);
       const paths = output.split('\0');
       return directories.map((directory, i) => paths[i]?.startsWith('/') ? paths[i] : directory);
-    }, (path) => readRemoteFile(ssh, path));
+    }, (path) => readRemoteFile(ssh, path), (cwd, command) => runShell(ssh, cwd, command));
     ssh.once('close', () => rpc.close());
     rpc.once('disconnected', () => ssh.end());
     await new Promise<void>((resolve, reject) => {
