@@ -7,6 +7,7 @@ import type { Server } from '../types.js';
 const server: Server = { id: 'server', name: 'Local', host: 'localhost', port: 22, username: 'test', authType: 'password', password: 'secret', createdAt: 1 };
 const native = { id: 'native', cwd: '/repo', name: 'Work', preview: 'First message', updatedAt: 1700000000,
   status: { type: 'active', activeFlags: [] }, canAcceptDirectInput: true };
+const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
 let peer: EventEmitter & { shell: ReturnType<typeof vi.fn>; readFile: ReturnType<typeof vi.fn>; projectPaths: ReturnType<typeof vi.fn>; request: ReturnType<typeof vi.fn>; send: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
 let service: CodexService;
 let connect: ReturnType<typeof vi.fn>;
@@ -58,6 +59,32 @@ it('opens the existing thread once and reads paginated native history', async ()
   expect(a).toMatchObject({ session: { id: 'native' }, items: [{ id: 'message', text: 'Working' }], turnId: 'turn', nextCursor: 'older' });
   expect(peer.request.mock.calls.filter(([m]) => m === 'thread/resume')).toHaveLength(1);
   expect(peer.request.mock.calls.some(([m]) => m === 'turn/start')).toBe(false);
+});
+
+it('sends images through native start and steer, including an image-only message', async () => {
+  await service.input(server.id, 'native', 'Check this', undefined, 'model-two', 'high', [image]);
+  expect(peer.request).toHaveBeenLastCalledWith('turn/start', { threadId: 'native', model: 'model-two', effort: 'high',
+    input: [{ type: 'text', text: 'Check this' }, { type: 'image', url: image }] });
+  await service.input(server.id, 'native', '', 'turn', undefined, undefined, [image]);
+  expect(peer.request).toHaveBeenLastCalledWith('turn/steer', { threadId: 'native', expectedTurnId: 'turn', input: [{ type: 'image', url: image }] });
+  peer.request.mockClear();
+  await expect(service.input(server.id, 'native', '')).rejects.toThrow('message or attach');
+  await expect(service.input(server.id, 'native', '!pwd', undefined, undefined, undefined, [image])).rejects.toThrow('Remove image');
+  await expect(service.input(server.id, 'native', 'Test', undefined, undefined, undefined, ['file:///tmp/x.png'])).rejects.toThrow('Use PNG');
+  expect(peer.request).not.toHaveBeenCalled(); expect(peer.shell).not.toHaveBeenCalled();
+});
+
+it('preserves native image URLs and remote local image paths in history and live events', async () => {
+  const item = { type: 'userMessage', id: 'with-images', content: [
+    { type: 'text', text: 'Screenshots' }, { type: 'image', url: image }, { type: 'localImage', path: '/remote/a.png' },
+  ] };
+  const expected = { id: 'with-images', kind: 'user', text: 'Screenshots', images: [image, '/remote/a.png'] };
+  expect(itemFromCodex(item)).toEqual(expected);
+  expect(itemFromCodex({ ...item, content: [{ type: 'image', fileId: 'unavailable' }] })?.text).toBe('[image]');
+  await service.detail(server.id, 'native');
+  const events: any[] = []; service.on('event', event => events.push(event));
+  peer.emit('event', { method: 'item/completed', params: { threadId: 'native', item } });
+  expect(events).toContainEqual({ serverId: server.id, threadId: 'native', type: 'item', item: expected });
 });
 
 it('loads the native model catalog across pages and sends model slugs only on new turns', async () => {

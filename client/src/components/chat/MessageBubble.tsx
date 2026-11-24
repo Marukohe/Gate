@@ -3,6 +3,7 @@ import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from './CodeBlock';
 import { ScrollableTable } from './ScrollableTable';
+import { ChatImage } from './ChatImage';
 import type { Item } from '../../../../server/src/types';
 import { messageUrl, SessionFileContext } from '@/lib/message-url';
 
@@ -29,11 +30,17 @@ export const MessageBubble = memo(function MessageBubble({ item }: { item: Item 
   if (item.kind === 'notice') return <p data-message-id={item.id} className="my-3 text-sm text-muted-foreground">{item.text}</p>;
   return <div data-message-id={item.id} className={`my-5 flex ${item.kind === 'user' ? 'justify-end' : 'justify-start'}`}>
     <div className={`min-w-0 max-w-full rounded-xl px-4 py-3 text-sm ${item.kind === 'user' ? 'bg-muted sm:max-w-[85%]' : 'w-full'}`}>
-      {item.kind === 'user' ? <p className="whitespace-pre-wrap break-words">{item.text}</p> : <div className="markdown-prose">
+      {item.kind === 'user' ? <>
+        {item.text && <p className="whitespace-pre-wrap break-words">{item.text}</p>}
+        {!!item.images?.length && <div className={`flex flex-wrap gap-2 ${item.text ? 'mt-3' : ''}`}>
+          {item.images.map((src, index) => <ChatImage key={`${index}:${src}`} src={messageUrl(src, fileEndpoint)} index={index} />)}
+        </div>}
+      </> : <div className="markdown-prose">
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}
           urlTransform={(url) => messageUrl(url, fileEndpoint)}>{item.text}</ReactMarkdown>
       </div>}
     </div>
   </div>;
 }, ({ item: before }, { item: after }) => before.id === after.id && before.kind === after.kind &&
-  before.text === after.text && before.title === after.title && before.status === after.status);
+  before.text === after.text && before.title === after.title && before.status === after.status &&
+  before.images?.length === after.images?.length && (before.images ?? []).every((src, index) => src === after.images?.[index]));

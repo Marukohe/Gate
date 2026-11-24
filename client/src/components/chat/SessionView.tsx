@@ -1,12 +1,14 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Popover } from 'radix-ui';
-import { ArrowUp, ChevronDown, LoaderCircle, Moon, Pencil, Square, Sun, Terminal } from 'lucide-react';
+import { ArrowUp, ChevronDown, ImagePlus, LoaderCircle, Moon, Pencil, Square, Sun, Terminal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { api, post } from '@/lib/api';
+import { readImages } from '@/lib/image-attachments';
+import { IMAGE_TYPES } from '../../../../server/src/images';
 import { useEvents } from '@/hooks/use-events';
 import { MessageBubble } from './MessageBubble';
 import { ShellOutput } from './ShellOutput';
@@ -30,7 +32,7 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
   const key = sessionKey(serverId, threadId);
   const saved = useSessionViewStore((state) => state.views[key] ?? emptyView);
   const update = useSessionViewStore((state) => state.update);
-  const { text, model, effort, busy, shellRuns } = saved;
+  const { text, model, effort, busy, shellRuns, images } = saved;
   const isShell = text.trimStart().startsWith('!');
   const command = isShell ? text.trimStart().slice(1).trim() : '';
   const setText = (text: string) => update(key, { text });
@@ -54,6 +56,7 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
   const [modelRevision, setModelRevision] = useState(0);
   const [loadingModels, setLoadingModels] = useState(true);
   const viewport = useRef<HTMLDivElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const lastScrollTop = useRef(0);
   const olderPending = useRef(false);
   const prepend = useRef<{ anchor?: HTMLElement; offset: number; top: number; height: number } | null>(null);
@@ -135,9 +138,17 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
     else return;
     lastScrollTop.current = node.scrollTop;
   }, [detail, shellRuns]);
+  async function attach(files: File[]) {
+    if (!files.length || useSessionViewStore.getState().views[key]?.busy || offline || !detail?.session.canInput) return;
+    setBusy(true); setError('');
+    try { update(key, { images: [...images, ...await readImages(files, images)] }); }
+    catch (e) { if (alive.current) setError((e as Error).message); }
+    finally { setBusy(false); }
+  }
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!text.trim() || (isShell && !command) || useSessionViewStore.getState().views[key]?.busy) return;
+    if ((!text.trim() && !images.length) || (isShell && (!command || images.length)) ||
+      useSessionViewStore.getState().views[key]?.busy || offline || !detail?.session.canInput) return;
     setBusy(true); setError('');
     if (isShell) {
       const run = { id: `shell-${Date.now()}-${Math.random().toString(36).slice(2)}`, command, afterItemId: detail?.items.at(-1)?.id };
@@ -149,9 +160,10 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
       return;
     }
     try {
-      await post(`${base}/input`, { text, turnId: detail?.turnId, ...(!detail?.turnId && model ? { model } : {}),
+      await post(`${base}/input`, { text, ...(images.length ? { images: images.map((image) => image.url) } : {}),
+        turnId: detail?.turnId, ...(!detail?.turnId && model ? { model } : {}),
         ...(!detail?.turnId && effortOverride ? { effort: effortOverride } : {}) });
-      setText(''); setModel(''); setEffort(''); follow.current = true; await refresh();
+      update(key, { text: '', images: [], model: '', effort: '' }); follow.current = true; await refresh();
     }
     catch (e) { setError((e as Error).message); await refresh(); } finally { setBusy(false); }
   }
@@ -270,8 +282,28 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
         {modelError ? <span role="status" className="min-w-0 break-words">Models unavailable. {modelError} <button type="button" className="underline" onClick={() => setModelRevision((value) => value + 1)}>Retry models</button></span>
           : detail?.turnId ? <span>Change settings between turns</span> : model || selectedEffort ? <span>Applies to your next message</span> : null}
       </div>}
-      <form onSubmit={send} className="flex items-end gap-2">
+      <form onSubmit={send} className="space-y-2"
+        onDragOver={(event) => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
+        onDrop={(event) => { event.preventDefault(); void attach(Array.from(event.dataTransfer.files)); }}>
+        {!!images.length && <div aria-label="Image attachments" className="flex gap-2 overflow-x-auto py-1">
+          {images.map((image) => <div key={image.id} className="relative shrink-0 rounded-lg border bg-muted/30 p-1" title={image.name}>
+            <img src={image.url} alt={image.name} className="size-16 rounded object-contain" />
+            <button type="button" aria-label={`Remove ${image.name}`} disabled={busy}
+              onClick={() => update(key, { images: images.filter((entry) => entry.id !== image.id) })}
+              className="absolute right-0 top-0 rounded-full border bg-background p-0.5 shadow-sm focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"><X className="size-3.5" /></button>
+          </div>)}
+        </div>}
+        {isShell && !!images.length && <p role="status" className="text-xs text-muted-foreground">Remove image attachments before running a shell command.</p>}
+        <div className="flex items-end gap-2">
+        <input ref={fileInput} type="file" aria-label="Image files" accept={IMAGE_TYPES.join(',')} multiple hidden
+          onChange={(event) => { void attach(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
+        <Button type="button" size="icon-lg" variant="ghost" aria-label="Attach images" title="Attach images (or paste / drop)"
+          disabled={busy || offline || !detail?.session.canInput || isShell} onClick={() => fileInput.current?.click()}><ImagePlus className="size-5" /></Button>
         <Textarea aria-label="Message Codex" placeholder="Send a message…" value={text}
+          onPaste={(event) => {
+            const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith('image/'));
+            if (files.length) { event.preventDefault(); void attach(files); }
+          }}
           onChange={(e) => setText(e.target.value)} rows={1} className="max-h-32 min-h-10 min-w-0 flex-1 resize-none py-[9px] leading-5"
           onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
           onBlur={() => { composing.current = false; }}
@@ -282,7 +314,8 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
           }} />
         {!isShell && detail?.turnId && <Button type="button" size="icon-lg" variant="outline" aria-label="Stop current turn" disabled={busy || offline} onClick={() => void stop()}><Square className="size-4" /></Button>}
         <Button type="submit" size="icon-lg" aria-label={isShell ? 'Run shell command' : detail?.turnId ? 'Send update' : 'Send message'}
-          disabled={busy || offline || !detail?.session.canInput || (isShell ? !command : !text.trim())}>{isShell ? <Terminal /> : <ArrowUp />}</Button>
+          disabled={busy || offline || !detail?.session.canInput || (isShell ? !command || !!images.length : !text.trim() && !images.length)}>{isShell ? <Terminal /> : <ArrowUp />}</Button>
+        </div>
       </form>
     </div></div>
     <Dialog open={renaming} onOpenChange={(open) => { if (!savingName) setRenaming(open); }}>

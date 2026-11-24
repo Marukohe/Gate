@@ -85,10 +85,11 @@ export function routes(db: Database, codex: CodexService) {
     } catch (error) { res.status(400).type('text/plain').send(`Cannot open file. ${(error as Error).message}`); }
   });
   router.post('/servers/:id/sessions/:thread/input', async (req, res) => {
-    res.json(await codex.input(req.params.id, req.params.thread, text(req.body.text, 'message'),
+    const message = req.body.text === undefined || (typeof req.body.text === 'string' && !req.body.text.trim()) ? '' : text(req.body.text, 'message');
+    res.json(await codex.input(req.params.id, req.params.thread, message,
       req.body.turnId ? text(req.body.turnId, 'turn ID', 200) : undefined,
       req.body.model === undefined ? undefined : text(req.body.model, 'model', 200),
-      req.body.effort === undefined ? undefined : text(req.body.effort, 'reasoning effort', 50)));
+      req.body.effort === undefined ? undefined : text(req.body.effort, 'reasoning effort', 50), req.body.images));
   });
   router.post('/servers/:id/sessions/:thread/shell', async (req, res) => {
     const command = text(req.body.command, 'shell command', 32_000);

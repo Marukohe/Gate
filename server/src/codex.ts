@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { sessionFilePath } from './session-files.js';
 import { connectCodex, type CodexRpc, type RpcMessage } from './codex-connection.js';
 import { describeRequest, decision } from './codex-requests.js';
+import { imageInputs } from './images.js';
 import type { Server, Session, MonitorServer, Item, Request, SessionDetail, ServerEvent, ModelOption } from './types.js';
 
 const compact = (text: unknown, length = 200) => String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, length);
@@ -22,7 +23,13 @@ export function sessionFromThread(thread: any): Session {
 }
 export function itemFromCodex(item: any): Item | null {
   if (!item?.id || item.type === 'reasoning') return null;
-  if (item.type === 'userMessage') return { id: item.id, kind: 'user', text: (item.content ?? []).map((c: any) => c.text ?? `[${c.type}]`).join('\n') };
+  if (item.type === 'userMessage') {
+    const content = item.content ?? [];
+    const imageSource = (c: any) => c.type === 'image' ? c.url : c.type === 'localImage' ? c.path : undefined;
+    const images = content.map(imageSource).filter((src: unknown) => typeof src === 'string' && src);
+    return { id: item.id, kind: 'user', text: content.filter((c: any) => !imageSource(c))
+      .map((c: any) => c.text ?? `[${c.type}]`).join('\n'), ...(images.length ? { images } : {}) };
+  }
   if (item.type === 'agentMessage' || item.type === 'plan') return { id: item.id, kind: 'assistant', text: item.text ?? '' };
   if (item.type === 'commandExecution') return { id: item.id, kind: 'tool', title: compact(item.command), status: item.status,
     text: String(item.aggregatedOutput ?? '').slice(-32_000) };
@@ -196,8 +203,11 @@ export class CodexService extends EventEmitter {
     } while (cursor);
     return models;
   }
-  async input(serverId: string, threadId: string, text: string, turnId?: string, model?: string, effort?: string) {
+  async input(serverId: string, threadId: string, text: string, turnId?: string, model?: string, effort?: string, attachments?: unknown) {
+    const images = imageInputs(attachments);
+    if (!text.trim() && !images.length) throw new Error('Enter a message or attach an image.');
     if (text.trimStart().startsWith('!')) {
+      if (images.length) throw new Error('Remove image attachments before running a shell command.');
       const command = text.trimStart().slice(1).trim();
       if (!command || command.length > 32_000 || command.includes('\0')) throw new Error('Invalid shell command');
       // Older open pages still post to /input. Classify here before any native turn RPC.
@@ -222,7 +232,8 @@ export class CodexService extends EventEmitter {
     const entry = this.entry(serverId);
     const rpc = await this.subscribe(entry, threadId);
     // Writes are never replayed on reconnect; the native backend arbitrates concurrent clients.
-    return rpc.request(turnId ? 'turn/steer' : 'turn/start', { threadId, input: [{ type: 'text', text }],
+    const input = [...(text.trim() ? [{ type: 'text', text }] : []), ...images.map((url) => ({ type: 'image', url }))];
+    return rpc.request(turnId ? 'turn/steer' : 'turn/start', { threadId, input,
       ...(turnId ? { expectedTurnId: turnId } : {}), ...(model ? { model } : {}), ...(effort ? { effort } : {}) });
   }
   async rename(serverId: string, threadId: string, name: string) {

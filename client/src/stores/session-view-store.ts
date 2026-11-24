@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { SessionDetail, ShellResult } from '../../../server/src/types';
+import type { ImageAttachment } from '@/lib/image-attachments';
 
 export const sessionKey = (serverId: string, threadId: string) => JSON.stringify([serverId, threadId]);
 export interface ShellRun {
@@ -9,8 +10,9 @@ interface ViewState {
   text: string; model: string; effort: string; busy: boolean;
   detail: SessionDetail | null; scrollTop: number; follow: boolean;
   shellRuns: ShellRun[];
+  images: ImageAttachment[];
 }
-export const emptyView: ViewState = { text: '', model: '', effort: '', busy: false, detail: null, scrollTop: 0, follow: true, shellRuns: [] };
+export const emptyView: ViewState = { text: '', model: '', effort: '', busy: false, detail: null, scrollTop: 0, follow: true, shellRuns: [], images: [] };
 // In-memory only: preserve a visit without writing conversations or drafts into browser storage.
 export const useSessionViewStore = create<{
   views: Record<string, ViewState>; update: (key: string, patch: Partial<ViewState>) => void;

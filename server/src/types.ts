@@ -19,6 +19,7 @@ export interface MonitorServer {
 }
 export interface Item {
   id: string; kind: 'user' | 'assistant' | 'tool' | 'notice'; text: string; title?: string; status?: string;
+  images?: string[];
 }
 export interface ShellResult {
   stdout: string; stderr: string; exitCode: number | null; signal?: string;

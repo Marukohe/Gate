@@ -61,6 +61,11 @@ Use the same remote OS user and Codex configuration as your terminal.
   works for manual loading. If loading fails, click it to retry; scrolling does not keep retrying the failed request.
   Scrolling up pauses automatic following; scroll back down near the bottom to follow new output again.
   History loads in place; background refreshes preserve newer live output received during the request.
+- **Attach images:** click the image button beside the input, paste a screenshot, or drop images onto the composer.
+  Review thumbnails and remove attachments before sending; text is optional. Supports PNG, JPEG, WebP and GIF,
+  up to 4 images, 5 MB each and 10 MB total per message. Unsent attachments survive session switching in this tab;
+  page reload clears drafts. Sent images are part of native Codex history and can be clicked to enlarge.
+  Remove attachments before using a `!` shell command.
 - **Files and images:** local Markdown links open files from the session's server in a new tab, including line references
   such as `main.ts:42` or `main.ts#L42`. Relative paths use the session's working directory; local images display inline.
   Gate reads through the existing SSH connection (SFTP), up to 10 MB per file. Text up to 1 MB is previewed; other files download.

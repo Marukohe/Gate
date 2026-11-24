@@ -8,9 +8,10 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { createDb } from './db.js';
 import { CodexService } from './codex.js';
 import { routes } from './routes.js';
+import { INPUT_BODY_LIMIT } from './images.js';
 
 const app = express();
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: INPUT_BODY_LIMIT }));
 const dataDir = process.env.GATE_DATA_DIR || path.join(os.homedir(), '.gate');
 fs.mkdirSync(dataDir, { recursive: true });
 const db = createDb(path.join(dataDir, 'gate.db'));

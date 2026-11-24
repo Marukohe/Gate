@@ -22,6 +22,9 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
   stay with the conversation; return/next attention navigation shares the same row. Directory and theme controls are on demand.
 - Codex owns sessions, history, approvals, and execution. Gate stores SSH settings and per-server display preferences.
 - Opening a session subscribes to the existing native thread. Sending messages uses `turn/start` or `turn/steer`.
+- Image attachments use native `image` data URLs on the same start/steer path; text is optional. Validate formats,
+  count and decoded byte limits before any RPC. Draft images stay in per-session browser memory; Codex owns sent history.
+  Preserve native `image` URLs and `localImage` paths when rendering user messages. Shell commands reject attachments.
 - Inputs prefixed with `!` run a non-interactive shell command over the existing SSH connection in native thread cwd.
   Classify the prefix in backend input handling too; older open pages receive results through existing item events.
   They never start/steer a model turn. Output and exit status stay in per-session browser memory, outside Codex history.

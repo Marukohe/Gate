@@ -7,6 +7,10 @@ import { WebSocketServer } from 'ws';
 import { chromium } from 'playwright';
 import { createDb } from '../server/dist/db.js';
 import { routes } from '../server/dist/routes.js';
+import { INPUT_BODY_LIMIT } from '../server/dist/images.js';
+const imageFile = { name: '截图.png', mimeType: 'image/png',
+  buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64') };
+const imageUrl = 'data:image/png;base64,' + imageFile.buffer.toString('base64');
 const db = createDb(':memory:');
 
 // Isolated native-session fixtures: no SSH connections or real user conversations.
@@ -46,7 +50,7 @@ const historyRequests = [];
 const probeMessages = (prefix, count) => Array.from({ length: count }, (_, i) => ({ id: `${prefix}-${i}`, kind: 'assistant',
   text: `${prefix} message ${i}\n\nA paragraph to make this conversation scroll.` + (prefix === 'current' && i === 39
     ? '\n\n```ts\nconst answer = 42;\n```\n\n| Name | Value |\n| --- | --- |\n| answer | 42 |' + probeStream : '') }));
-const app = express(); app.use(express.json());
+const app = express(); app.use(express.json({ limit: INPUT_BODY_LIMIT }));
 const http = createServer(app);
 const wss = new WebSocketServer({ server: http, path: '/ws' });
 const emit = (event = {}) => {
@@ -90,7 +94,7 @@ app.post('/api/servers/:id/sessions/:thread/input', async (req, res) => {
   if (holdInput) await new Promise(resolve => { releaseInput = resolve; });
   if (req.body.model) detail.session.model = req.body.model;
   if (req.body.effort) detail.session.effort = req.body.effort;
-  detail.items.push({ id: `message-${writes.length}`, kind: 'user', text: req.body.text });
+  detail.items.push({ id: `message-${writes.length}`, kind: 'user', text: req.body.text, images: req.body.images });
   detail.turnId = 'turn-two'; detail.session.state = 'running'; res.json({}); emit();
 });
 app.post('/api/servers/:id/sessions/:thread/interrupt', (req, res) => {
@@ -481,6 +485,80 @@ try {
   await page.reload();
   await page.getByRole('button', { name: 'Earlier messages' }).click();
   await page.getByText('Earlier context.', { exact: true }).waitFor();
+  // Attachments are drafts scoped to a session, then become native user-message content.
+  const imageComposer = page.getByLabel('Message Codex');
+  const imageInput = page.getByLabel('Image files', { exact: true });
+  const previews = page.getByLabel('Image attachments', { exact: true });
+  await imageInput.setInputFiles(imageFile);
+  await previews.getByRole('img', { name: imageFile.name }).waitFor();
+  await page.waitForFunction(() => !document.querySelector('textarea').disabled);
+  const imageHash = await page.evaluate(() => location.hash);
+  await page.evaluate(hash => { location.hash = hash.replace(/\/gate$/, '/website'); }, imageHash);
+  await page.getByRole('heading', { name: 'website', exact: true }).waitFor();
+  assert.equal(await previews.count(), 0, 'Attachment drafts cannot leak to another session');
+  await page.evaluate(hash => { location.hash = hash; }, imageHash);
+  await previews.getByRole('img', { name: imageFile.name }).waitFor();
+  await page.waitForFunction(() => !document.querySelector('textarea').disabled);
+  await imageComposer.fill('!pwd');
+  assert.equal(await page.getByRole('button', { name: 'Run shell command', exact: true }).isDisabled(), true);
+  await page.getByText('Remove image attachments before running a shell command.', { exact: true }).waitFor();
+  await imageComposer.fill('Review this screenshot.');
+  for (const width of [1365, 390, 320]) { await page.setViewportSize({ width, height: 844 }); await bounded(); }
+  await shot('image-attachments-mobile');
+  await page.route('**/sessions/gate/input', route => route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: 'Image request rejected' }) }));
+  await page.getByRole('button', { name: 'Send message', exact: true }).click();
+  await page.getByRole('alert').getByText('Image request rejected').waitFor();
+  assert.equal(await previews.getByRole('img').count(), 1, 'A failed send retains image drafts');
+  assert.equal(await imageComposer.inputValue(), 'Review this screenshot.');
+  await page.unroute('**/sessions/gate/input');
+  await page.getByRole('button', { name: 'Send message', exact: true }).click();
+  await page.getByRole('button', { name: 'Stop current turn' }).waitFor();
+  assert.deepEqual(writes.at(-1).images, [imageUrl]);
+  assert.equal(writes.at(-1).text, 'Review this screenshot.');
+  assert.equal(await previews.count(), 0);
+  const sentImage = page.getByRole('img', { name: 'Attached image 1', exact: true }).first();
+  await sentImage.waitFor();
+  await sentImage.scrollIntoViewIfNeeded();
+  await page.waitForFunction(() => [...document.querySelectorAll('img[alt="Attached image 1"]')].some(image => image.complete && image.naturalWidth > 0));
+  assert.ok(await sentImage.evaluate(image => image.complete && image.naturalWidth > 0));
+  await page.getByRole('button', { name: 'Preview image 1', exact: true }).click();
+  await page.getByRole('dialog').getByRole('img').waitFor();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await sentImage.evaluate(image => { window.attachmentNode = image; });
+  await page.waitForResponse(response => response.url().endsWith('/sessions/gate'));
+  assert.equal(await sentImage.evaluate(image => image === window.attachmentNode), true, 'Polling must not remount images');
+  // Clipboard and drop work without navigating the page or inserting file paths as text.
+  for (const type of ['paste', 'drop']) {
+    await imageComposer.evaluate((input, { type, bytes }) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([Uint8Array.from(bytes)], `${type}.png`, { type: 'image/png' }));
+      input.dispatchEvent(type === 'paste' ? new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true })
+        : new DragEvent('drop', { dataTransfer: transfer, bubbles: true, cancelable: true }));
+    }, { type, bytes: [...imageFile.buffer] });
+    await previews.getByRole('img', { name: `${type}.png` }).waitFor();
+    await page.waitForFunction(() => !document.querySelector('textarea').disabled);
+  }
+  await page.getByRole('button', { name: 'Remove drop.png', exact: true }).click();
+  assert.equal(await previews.getByRole('img').count(), 1);
+  await imageInput.setInputFiles(Array(4).fill(imageFile));
+  await page.getByRole('alert').getByText('Attach up to 4 images.').waitFor();
+  assert.equal(await previews.getByRole('img').count(), 1);
+  await imageInput.setInputFiles({ name: 'invalid.png', mimeType: 'image/png', buffer: Buffer.from('broken') });
+  await page.getByRole('alert').getByText('Cannot open invalid.png as an image.').waitFor();
+  await imageInput.setInputFiles({ name: 'large.png', mimeType: 'image/png', buffer: Buffer.alloc(5 * 1024 * 1024 + 1) });
+  await page.getByRole('alert').getByText('Each image must be 5 MB or smaller.').waitFor();
+  await page.getByRole('button', { name: 'Send update', exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector('textarea').disabled);
+  assert.deepEqual(writes.at(-1).images, [imageUrl]);
+  assert.equal(writes.at(-1).text, '', 'Images can be sent without text');
+  assert.equal(writes.at(-1).turnId, 'turn-two');
+  await page.getByRole('button', { name: 'Stop current turn' }).click();
+  await page.getByRole('button', { name: 'Send message', exact: true }).waitFor();
+  await page.reload();
+  await page.getByRole('button', { name: 'Attach images', exact: true }).waitFor();
+  assert.equal(await page.getByRole('img', { name: 'Attached image 1', exact: true }).count(), 2, 'Native history restores sent attachments');
+  await page.getByRole('button', { name: 'Earlier messages' }).click();
+  await page.getByText('Earlier context.', { exact: true }).waitFor();
   const reasoning = page.getByLabel('Reasoning effort', { exact: true });
   await reasoning.selectOption('high');
   await page.getByLabel('Model', { exact: true }).selectOption('fixture-other');
@@ -622,6 +700,9 @@ try {
   assert.equal(await reasoning.getByRole('option', { selected: true }).textContent(), 'Current: medium');
   const writesBeforeSwitch = writes.length;
   holdInput = true;
+  await imageInput.setInputFiles(imageFile);
+  await previews.getByRole('img').waitFor();
+  await page.waitForFunction(() => !document.querySelector('textarea').disabled);
   await page.getByLabel('Message Codex').fill('Pending switch check');
   await page.getByRole('button', { name: 'Send message', exact: true }).click();
   await attentionButton.click();
@@ -634,6 +715,8 @@ try {
   await page.getByRole('button', { name: 'Stop current turn', exact: true }).waitFor();
   assert.equal(await page.getByLabel('Message Codex').inputValue(), '', 'Confirmed send clears the original draft');
   assert.equal(writes.slice(writesBeforeSwitch).filter(w => w.type === 'input').length, 1, 'Switching must not replay pending sends');
+  assert.deepEqual(writes.at(-1).images, [imageUrl]);
+  assert.equal(await previews.count(), 0, 'Confirmed send clears attachments even after switching away and back');
   await page.getByRole('button', { name: 'Stop current turn', exact: true }).click();
   await page.getByRole('button', { name: 'Send message', exact: true }).waitFor();
   modelsUnavailable = true;

@@ -4,6 +4,7 @@ import type { Server as HttpServer } from 'node:http';
 import { createDb } from '../db.js';
 import { routes } from '../routes.js';
 import type { CodexService } from '../codex.js';
+import { INPUT_BODY_LIMIT } from '../images.js';
 
 let db: ReturnType<typeof createDb>;
 let http: HttpServer;
@@ -11,7 +12,7 @@ let origin: string;
 const codex = { sync: vi.fn(), monitor: vi.fn(), create: vi.fn(), input: vi.fn(), rename: vi.fn(), models: vi.fn(), file: vi.fn(), shell: vi.fn() };
 beforeEach(async () => {
   vi.resetAllMocks(); db = createDb(':memory:');
-  const app = express(); app.use(express.json()); app.use(routes(db, codex as unknown as CodexService));
+  const app = express(); app.use(express.json({ limit: INPUT_BODY_LIMIT })); app.use(routes(db, codex as unknown as CodexService));
   app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => res.status(400).json({ error: error.message }));
   http = app.listen(0, '127.0.0.1'); await new Promise<void>((resolve) => http.once('listening', resolve));
   const address = http.address(); origin = `http://127.0.0.1:${typeof address === 'object' && address?.port}`;
@@ -42,14 +43,24 @@ it('lists server models and validates optional model overrides before input', as
   }
   expect(codex.input).not.toHaveBeenCalled();
   expect((await send(path, { text: 'Work', model: 'model-two' })).status).toBe(200);
-  expect(codex.input).toHaveBeenCalledWith('server', 'native', 'Work', undefined, 'model-two', undefined);
+  expect(codex.input).toHaveBeenCalledWith('server', 'native', 'Work', undefined, 'model-two', undefined, undefined);
   codex.input.mockClear();
   for (const effort of ['', ' ', 42, 'bad\0effort', 'x'.repeat(51)]) {
     expect((await send(path, { text: 'Work', effort })).status).toBe(400);
   }
   expect(codex.input).not.toHaveBeenCalled();
   expect((await send(path, { text: 'Work', effort: 'high' })).status).toBe(200);
-  expect(codex.input).toHaveBeenCalledWith('server', 'native', 'Work', undefined, undefined, 'high');
+  expect(codex.input).toHaveBeenCalledWith('server', 'native', 'Work', undefined, undefined, 'high', undefined);
+});
+
+it('accepts image-only input above the old JSON body limit and retains text validation', async () => {
+  const path = '/servers/server/sessions/native/input';
+  const images = ['data:image/png;base64,' + Buffer.alloc(1024 * 1024).toString('base64')];
+  expect((await send(path, { images })).status).toBe(200);
+  expect(codex.input).toHaveBeenCalledWith('server', 'native', '', undefined, undefined, undefined, images);
+  for (const text of [42, null, 'bad\0text', 'x'.repeat(200001)]) expect((await send(path, { text, images: [] })).status).toBe(400);
+  codex.input.mockRejectedValueOnce(new Error('Invalid image data.'));
+  expect(await (await send(path, { text: '', images: ['bad'] })).json()).toEqual({ error: 'Invalid image data.' });
 });
 
 it('preserves a saved password on edit without exposing it in any settings response', async () => {
