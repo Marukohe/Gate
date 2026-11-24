@@ -175,3 +175,32 @@ it('executes shell commands using native cwd without starting or steering an LLM
   await expect(service.shell(server.id, 'native', 'pwd')).rejects.toThrow('working directory');
   expect(peer.shell).toHaveBeenCalledOnce();
 });
+
+it('intercepts bang input from older pages before any model turn and publishes shell output', async () => {
+  const events: any[] = []; service.on('event', (event) => events.push(structuredClone(event)));
+  const result = await service.input(server.id, 'native', '  !pwd', 'turn');
+  expect(result).toMatchObject({ shell: { stdout: 'done', exitCode: 0 } });
+  expect(peer.shell).toHaveBeenCalledWith('/repo', 'pwd');
+  expect(peer.request.mock.calls).toEqual([['thread/read', { threadId: 'native' }]]);
+  expect(events).toMatchObject([
+    { serverId: 'server', threadId: 'native', type: 'item', item: { kind: 'tool', title: '$ pwd', status: 'Running…' } },
+    { serverId: 'server', threadId: 'native', type: 'item', item: { kind: 'tool', text: 'done', status: 'Exit 0' } },
+  ]);
+  expect(events[0].item.id).toBe(events[1].item.id);
+  await service.input(server.id, 'native', '!pwd', 'turn', 'old-model-selection', 'high');
+  expect(peer.request.mock.calls.every(([method]) => method === 'thread/read')).toBe(true);
+  peer.request.mockClear(); peer.shell.mockClear();
+  for (const text of ['!', '!  ', '!' + 'x'.repeat(32001), '!bad\0command']) {
+    await expect(service.input(server.id, 'native', text)).rejects.toThrow('Invalid shell command');
+  }
+  expect(peer.request).not.toHaveBeenCalled(); expect(peer.shell).not.toHaveBeenCalled();
+});
+
+it('never falls back to model input if a bang command fails', async () => {
+  peer.shell.mockRejectedValueOnce(new Error('SSH unavailable'));
+  const events: any[] = []; service.on('event', (event) => events.push(event));
+  await expect(service.input(server.id, 'native', '!pwd')).rejects.toThrow('SSH unavailable');
+  expect(peer.request.mock.calls).toEqual([['thread/read', { threadId: 'native' }]]);
+  expect(events.at(-1)).toMatchObject({ type: 'item', item: { status: 'Unconfirmed', text: expect.stringContaining('SSH unavailable') } });
+  expect(peer.shell).toHaveBeenCalledOnce();
+});

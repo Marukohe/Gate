@@ -33,6 +33,7 @@
   Approval IDs belong to their connection. Do not replay inputs or decisions after timeout/disconnection.
 - `!` commands use the owning session's native cwd and existing SSH connection, never model input. Group the command
   after a checked `cd`, close interactive stdin, bound output/time, and retain pending/results across navigation without replay.
+  Enforce the prefix at the backend input boundary, not only in the composer: older open pages still use normal chat input.
 - Subscribe to a native thread before reading its paginated history; sharing a socket backend alone is not a subscription.
 - Monitoring uses native thread status and must not start agent turns. Mark retained snapshots unknown on connection loss.
 - Rename sessions through `thread/name/set` and handle `thread/name/updated`; keep native names shared across clients.

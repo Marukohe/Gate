@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import { sessionFilePath } from './session-files.js';
 import { connectCodex, type CodexRpc, type RpcMessage } from './codex-connection.js';
 import { describeRequest, decision } from './codex-requests.js';
@@ -196,6 +197,27 @@ export class CodexService extends EventEmitter {
     return models;
   }
   async input(serverId: string, threadId: string, text: string, turnId?: string, model?: string, effort?: string) {
+    if (text.trimStart().startsWith('!')) {
+      const command = text.trimStart().slice(1).trim();
+      if (!command || command.length > 32_000 || command.includes('\0')) throw new Error('Invalid shell command');
+      // Older open pages still post to /input. Classify here before any native turn RPC.
+      const item: Item = { id: `shell-${randomUUID()}`, kind: 'tool', title: `$ ${command}`, text: '', status: 'Running…' };
+      const publish = () => this.publish({ serverId, threadId, type: 'item', item: { ...item } });
+      publish();
+      try {
+        const result = await this.shell(serverId, threadId, command);
+        item.status = result.error ? 'Unconfirmed' : result.timedOut ? 'Timed out' : result.signal ? `Signal ${result.signal}`
+          : result.exitCode === null ? 'Exit unknown' : `Exit ${result.exitCode}`;
+        item.text = [result.stdout, result.stderr && `Standard error:\n${result.stderr}`, result.error,
+          result.timedOut && 'Stopped waiting after 60 seconds and requested termination. Check before running again.',
+          result.truncated && 'Output truncated after 128,000 characters.'].filter(Boolean).join('\n') || 'No output.';
+        publish();
+        return { shell: result };
+      } catch (error) {
+        item.status = 'Unconfirmed'; item.text = `${(error as Error).message}. Check the command before running it again.`;
+        publish(); throw error;
+      }
+    }
     if (turnId && (model || effort)) throw new Error('Models and reasoning effort can only be changed between turns');
     const entry = this.entry(serverId);
     const rpc = await this.subscribe(entry, threadId);

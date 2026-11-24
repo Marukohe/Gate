@@ -23,6 +23,7 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - Codex owns sessions, history, approvals, and execution. Gate stores SSH settings and per-server display preferences.
 - Opening a session subscribes to the existing native thread. Sending messages uses `turn/start` or `turn/steer`.
 - Inputs prefixed with `!` run a non-interactive shell command over the existing SSH connection in native thread cwd.
+  Classify the prefix in backend input handling too; older open pages receive results through existing item events.
   They never start/steer a model turn. Output and exit status stay in per-session browser memory, outside Codex history.
   Commands have a 60-second wait limit and bounded output; uncertain execution is never automatically replayed.
 - Local Markdown file/image URLs use a session-scoped HTTP endpoint and SFTP over the existing SSH connection.
