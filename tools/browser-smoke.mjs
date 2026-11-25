@@ -149,10 +149,25 @@ async function bounded() {
     assert.ok(box && box.x >= 0 && box.x + box.width <= page.viewportSize().width && box.y + box.height <= page.viewportSize().height);
   }
 }
+async function showSidebar() {
+  if (!await page.getByRole('complementary', { name: 'Sessions', exact: true }).isVisible()) {
+    await page.getByRole('button', { name: 'Open sidebar', exact: true }).click();
+  }
+}
 try {
   await page.goto(`http://127.0.0.1:${http.address().port}`);
   await page.getByRole('button', { name: /^api Needs you/ }).waitFor();
-  assert.equal(await page.getByRole('navigation').count(), 0);
+  assert.equal(await page.getByRole('navigation', { name: 'Server sessions' }).count(), 1);
+  const sidebar = page.getByRole('complementary', { name: 'Sessions', exact: true });
+  const searchNode = await page.getByLabel('Search sessions').elementHandle();
+  await page.getByRole('button', { name: 'Close sidebar', exact: true }).click();
+  assert.equal(await sidebar.isVisible(), false);
+  assert.equal(await searchNode.evaluate(node => node.isConnected), true, 'Collapsing keeps the monitor mounted');
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Open sidebar');
+  await page.reload();
+  assert.equal(await sidebar.isVisible(), false, 'Desktop sidebar preference survives reload');
+  await showSidebar();
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Close sidebar');
   const runningProject = page.getByRole('group', { name: 'Project /home/alex/projects/website', exact: true });
   const collapseRunning = runningProject.getByRole('button', { name: 'Collapse sessions in website' });
   assert.equal(await collapseRunning.isEnabled(), true);
@@ -224,8 +239,23 @@ try {
   await page.getByRole('button', { name: /^api Running/ }).waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: /^Validate migrations Running/ }).click();
   await page.getByText('The panel now groups sessions by server.').waitFor();
+  assert.equal(await sidebar.isVisible(), false, 'Picking a session closes the mobile sidebar');
+  await page.getByLabel('Message', { exact: true }).fill('Keep this sidebar draft');
+  const chatNode = await page.getByRole('region', { name: 'Conversation', exact: true }).elementHandle();
+  await page.setViewportSize({ width: 1365, height: 844 });
+  await sidebar.waitFor();
+  assert.equal(await page.evaluate(() => localStorage.getItem('gate-sidebar-open')), 'true', 'Mobile navigation does not change the desktop preference');
+  assert.equal(await page.getByRole('button', { name: /^Validate migrations Running/ }).getAttribute('aria-current'), 'page');
+  await page.getByRole('button', { name: 'Close sidebar', exact: true }).click();
+  assert.equal(await chatNode.evaluate(node => node.isConnected), true, 'Collapsing must not remount chat');
+  assert.equal(await page.getByLabel('Message', { exact: true }).inputValue(), 'Keep this sidebar draft');
+  await showSidebar();
+  assert.equal(await page.getByRole('button', { name: 'Running', exact: true }).getAttribute('aria-pressed'), 'true');
+  await page.getByLabel('Message', { exact: true }).fill('');
+  await shot('sidebar-conversation');
   for (const width of [1365, 390, 320]) {
     await page.setViewportSize({ width, height: 844 });
+    await page.locator('header').waitFor();
     const header = await page.locator('header').boundingBox();
     const conversation = await page.getByRole('region', { name: 'Conversation', exact: true }).boundingBox();
     assert.ok(header.height <= 52, 'Chat header should occupy one compact row');
@@ -237,7 +267,7 @@ try {
   await headerRunning.click();
   assert.equal(await page.getByRole('button', { name: /^Validate migrations Codex Current/ }).isDisabled(), true);
   await page.getByRole('button', { name: 'Close session list', exact: true }).click();
-  await page.getByRole('button', { name: 'All sessions', exact: true }).click();
+  await showSidebar();
   await page.getByRole('button', { name: /^Validate migrations Running/ }).waitFor();
   assert.equal(await runningCard.getAttribute('aria-pressed'), 'true', 'Returning from chat must keep the status filter');
   assert.equal(await page.getByRole('button', { name: /^api Needs you/ }).count(), 0);
@@ -261,6 +291,7 @@ try {
   await page.getByRole('group', { name: 'Project /home/alex/projects/website', exact: true }).waitFor({ state: 'hidden' });
   assert.deepEqual(db.getVisibility(server.id).excludedDirectories, ['/home/alex/projects/website']);
   await page.reload();
+  await showSidebar();
   await page.getByRole('button', { name: 'Filter sessions on Development' }).click();
   assert.equal(await page.getByRole('button', { name: 'Hide /home/alex/projects/website', exact: true }).count(), 0);
   assert.equal(await page.getByRole('list', { name: 'Blocked directories', exact: true }).isVisible(), false);
@@ -274,6 +305,7 @@ try {
   await page.getByRole('button', { name: /^Validate migrations/ }).waitFor({ state: 'hidden' });
   assert.equal(db.getVisibility(server.id).archivedSessions[0].id, 'api-worktree');
   await page.reload();
+  await showSidebar();
   await page.getByRole('button', { name: 'Filter sessions on Development' }).click();
   await page.getByText('Archived sessions (1)', { exact: true }).click();
   await page.getByRole('button', { name: 'Restore Validate migrations', exact: true }).waitFor();
@@ -308,6 +340,7 @@ try {
   const futureSnapshot = await page.request.get(`http://127.0.0.1:${http.address().port}/api/monitor`);
   assert.equal((await futureSnapshot.json()).servers[0].sessions.some(s => s.id === 'dated-future'), false);
   await page.reload();
+  await showSidebar();
   await page.getByRole('button', { name: 'Filter sessions on Development' }).click();
   await page.getByText('Blocked directories (1)', { exact: true }).click();
   await page.getByRole('button', { name: `Show ${parent}`, exact: true }).click();
@@ -464,6 +497,20 @@ try {
   const readingPosition = await historyViewport.evaluate(node => {
     node.scrollTop -= 40; node.dispatchEvent(new Event('scroll')); return node.scrollTop;
   });
+  await showSidebar();
+  const hiddenChat = page.locator('[aria-label="Conversation"]');
+  assert.equal(await hiddenChat.isVisible(), false);
+  // Hidden chat must not treat image paste into the sidebar as a conversation attachment.
+  assert.equal(await page.getByRole('button', { name: 'Close sidebar' }).evaluate((node, url) => {
+    const bytes = Uint8Array.from(atob(url.split(',')[1]), character => character.charCodeAt(0));
+    const clipboardData = new DataTransfer(); clipboardData.items.add(new File([bytes], 'sidebar.png', { type: 'image/png' }));
+    const event = new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true });
+    node.dispatchEvent(event); return event.defaultPrevented;
+  }, imageUrl), false);
+  await page.waitForResponse(response => response.url().includes('/sessions/gate') && !response.url().includes('cursor'));
+  await page.keyboard.press('Escape');
+  await historyViewport.waitFor();
+  assert.ok(Math.abs(await historyViewport.evaluate(node => node.scrollTop) - readingPosition) < 2, 'Hiding chat through a refresh preserves the reading position');
   emit({ type: 'delta', itemId: 'current-39', delta: '\n\nOutput arriving while reading above the bottom.' });
   await page.getByText('Output arriving while reading above the bottom.', { exact: true }).waitFor();
   assert.ok(Math.abs(await historyViewport.evaluate(node => node.scrollTop) - readingPosition) < 2, 'A small upward scroll must stop bottom-follow during streaming');
@@ -798,7 +845,7 @@ try {
   await page.getByText('Idle', { exact: true }).waitFor();
   await page.keyboard.press('Escape');
   assert.equal(writes.length, beforeReconnect, 'Reconnect must never replay writes');
-  await page.getByRole('button', { name: 'All sessions' }).click();
+  await showSidebar();
   await page.getByRole('button', { name: 'New session on Development' }).click();
   assert.equal(await page.getByLabel('Working directory').inputValue(), server.defaultWorkingDir);
   await page.getByLabel('First message').fill('Add a focused regression test.');
@@ -826,7 +873,7 @@ try {
   await page.getByText('Restored native ACP history', { exact: true }).waitFor();
   assert.equal(await page.getByText('Add a focused regression test.', { exact: true }).count(), 0, 'A fresh ACP replay replaces unstable cached message IDs');
   assert.equal(await page.getByLabel('Message', { exact: true }).inputValue(), 'Keep this draft while agy runs');
-  await page.getByRole('button', { name: 'All sessions' }).click();
+  await showSidebar();
   await page.getByRole('button', { name: 'Add server', exact: true }).click();
   await page.getByLabel('SSH host', { exact: true }).selectOption('@manual');
   await page.getByLabel('Tool', { exact: true }).selectOption('agy');
@@ -881,6 +928,7 @@ try {
   for (const [connectionId, toolName] of [[server.id, 'Codex'], [agy.id, 'Antigravity']]) separateDetails.set(`${connectionId}/${shared.id}`,
     { ...detail, toolName, session: shared, turnId: 'shared-turn', requests: [], nextCursor: null, items: [{ id: 'native-output', kind: 'assistant', text: `${toolName} native context` }] });
   await page.reload();
+  await showSidebar();
   const sharedCard = page.getByRole('region', { name: 'Development sessions', exact: true });
   const codexRow = page.getByRole('button', { name: 'Shared conversation Running · Codex', exact: true });
   const agyRow = page.getByRole('button', { name: 'Shared conversation Running · Antigravity', exact: true });
@@ -894,12 +942,12 @@ try {
   for (const width of [1365, 390, 320]) { await page.setViewportSize({ width, height: 900 }); await bounded(); await shot(`grouped-server-${width}`); }
   await codexRow.click(); await page.getByText('Codex native context', { exact: true }).waitFor();
   await page.getByLabel('Message', { exact: true }).fill('Codex-only draft');
-  await page.getByRole('button', { name: 'All sessions', exact: true }).click();
+  await showSidebar();
   await agyRow.click(); await page.getByText('Antigravity native context', { exact: true }).waitFor();
   assert.equal(new URL(page.url()).hash, `#session/${agy.id}/${shared.id}`);
   assert.equal(await page.getByLabel('Message', { exact: true }).inputValue(), '');
   await page.getByLabel('Message', { exact: true }).fill('Antigravity-only draft');
-  await page.getByRole('button', { name: 'All sessions', exact: true }).click();
+  await showSidebar();
   await codexRow.click();
   assert.equal(await page.getByLabel('Message', { exact: true }).inputValue(), 'Codex-only draft');
   await page.getByRole('button', { name: 'Running sessions', exact: true }).click();
@@ -907,7 +955,7 @@ try {
   await page.getByText('Antigravity native context', { exact: true }).waitFor();
   assert.equal(await page.getByLabel('Message', { exact: true }).inputValue(), 'Antigravity-only draft');
   await page.getByRole('button', { name: 'Return to Shared conversation', exact: true }).click();
-  await page.getByRole('button', { name: 'All sessions', exact: true }).click();
+  await showSidebar();
   await agyRow.locator('..').getByRole('button', { name: 'Archive Shared conversation', exact: true }).click();
   await agyRow.waitFor({ state: 'hidden' }); await codexRow.waitFor();
   assert.ok(db.getVisibility(agy.id).archivedSessions.some(s => s.id === shared.id));
@@ -942,7 +990,7 @@ try {
   await page.getByText('Create with the selected agent', { exact: true }).waitFor();
   assert.equal(createdOn.at(-1), agy.id); assert.equal(new URL(page.url()).hash, `#session/${agy.id}/created`);
   assert.equal(await page.getByLabel('Message', { exact: true }).inputValue(), '');
-  await page.getByRole('button', { name: 'All sessions', exact: true }).click();
+  await showSidebar();
   agyMonitor.state = 'error'; agyMonitor.error = 'Fixture tool disconnected';
   await page.getByText('Antigravity · Fixture tool disconnected', { exact: true }).waitFor();
   await codexRow.waitFor(); await agyRow.waitFor({ state: 'hidden' });
@@ -951,8 +999,11 @@ try {
   await page.getByLabel('Search sessions', { exact: true }).fill('Shared conversation');
   await page.getByRole('button', { name: 'Needs you', exact: true }).click();
   await page.getByText('No matching sessions.', { exact: true }).waitFor();
+  monitor.servers = [];
+  await page.getByText('Your servers. Your sessions.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Add server', exact: true }).count(), 1, 'Empty sidebar has one add-server entry');
   assert.deepEqual(errors, []);
-  console.log('Browser smoke passed: grouped servers, tool tags and routing, SSH import, filters, archive/restore, projects, history, chat, attention, approvals, reconnect, 320/390/1365px.');
+  console.log('Browser smoke passed: collapsible sidebar, mobile focus/scroll/paste, grouped servers, tool tags and routing, SSH import, filters, archive/restore, projects, history, chat, attention, approvals, reconnect, 320/390/1365px.');
 } catch (error) {
   await shot('failure');
   console.error(await page.locator('body').innerText());

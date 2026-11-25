@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent } from 'react';
-import { Activity, Archive, CircleAlert, Filter, ChevronRight, Plus, Search, Server as ServerIcon, Settings2 } from 'lucide-react';
+import { Archive, Filter, ChevronRight, Plus, Search, Server as ServerIcon, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,16 +15,12 @@ import { ToolTag } from './ToolTag';
 
 import { SessionFilters } from './SessionFilters';
 import { labels } from '@/lib/session';
+import type { SessionTarget } from '@/lib/attention';
 import { groupProjects, isPastSession, type ProjectGroup } from '@/lib/project-groups';
-function age(time: number) {
-  const seconds = Math.max(0, Math.floor((Date.now() - time) / 1000));
-  return seconds < 60 ? 'Just now' : seconds < 3600 ? `${Math.floor(seconds / 60)}m ago`
-    : seconds < 86400 ? `${Math.floor(seconds / 3600)}h ago` : `${Math.floor(seconds / 86400)}d ago`;
-}
 export type MonitorFilter = 'running' | 'waiting' | null;
-export function SessionMonitor({ onOpen, onAddServer, onEditServer, statusFilter, onStatusFilter }: {
-  onOpen: (serverId: string, sessionId: string, error?: string) => void; onAddServer: () => void; onEditServer: (id: string) => void;
-  statusFilter: MonitorFilter; onStatusFilter: (filter: MonitorFilter) => void;
+export function SessionMonitor({ current, onOpen, onEditServer, statusFilter, onStatusFilter }: {
+  onOpen: (serverId: string, sessionId: string, error?: string) => void; onEditServer: (id: string) => void;
+  current: SessionTarget | null; statusFilter: MonitorFilter; onStatusFilter: (filter: MonitorFilter) => void;
 }) {
   const { servers, error, refresh } = useMonitorStore();
   const [query, setQuery] = useState('');
@@ -39,46 +35,41 @@ export function SessionMonitor({ onOpen, onAddServer, onEditServer, statusFilter
     (!statusFilter || (!error && session.state === statusFilter)) &&
     `${server.name} ${server.host} ${session.toolName} ${session.username} ${session.name} ${session.cwd} ${session.projectPath ?? ''} ${session.preview}`.toLowerCase().includes(search)) }))
     .filter((s) => statusFilter ? s.sessions.length || s.connections.some((c) => c.error) : !search || s.sessions.length || `${s.name} ${s.host}`.toLowerCase().includes(search));
-  return <main className="h-full overflow-y-auto bg-muted/20"><div className="mx-auto max-w-6xl space-y-7 px-4 py-6 sm:px-8 sm:py-9">
-    <div className="flex flex-wrap items-center justify-between gap-4">
-      <h1 className="page-title">Sessions</h1>
-      <div className="relative w-full sm:w-64"><Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
-        <Input className="pl-9" aria-label="Search sessions" placeholder="Find a project or session…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
-    </div>
-    <div role="group" aria-label="Session summary" className="grid grid-cols-3 gap-2 sm:gap-3">
+  return <div className="session-monitor">
+    <div className="sidebar-controls">
+      <div className="relative"><Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+        <Input className="h-9 bg-background/70 pl-8 text-sm" aria-label="Search sessions" placeholder="Find a session…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+      <div role="group" aria-label="Session summary" className="mt-2 grid grid-cols-3 gap-1.5">
         {([
-          { label: 'Needs you', count: sessions.filter((s) => s.state === 'waiting').length, tone: 'waiting', Icon: CircleAlert },
-          { label: 'Running', count: sessions.filter((s) => s.state === 'running').length, tone: 'running', Icon: Activity },
-          { label: 'Servers', count: groups.length, tone: 'unknown', Icon: ServerIcon },
-        ] as const).map(({ label, count, tone, Icon }) => {
+          { label: 'Needs you', count: sessions.filter((s) => s.state === 'waiting').length, tone: 'waiting' },
+          { label: 'Running', count: sessions.filter((s) => s.state === 'running').length, tone: 'running' },
+          { label: 'Servers', count: groups.length, tone: 'unknown' },
+        ] as const).map(({ label, count, tone }) => {
           const className = `monitor-summary monitor-${error || !servers ? 'unknown' : tone}`;
-          const content = <><span className="flex items-center gap-1.5 text-xs font-semibold sm:text-sm"><Icon aria-hidden="true" className="hidden size-4 min-[380px]:block" />{label}</span>
-            <span className="mt-2 block text-3xl font-semibold tracking-tight tabular-nums sm:text-4xl">{error || !servers ? '—' : count}</span></>;
+          const content = <><span>{label}</span><span className="font-semibold tabular-nums">{error || !servers ? '—' : count}</span></>;
           return tone === 'unknown' ? <div key={label} className={className}>{content}</div>
-            : <button key={label} type="button" className={className} aria-label={label} aria-pressed={statusFilter === tone}
-              title={statusFilter === tone ? 'Show all sessions' : `Show ${label.toLowerCase()} sessions`}
-              onClick={() => onStatusFilter(statusFilter === tone ? null : tone)}>{content}</button>;
+            : <button key={label} className={className} aria-label={label} aria-pressed={statusFilter === tone} onClick={() => onStatusFilter(statusFilter === tone ? null : tone)}>{content}</button>;
         })}
+      </div>
     </div>
+    <nav aria-label="Server sessions" className="sidebar-list">
     {error && <p role="alert" className="break-words text-sm text-destructive">Updates paused. {error} Retrying automatically.</p>}
     {!servers && !error && <p className="py-12 text-center text-sm text-muted-foreground">Connecting to your servers…</p>}
     {servers?.length === 0 && <div className="monitor-empty"><ServerIcon className="mx-auto mb-4 size-7 text-muted-foreground" />
-      <h2 className="font-medium">Your servers. Your sessions.</h2><p className="mt-2 text-sm text-muted-foreground">Add a server and choose a coding tool to see its sessions.</p>
-      <Button className="mt-5" onClick={onAddServer}><Plus />Add server</Button></div>}
+      <h2 className="font-medium">Your servers. Your sessions.</h2><p className="mt-2 text-sm text-muted-foreground">Add a server below to see its sessions.</p></div>}
     {filtered.map((server) => <section key={server.key} aria-label={`${server.name} sessions`} className="server-group">
-      <div className="server-group-header"><ServerIcon className="size-4 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 flex-1"><h2 className="truncate text-sm font-semibold">{server.name}<span className="ml-2 font-normal text-muted-foreground">{server.sessions.length}</span></h2>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{[...new Set(server.connections.map((c) => c.username))].join(', ')}@{server.host}{server.port !== 22 && `:${server.port}`}</p></div>
+      <div className="server-group-header"><ServerIcon className="size-3.5 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1" title={`${[...new Set(server.connections.map((c) => c.username))].join(', ')}@${server.host}:${server.port}`}><h2 className="truncate text-sm font-semibold">{server.name}<span className="ml-2 font-normal text-muted-foreground">{server.sessions.length}</span></h2></div>
         <Button variant="ghost" size="icon-sm" aria-label={`Filter sessions on ${server.name}`} title="Session filters"
           className={server.connections.some((c) => c.hasFilters) ? 'text-primary bg-accent' : ''} onClick={() => setFilterServer(server.key)}><Filter /></Button>
         <Button variant="ghost" size="icon-sm" aria-label={`Edit ${server.name}`} onClick={() => onEditServer(server.connections[0].id)}><Settings2 /></Button>
-        <Button variant="outline" size="sm" aria-label={`New session on ${server.name}`} onClick={() => setCreating(server.key)}><Plus /><span className="hidden min-[380px]:inline">Session</span></Button>
+        <Button variant="ghost" size="icon-sm" title="New session" aria-label={`New session on ${server.name}`} onClick={() => setCreating(server.key)}><Plus /></Button>
       </div>
       {server.connections.map((connection) => connection.error
         ? <p key={connection.id} role="alert" className="break-words border-b px-5 py-3 text-xs text-destructive">{toolName(connection)} · {connection.error}</p>
         : connection.state === 'connecting' ? <p key={connection.id} className="px-5 py-3 text-xs text-muted-foreground">Connecting to {toolName(connection)}…</p> : null)}
       {groupProjects(server.sessions).map((project) => <ProjectSessions key={project.path} project={project}
-        searching={!!search || !!statusFilter} stale={!!error} onOpen={(session) => onOpen(session.connectionId, session.id)} onArchive={async (session) => {
+        current={current} searching={!!search || !!statusFilter} stale={!!error} onOpen={(session) => onOpen(session.connectionId, session.id)} onArchive={async (session) => {
           await post(`/servers/${encodeURIComponent(session.connectionId)}/sessions/${encodeURIComponent(session.id)}/archive`, { name: session.name, cwd: session.cwd });
           await refresh();
         }} />)}
@@ -88,24 +79,24 @@ export function SessionMonitor({ onOpen, onAddServer, onEditServer, statusFilter
     {servers && !error && (search || statusFilter) && !filtered?.length && <p role="status" className="py-12 text-center text-sm text-muted-foreground">
       {search ? 'No matching sessions.' : statusFilter === 'running' ? 'No sessions are running.' : 'No sessions need your attention.'}
     </p>}
-  </div>
+    </nav>
   <Dialog open={creating !== null} onOpenChange={(open) => { if (!open) setCreating(null); }}><DialogContent className="rounded-2xl">
     <DialogHeader><DialogTitle>New session</DialogTitle><DialogDescription>{creatingServer?.name}</DialogDescription></DialogHeader>
     {creatingServer && <NewSession key={creatingServer.key} connections={creatingServer.connections} onCreated={(id, session, error) => { setCreating(null); onOpen(id, session.id, error); }} />}
   </DialogContent></Dialog>
   {filteringServer && <SessionFilters connections={filteringServer.connections} serverName={filteringServer.name}
     onClose={() => setFilterServer(null)} onChanged={refresh} />}
-  </main>;
+  </div>;
 }
 
-function ProjectSessions({ project, searching, stale, onOpen, onArchive }: {
-  project: ProjectGroup<ServerSession>; searching: boolean; stale: boolean; onOpen: (session: ServerSession) => void; onArchive: (session: ServerSession) => Promise<void>;
+function ProjectSessions({ project, current, searching, stale, onOpen, onArchive }: {
+  project: ProjectGroup<ServerSession>; current: SessionTarget | null; searching: boolean; stale: boolean; onOpen: (session: ServerSession) => void; onArchive: (session: ServerSession) => Promise<void>;
 }) {
   const [view, setView] = useState<'active' | 'all' | 'collapsed'>('active');
   const sessionsId = useId();
   const past = project.sessions.filter(isPastSession);
   const visible = searching || view === 'all' ? project.sessions : view === 'collapsed' ? []
-    : project.sessions.filter((session) => !isPastSession(session));
+    : project.sessions.filter((session) => !isPastSession(session) || (current?.serverId === session.connectionId && current.threadId === session.id));
   const canCollapse = visible.length > 0 && (view === 'all' || past.length === 0);
   const waiting = project.sessions.filter((session) => session.state === 'waiting').length;
   const running = project.sessions.filter((session) => session.state === 'running').length;
@@ -128,13 +119,13 @@ function ProjectSessions({ project, searching, stale, onOpen, onArchive }: {
       </button>
     </h3>
     <div id={sessionsId}>
-    {visible.map((session) => <SessionRow key={sessionKey(session.connectionId, session.id)} session={session} stale={stale} onOpen={onOpen} onArchive={onArchive} />)}
+    {visible.map((session) => <SessionRow key={sessionKey(session.connectionId, session.id)} session={session} selected={current?.serverId === session.connectionId && current.threadId === session.id} stale={stale} onOpen={onOpen} onArchive={onArchive} />)}
     </div>
   </div>;
 }
 
-function SessionRow({ session, stale, onOpen, onArchive }: {
-  session: ServerSession; stale: boolean; onOpen: (session: ServerSession) => void; onArchive: (session: ServerSession) => Promise<void>;
+function SessionRow({ session, selected, stale, onOpen, onArchive }: {
+  session: ServerSession; selected: boolean; stale: boolean; onOpen: (session: ServerSession) => void; onArchive: (session: ServerSession) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -143,15 +134,13 @@ function SessionRow({ session, stale, onOpen, onArchive }: {
     try { await onArchive(session); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
   return <div>
-    <div className="flex items-center">
-      <button className="monitor-session min-w-0 flex-1" aria-label={`${session.name} ${stale ? 'Unknown' : labels[session.state]} · ${session.toolName}`} onClick={() => onOpen(session)}>
+    <div className="session-row" data-selected={selected}>
+      <button aria-current={selected ? 'page' : undefined} title={`${session.name} · ${stale ? 'Unknown' : labels[session.state]}`} className="monitor-session min-w-0 flex-1" aria-label={`${session.name} ${stale ? 'Unknown' : labels[session.state]} · ${session.toolName}`} onClick={() => onOpen(session)}>
         <span className={`monitor-dot monitor-${stale ? 'unknown' : session.state}`} aria-hidden="true" />
-        <span className="flex min-w-0 flex-1 items-center gap-2"><span className="truncate text-sm font-medium">{session.name}</span>
+        <span className="flex min-w-0 flex-1 items-center gap-1.5"><span className="min-w-0 flex-1 truncate text-[13px]">{session.name}</span>
           <ToolTag name={session.toolName} title={[session.toolName, session.username, session.toolNote].filter(Boolean).join(' · ')} /></span>
-        <div className="shrink-0 text-right"><span className={`monitor-state monitor-${stale ? 'unknown' : session.state}`}>{stale ? 'Unknown' : labels[session.state]}</span>
-          <p className="mt-1 text-[11px] text-muted-foreground"><time dateTime={new Date(session.updatedAt).toISOString()}>{age(session.updatedAt)}</time></p></div>
       </button>
-      <Button variant="ghost" size="icon-sm" className="mr-2 shrink-0 text-muted-foreground" disabled={busy}
+      <Button variant="ghost" size="icon-sm" className="session-archive shrink-0 text-muted-foreground" disabled={busy}
         aria-label={`Archive ${session.name}`} title="Archive in Gate" onClick={() => void archive()}><Archive /></Button>
     </div>
     {error && <p role="alert" className="px-4 pb-3 text-xs text-destructive">{error}</p>}

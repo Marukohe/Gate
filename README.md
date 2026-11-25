@@ -5,7 +5,7 @@
 Gate is a simple panel for coding-agent sessions across SSH servers, supporting **Codex** and **Google Antigravity CLI (agy)**.
 See what needs attention, open conversations, and continue work from your browser.
 
-![Session panel](assets/session-monitor.png)
+![Sidebar and conversation](assets/session-monitor.png)
 
 ## How it works
 
@@ -44,7 +44,7 @@ SSH access, repository grouping and the browser panel remain independent of it.
    Importing fills the name, host, port, username and first available identity-file path; expand the connection summary
    to edit these fields or switch to password authentication. Passwords must be entered separately.
    Set **Tool executable** to an absolute path if it is not on the SSH login PATH.
-   Add each tool's connection to use Codex and agy on the same machine; the homepage combines them in one server card.
+   Add each tool's connection to use Codex and agy on the same machine; the sidebar combines them under one server.
    Existing Codex settings migrate automatically.
 
 SSH import requires local OpenSSH. It lists concrete `Host` aliases, including `Include` files, and uses `ssh -G`
@@ -58,16 +58,21 @@ Use the same remote OS user and Codex configuration as your terminal.
 
 ## Everyday use
 
-- **Monitor:** one page groups sessions by server and repository. Worktrees share their repository group.
-  Connections with the same SSH host and port share one card, including sessions from different tools in the same repository.
+- **Sidebar:** servers, search, status filters, new sessions and connection settings live in one collapsible sidebar.
+  Open a session beside it without leaving the list. The current session is highlighted; rows show a status dot, name
+  and tool tag. Collapse with the top-left panel button; the desktop preference survives reload. On mobile the list uses
+  the whole pane and closes when you choose a session. Search, filters and expanded groups stay while switching sessions.
+- **Monitor:** the sidebar groups sessions by server and repository. Worktrees share their repository group.
+  Connections with the same SSH host and port share one group, including sessions from different tools in the same repository.
   Each session name has a tool tag. The **Servers** count reflects these server groups, not the number of tools.
   Projects needing attention come first. Active sessions show by default. Click a project heading to reveal history
   or collapse its sessions; running-only projects can also be collapsed.
   Full paths appear on hover, with short parent paths shown only for duplicate project names. Search reveals matches.
 - **Quick filters:** click **Running** or **Needs you** to show matching sessions, grouped by server and repository.
-  Click the selected card again to show all sessions. The filter stays selected when returning from a conversation.
-- **Conversation layout:** one compact header contains back navigation, the session name, and status counts.
-  Click the name for server, directory, full status, rename, theme, or the session overview.
+  Click the selected filter again to show all sessions. It stays selected while you switch conversations.
+- **Conversation layout:** one compact header contains the sidebar button when collapsed, the session name, and status counts.
+  Click the name for server, directory, full status, rename, theme, or the session list.
+  Mobile status buttons use icons and counts to leave room for the title.
 - **Session status:** while chatting, the header shows other sessions needing attention and all running sessions,
   including the current conversation. The running list marks it **Current**. Click either count
   to switch sessions. New waits and native session errors show a brief notice with the server and reason.
@@ -106,7 +111,8 @@ Use the same remote OS user and Codex configuration as your terminal.
   Choices and default efforts come from that tool's native catalog. Changes take effect when the message is sent
   and become the session defaults; running turns keep their current settings.
 - **Rename (Codex):** click the conversation title, then **Rename**. Names are saved in Codex and shared with the terminal.
-- **Start:** click **+ Session**, choose a tool when more than one is configured, then enter a working directory and first instruction.
+- **Start:** click **+** beside a server, choose a tool when more than one is configured, then enter
+  a working directory and first instruction.
   This creates a native session in the chosen tool. The server's settings button likewise lets you select which tool to edit.
 - **Respond:** allow/decline the tool's requested operations in the conversation. Codex also supports structured questions;
   unsupported Codex requests remain visible for handling in its terminal.

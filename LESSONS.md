@@ -2,7 +2,7 @@
 
 - Gate's core is servers and native sessions. Simplify the underlying connection path along with the UI;
   hiding task menus while retaining multiple execution systems does not reduce complexity.
-  Tool connections are not separate homepage servers. Group by SSH host/port and tag sessions with their tool;
+  Tool connections are not separate displayed servers. Group by SSH host/port and tag sessions with their tool;
   preserve connection-plus-native-ID identity for navigation, drafts and archives even when native IDs collide.
 - Keep each project heading to one row and use it to reveal history or collapse sessions, including running-only groups.
   Paths and history controls should not add extra rows. Polling must preserve the user's collapsed state.
@@ -17,6 +17,9 @@
   overwriting them with the snapshot; test a delayed response after streamed output, including conversation height.
   Merge live status after asynchronous metadata lookup. A tool's own saved timestamp must not discard completed output
   or an error notice by triggering an unnecessary history replay.
+- Keep sidebar and conversation mounted across collapse. Hidden panes report zero scroll geometry: retain the last
+  visible position, skip hidden positioning/paste handlers, and restore before paint. Mobile selection should close the
+  list without changing the saved desktop preference; keyboard focus must move to a visible control.
 - Keep chat navigation, title, and status in one header row, including after attention jumps. Move metadata into the title
   popover and verify the conversation starts directly below the header at 320px, 390px, and desktop widths.
 - Auto-load history only on upward scrolling near the top, with a synchronous in-flight guard. Anchor the visible message

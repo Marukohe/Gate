@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Popover } from 'radix-ui';
-import { X } from 'lucide-react';
+import { Activity, CircleAlert, X } from 'lucide-react';
 import { useMonitorStore } from '@/stores/monitor-store';
 import { sessionKey } from '@/stores/session-view-store';
 import { needsAttention, otherSessions, type AttentionSession, type SessionTarget } from '@/lib/attention';
@@ -68,8 +68,9 @@ export function SessionAttention({ current, onOpen }: {
         const listLabel = kind === 'waiting' ? 'Other sessions: Needs you' : 'Running sessions';
         return <Popover.Root key={kind} open={panel === kind} onOpenChange={(value) => setPanel(value ? kind : null)}>
           <Popover.Trigger asChild><button type="button" aria-label={listLabel} title={listLabel}
-            className={`rounded-md px-1.5 py-1.5 text-[11px] font-semibold hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring sm:px-2 sm:text-xs monitor-${kind}`}>
-            {label}<span className="ml-1 tabular-nums">{error || !servers ? '—' : items.length}</span>
+            className={`inline-flex items-center gap-1 rounded-md px-1.5 py-1.5 text-[11px] font-semibold hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring sm:px-2 sm:text-xs monitor-${kind}`}>
+            {kind === 'waiting' ? <CircleAlert className="size-3.5 sm:hidden" aria-hidden="true" /> : <Activity className="size-3.5 sm:hidden" aria-hidden="true" />}
+            <span className="sr-only sm:not-sr-only">{label}</span><span className="tabular-nums">{error || !servers ? '—' : items.length}</span>
           </button></Popover.Trigger>
           <Popover.Portal><Popover.Content align="end" sideOffset={12} collisionPadding={16}
             aria-label={listLabel} className="z-50 w-[min(24rem,calc(100vw-2rem))] rounded-xl border bg-popover p-2 text-popover-foreground shadow-lg outline-none">

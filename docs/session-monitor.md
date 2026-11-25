@@ -4,11 +4,11 @@ Each saved connection selects a tool and an SSH account. The same host can have 
 Routes use `AgentService` and the `AgentBackend` contract; tool adapters own protocol translation. New tools register a
 definition and backend implementation. Session capabilities determine available UI controls.
 
-The homepage presents one server card per SSH hostname and port, regardless of tool or account. The oldest saved
+The sidebar presents one server group per SSH hostname and port, regardless of tool or account. The oldest saved
 connection supplies its display name. Repository groups combine sessions across those connections; session titles and
 attention lists show tool tags. Server counts use these display groups. Different SSH ports stay separate.
 Navigation, draft/cache keys, native actions and archive/restore retain the owning connection ID and native session ID.
-Do not deduplicate sessions by native ID alone. A disconnected tool shows an error within its card without hiding healthy tools.
+Do not deduplicate sessions by native ID alone. A disconnected tool shows an error within its group without hiding healthy tools.
 The existing new-session, settings and filter dialogs select a tool when needed. Filter/archival preferences remain
 per connection; combining the display never combines or overwrites stored rules.
 
@@ -34,6 +34,11 @@ the agent supplies no stable message IDs. Credentials and conversation history a
 agy 1.5.16 accepts image input but omits images from `session/load` replay. Images remain visible in connection memory;
 they cannot be restored after reconnecting. Gate does not create a separate persistent attachment/history store.
 
+The collapsible sidebar contains search, status filters, server settings and session creation. Conversations open in the
+adjacent pane; list and conversation remain mounted when collapsed. Desktop collapse state is saved in browser storage.
+Mobile uses one pane at a time and closes the sidebar after selection. Search, filters and expansion state stay across
+conversation switches. Hiding chat preserves reading position and prevents it from intercepting image paste in the list.
+
 The panel groups sessions by repository under each server. Read-only Git metadata merges repository subdirectories
 and linked worktrees; separate clones remain separate, even with the same name. Non-Git or unavailable directories
 use their working path. This metadata is cached briefly and creates no project records.
@@ -44,12 +49,13 @@ Full directory paths appear on hover; duplicate project names show a short paren
 Searching names, paths, or previews reveals matching sessions without changing the collapsed state.
 
 Click Running or Needs you to filter this same panel by native session state. Matches expand automatically under
-their server and repository, and search further narrows them. The selected card stays highlighted; click it again
+their server and repository, and search further narrows them. The selected filter stays highlighted; click it again
 to restore all sessions. Summary counts stay global to the visible snapshot, respecting directory filters and archives.
-Status changes update the results automatically. Returning from a conversation keeps the quick filter; reloading resets it.
+Status changes update the results automatically. Switching conversations keeps the quick filter; reloading resets it.
 
-A conversation uses a single compact header: back navigation, session title/status dot, and session counts.
-Click the title to see server, working directory, full status, rename, theme, and session overview actions.
+A conversation uses a single compact header: sidebar/attention navigation, session title/status dot, and session counts.
+Mobile counts use icons to keep the title visible.
+Click the title to see server, working directory, full status, rename, theme, and session list actions.
 After an attention jump the back arrow returns to the original conversation; the forward arrow opens the next pending one.
 Neither conversation details nor return navigation adds a second toolbar above the messages.
 

@@ -10,7 +10,7 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - React browser → HTTP actions and WebSocket events → Gate backend adapter → SSH → native tool.
 - HTTP routes use `AgentService`; protocol implementations satisfy `AgentBackend`. Connection settings select the tool
   and executable. SSH, SFTP, repository lookup and direct shell execution live outside tool-specific transports.
-- The homepage groups tool connections by SSH host and port into one server card, using the oldest connection's name.
+- The sidebar groups tool connections by SSH host and port into one server entry, using the oldest connection's name.
   Merge repository groups across tools, label session rows and attention lists with tool tags, and count server groups.
   Keep connection ID plus native session ID on every action, draft, cache and row key; native IDs can collide across tools.
   New-session, settings and filter dialogs select a tool within the existing server entry. Visibility settings remain scoped
@@ -21,8 +21,12 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - Repository groups are derived from read-only Git metadata over the existing SSH connection, with cwd fallback.
   They are display groups, not persisted project workflows. Project headings reveal history and collapse sessions, including running-only groups.
   Active sessions show by default; search reveals matches without changing the chosen collapsed state.
-- Running and Needs you cards filter the monitor in place and reveal matching sessions. App owns this transient filter
-  so it survives navigation into a conversation and back. Summary counts remain independent of status/search filters.
+- A collapsible sidebar owns the monitor, search, status filters, creation and server settings. Desktop collapse preference
+  persists in browser storage. Mobile shows one pane at a time and closes the sidebar after selecting a session.
+  Keep both panes mounted: hiding must preserve list state, chat drafts and scroll. Hidden chat must not capture paste
+  or use zero-sized scroll geometry; restore its reading position before paint when visible again.
+- Running and Needs you filter the sidebar in place and reveal matching sessions. App owns this transient filter
+  so it survives switching conversations. Summary counts remain independent of status/search filters.
 - App polls one shared monitor store across navigation. Header Running includes the current thread and marks it Current;
   Needs you lists other waiting/error sessions. Both respect visibility preferences and known connection state;
   transition notices use only known native status, exclude the current thread, and do not open additional conversations.
@@ -30,7 +34,8 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
   cached history, and scroll position. Cached approval requests are discarded and native state is refreshed before input.
   Refresh snapshots preserve message items updated while the request was in flight.
 - Chats use one compact header. SessionView portals its title/details into AppHeader so live metadata and rename state
-  stay with the conversation; return/next attention navigation shares the same row. Directory and theme controls are on demand.
+  stay with the conversation; sidebar/return/next attention navigation shares the same row; mobile status buttons use icons
+  and counts. Directory and theme controls are on demand.
 - Tools own sessions, history, approvals, and execution. Gate stores connection/tool settings and display preferences.
 - Codex subscribes to native threads and sends via `turn/start` or `turn/steer`. ACP lists/loads native sessions and uses
   `session/prompt`, updates, offered permission choices, and `session/cancel`. Never infer external live status from saved
@@ -103,7 +108,7 @@ Data defaults to `~/.gate/gate.db`. Preserve existing user data when removing ol
 - Commit completed steps with small, meaningful Conventional Commits.
 - Run relevant tests, clear compiler warnings, and build broad frontend/server changes before committing.
 - Validate real tool behavior, including existing native sessions; mocked UI alone does not prove attachment.
-- Keep one tool per internal connection while displaying one card per SSH endpoint. Changing provider on an existing
+- Keep one tool per internal connection while displaying one entry per SSH endpoint. Changing provider on an existing
   connection would mix session IDs, drafts and persistent visibility preferences; tool selection edits the correct connection.
 - Gate archives are display preferences, not native archives. Filtering/archiving must not mutate native tool sessions.
 - Never kill a shared backend to test reconnection. Close only Gate's own connection or an isolated test fixture.

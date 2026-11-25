@@ -24,9 +24,9 @@ function mergeItems(old: Item[], incoming: Item[]) {
   for (const item of incoming) result.set(item.id, item);
   return [...result.values()];
 }
-export function SessionView({ serverId, threadId, serverName, initialError, headerTarget, onHome }: {
+export function SessionView({ serverId, threadId, serverName, initialError, headerTarget, visible, onHome }: {
   serverId: string; threadId: string; serverName: string; initialError: string;
-  headerTarget: HTMLElement | null; onHome: () => void;
+  headerTarget: HTMLElement | null; visible: boolean; onHome: () => void;
 }) {
   const base = `/servers/${encodeURIComponent(serverId)}/sessions/${encodeURIComponent(threadId)}`;
   const key = sessionKey(serverId, threadId);
@@ -72,8 +72,12 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
     const node = viewport.current;
     const cached = useSessionViewStore.getState().views[key];
     if (node && cached) { node.scrollTop = cached.scrollTop; lastScrollTop.current = node.scrollTop; }
-    return () => update(key, { detail: latestDetail.current, scrollTop: node?.scrollTop ?? 0, follow: follow.current });
+    return () => update(key, { detail: latestDetail.current, scrollTop: lastScrollTop.current, follow: follow.current });
   }, [key, update]);
+  useLayoutEffect(() => {
+    // A mobile sidebar hides the pane without unmounting it. Hidden elements report scrollTop = 0.
+    if (visible && viewport.current) viewport.current.scrollTop = lastScrollTop.current;
+  }, [visible]);
   const alive = useRef(true);
   const revision = useRef(0);
   const eventTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -132,7 +136,7 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
   });
   useLayoutEffect(() => {
     const node = viewport.current;
-    if (!node) return;
+    if (!node || !visible || !node.clientHeight) return;
     if (prepend.current) {
       const { anchor, offset, top, height } = prepend.current;
       // Keep the visible message fixed even if streaming also changed content below it.
@@ -142,7 +146,7 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
     } else if (follow.current) node.scrollTop = node.scrollHeight;
     else return;
     lastScrollTop.current = node.scrollTop;
-  }, [detail, shellRuns]);
+  }, [detail, shellRuns, visible]);
   const canAttach = !!detail?.session.canInput && !offline && capabilities?.images !== false;
   const attach = useCallback(async (files: File[]) => {
     const draft = useSessionViewStore.getState().views[key] ?? emptyView;
@@ -155,7 +159,7 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
     finally { update(key, { busy: false }); }
   }, [key, canAttach, update]);
   useLayoutEffect(() => {
-    if (!busy && focusAfterPaste.current) {
+    if (visible && !busy && focusAfterPaste.current) {
       focusAfterPaste.current = false;
       if (!document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) {
         messageInput.current?.focus({ preventScroll: true });
@@ -164,10 +168,10 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
   });
   useEffect(() => {
     const paste = (event: ClipboardEvent) => {
-      if (event.defaultPrevented || !event.clipboardData || !canAttach || useSessionViewStore.getState().views[key]?.busy) return;
+      if (!visible || event.defaultPrevented || !event.clipboardData || !canAttach || useSessionViewStore.getState().views[key]?.busy) return;
       const target = event.target instanceof Element ? event.target : null;
       // Leave other editors and dialogs alone; ordinary text keeps the browser's normal paste behavior.
-      if (target?.closest('[role="dialog"], [role="alertdialog"]') || document.querySelector('[role="dialog"][data-state="open"]')) return;
+      if (target?.closest('#session-sidebar, [role="dialog"], [role="alertdialog"]') || document.querySelector('[role="dialog"][data-state="open"]')) return;
       if (target?.closest('input, textarea, [contenteditable]:not([contenteditable="false"]), [role="textbox"]') && target !== messageInput.current) return;
       const files = clipboardImages(event.clipboardData);
       if (!files.length) return;
@@ -177,7 +181,7 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
     };
     document.addEventListener('paste', paste);
     return () => document.removeEventListener('paste', paste);
-  }, [attach, canAttach, key]);
+  }, [attach, canAttach, key, visible]);
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if ((!text.trim() && !images.length) || (isShell && (!command || images.length)) ||
@@ -264,7 +268,7 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
     </Popover.Root>, headerTarget)}
     <div role="region" aria-label="Conversation" className="min-h-0 flex-1 overflow-y-auto" ref={viewport} onScroll={() => {
       const node = viewport.current;
-      if (!node) return;
+      if (!node || !visible || !node.clientHeight) return;
       // Ignore scroll events from our own positioning; they must not turn follow back on.
       if (Math.abs(node.scrollTop - lastScrollTop.current) < 1) return;
       const scrollingUp = node.scrollTop < lastScrollTop.current;
