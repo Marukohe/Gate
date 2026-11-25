@@ -44,7 +44,8 @@ SSH access, repository grouping and the browser panel remain independent of it.
    Importing fills the name, host, port, username and first available identity-file path; expand the connection summary
    to edit these fields or switch to password authentication. Passwords must be entered separately.
    Set **Tool executable** to an absolute path if it is not on the SSH login PATH.
-   Add separate connections to use Codex and agy on the same machine; existing Codex settings migrate automatically.
+   Add each tool's connection to use Codex and agy on the same machine; the homepage combines them in one server card.
+   Existing Codex settings migrate automatically.
 
 SSH import requires local OpenSSH. It lists concrete `Host` aliases, including `Include` files, and uses `ssh -G`
 to resolve their settings. Gate saves an editable copy, does not change `~/.ssh/config`, and does not track later config edits.
@@ -58,6 +59,8 @@ Use the same remote OS user and Codex configuration as your terminal.
 ## Everyday use
 
 - **Monitor:** one page groups sessions by server and repository. Worktrees share their repository group.
+  Connections with the same SSH host and port share one card, including sessions from different tools in the same repository.
+  Each session name has a tool tag. The **Servers** count reflects these server groups, not the number of tools.
   Projects needing attention come first. Active sessions show by default. Click a project heading to reveal history
   or collapse its sessions; running-only projects can also be collapsed.
   Full paths appear on hover, with short parent paths shown only for duplicate project names. Search reveals matches.
@@ -73,6 +76,7 @@ Use the same remote OS user and Codex configuration as your terminal.
   Drafts, model/effort choices, and reading positions stay
   in browser memory while the page remains open; reloading clears them.
 - **Filter:** use the filter icon beside a server. Search **Available directories** and click **Hide**.
+  If the server has multiple tools, select **Tool** in the dialog. Each tool keeps its existing filters and archives.
   **Blocked directories** stays collapsed; expand it and click **Show** to unblock a path.
   Use **Add another directory** for a custom parent path.
   Saved rules include existing and future descendants and match session working paths.
@@ -102,7 +106,8 @@ Use the same remote OS user and Codex configuration as your terminal.
   Choices and default efforts come from that tool's native catalog. Changes take effect when the message is sent
   and become the session defaults; running turns keep their current settings.
 - **Rename (Codex):** click the conversation title, then **Rename**. Names are saved in Codex and shared with the terminal.
-- **Start:** click **+ Session**, enter a working directory and first instruction. This creates a native session in the chosen tool.
+- **Start:** click **+ Session**, choose a tool when more than one is configured, then enter a working directory and first instruction.
+  This creates a native session in the chosen tool. The server's settings button likewise lets you select which tool to edit.
 - **Respond:** allow/decline the tool's requested operations in the conversation. Codex also supports structured questions;
   unsupported Codex requests remain visible for handling in its terminal.
 - **Interrupt:** stop the current turn without closing the tool connection.

@@ -8,6 +8,7 @@ import { useServerStore, type Server } from '@/stores/server-store';
 import { api } from '@/lib/api';
 import { useMonitorStore } from '@/stores/monitor-store';
 import { needsAttention, otherSessions, type SessionTarget } from '@/lib/attention';
+import { groupServers } from '@/lib/server-groups';
 
 function route() {
   const parts = location.hash.slice(1).split('/');
@@ -26,6 +27,9 @@ export default function App() {
   const setServers = useServerStore((s) => s.setServers);
   const snapshot = useMonitorStore((state) => state.servers);
   const monitorError = useMonitorStore((state) => state.error);
+  const groups = groupServers(snapshot ?? []);
+  const selectedGroup = groups.find((group) => group.connections.some((connection) => connection.id === selected?.serverId));
+  const editingGroup = groups.find((group) => group.connections.some((connection) => connection.id === editing?.id));
   const pending = monitorError ? [] : otherSessions(snapshot, selected).filter(({ session }) => needsAttention(session));
   const returnName = snapshot?.find((server) => server.id === returnTo?.serverId)?.sessions.find((session) => session.id === returnTo?.threadId)?.name ?? 'original session';
   useEffect(() => {
@@ -62,11 +66,12 @@ export default function App() {
       next={canReturn && pending[0] ? { count: pending.length, run: () => open(pending[0].serverId, pending[0].threadId) } : undefined} />
     <div className="min-h-0 flex-1">
       {selected ? <SessionView key={`${selected.serverId}:${selected.threadId}`} {...selected} initialError={error}
-        serverName={servers.find((s) => s.id === selected.serverId)?.name ?? 'Server'} headerTarget={sessionTitleTarget} onHome={home} />
+        serverName={selectedGroup?.name ?? servers.find((s) => s.id === selected.serverId)?.name ?? 'Server'} headerTarget={sessionTitleTarget} onHome={home} />
         : <SessionMonitor statusFilter={monitorFilter} onStatusFilter={setMonitorFilter} onOpen={open} onAddServer={add} onEditServer={(id) => {
           setEditing(servers.find((s) => s.id === id) ?? null); setDialog(true);
         }} />}
     </div>
-    <ServerDialog open={dialog} onOpenChange={setDialog} editServer={editing} onSaved={() => void refresh()} />
+    <ServerDialog open={dialog} onOpenChange={setDialog} editServer={editing} connections={editingGroup?.connections}
+      onSelectConnection={(id) => setEditing(servers.find((server) => server.id === id) ?? editing)} onSaved={() => void refresh()} />
   </div>;
 }

@@ -2,6 +2,8 @@
 
 - Gate's core is servers and native sessions. Simplify the underlying connection path along with the UI;
   hiding task menus while retaining multiple execution systems does not reduce complexity.
+  Tool connections are not separate homepage servers. Group by SSH host/port and tag sessions with their tool;
+  preserve connection-plus-native-ID identity for navigation, drafts and archives even when native IDs collide.
 - Keep each project heading to one row and use it to reveal history or collapse sessions, including running-only groups.
   Paths and history controls should not add extra rows. Polling must preserve the user's collapsed state.
 - Keep quick status filters above the monitor's component lifetime so returning from chat preserves the choice.

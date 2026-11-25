@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import { useMonitorStore } from '@/stores/monitor-store';
 import { sessionKey } from '@/stores/session-view-store';
 import { needsAttention, otherSessions, type AttentionSession, type SessionTarget } from '@/lib/attention';
+import { ToolTag } from '@/components/monitor/ToolTag';
 
 export function SessionAttention({ current, onOpen }: {
   current: SessionTarget | null; onOpen: (serverId: string, threadId: string) => void;
@@ -79,18 +80,19 @@ export function SessionAttention({ current, onOpen }: {
                 type="button" onClick={() => open(item)} disabled={item.serverId === current.serverId && item.threadId === current.threadId}
                 className="block w-full rounded-lg px-2 py-3 text-left hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring">
                 <span className="flex items-center gap-2 text-sm font-medium"><span className="min-w-0 flex-1 truncate">{item.session.name}</span>
+                  <ToolTag name={item.toolName} />
                   {item.serverId === current.serverId && item.threadId === current.threadId && <span className="text-xs font-normal text-muted-foreground">Current</span>}</span>
                 <span className="mt-1 block truncate text-xs text-muted-foreground">{item.serverName} · {item.session.attentionReason || (kind === 'waiting' ? item.session.state === 'error' ? 'Session error' : 'Waiting for you' : 'Running')}</span>
               </button>)}
               {!items.length && <p className="p-2 text-sm text-muted-foreground">{kind === 'waiting' ? 'No other sessions need you.' : 'No sessions are running.'}</p>}
             </div>}
-            {servers?.some((server) => server.state !== 'connected') && <p className="border-t px-2 py-2 text-xs text-muted-foreground">Some servers are unavailable; their status is unknown.</p>}
+            {servers?.some((server) => server.state !== 'connected') && <p className="border-t px-2 py-2 text-xs text-muted-foreground">Some tools are unavailable; their session status is unknown.</p>}
           </Popover.Content></Popover.Portal>
         </Popover.Root>;
       })}
     </div>
     {notice && <div role="status" aria-live="polite" className="fixed right-4 top-20 z-40 w-[calc(100%-2rem)] max-w-sm rounded-xl border bg-card p-3 text-card-foreground shadow-lg">
-      <div className="flex items-start gap-2"><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{notice.session.name}</p>
+      <div className="flex items-start gap-2"><div className="min-w-0 flex-1"><div className="flex min-w-0 items-center gap-2"><p className="truncate text-sm font-semibold">{notice.session.name}</p><ToolTag name={notice.toolName} /></div>
         <p className="mt-1 break-words text-xs text-muted-foreground">{notice.serverName} · {notice.session.attentionReason || (notice.session.state === 'error' ? 'Session error' : 'Waiting for you')}</p></div>
         <button type="button" aria-label="Dismiss session notice" className="rounded p-1 hover:bg-accent" onClick={() => setNotices((old) => old.filter((item) => item !== notice))}><X className="size-4" /></button></div>
       <button type="button" className="mt-2 text-xs font-semibold underline" onClick={() => open(notice)}>View session</button>

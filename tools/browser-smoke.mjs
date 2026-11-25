@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { chromium } from 'playwright';
-import { createDb } from '../server/dist/db.js';
+import { createDb, publicServer } from '../server/dist/db.js';
 import { routes } from '../server/dist/routes.js';
 import { INPUT_BODY_LIMIT } from '../server/dist/images.js';
 const imageFile = { name: '截图.png', mimeType: 'image/png',
@@ -36,6 +36,8 @@ let detail = { session: { ...sessions[2], model: 'fixture-current', effort: 'hig
   { id: 'a1', kind: 'assistant', text: 'The panel now groups sessions by server.\n\n- Running work stays visible.\n- Questions appear in the conversation.\n- Each session has one place to continue.' }],
   nextCursor: 'older', turnId: null, requests: [] };
 const writes = [];
+const createdOn = [];
+const separateDetails = new Map();
 let sshHostsUnavailable = false;
 let releaseSshHost;
 let modelsUnavailable = false;
@@ -59,7 +61,7 @@ const emit = (event = {}) => {
   if (historyProbe && event.type === 'delta' && event.itemId === 'current-39') probeStream += event.delta;
   for (const socket of wss.clients) socket.send(JSON.stringify({ serverId: server.id, threadId: detail.session.id, type: 'changed', ...event }));
 };
-app.get('/api/servers', (_req, res) => res.json([server]));
+app.get('/api/servers', (_req, res) => res.json(db.listServers().map(publicServer)));
 app.get('/api/servers/:id/models', (_req, res) => modelsUnavailable
   ? res.status(503).json({ error: 'Catalog unavailable' })
   : res.json({ models: [
@@ -68,6 +70,7 @@ app.get('/api/servers/:id/models', (_req, res) => modelsUnavailable
   ] }));
 
 app.get('/api/servers/:id/sessions/:thread', async (req, res) => {
+  const separate = separateDetails.get(`${req.params.id}/${req.params.thread}`); if (separate) return res.json(separate);
   if (historyProbe && req.params.thread === 'gate') {
     if (!req.query.cursor) return res.json({ ...detail, items: probeMessages('current', 40), nextCursor: 'probe-1' });
     historyRequests.push(req.query.cursor);
@@ -86,6 +89,7 @@ app.get('/api/servers/:id/sessions/:thread', async (req, res) => {
   res.json(req.query.cursor ? { ...value, items: [{ id: 'old', kind: 'user', text: 'Earlier context.' }], nextCursor: null } : value);
 });
 app.post('/api/servers/:id/sessions', (req, res) => {
+  createdOn.push(req.params.id);
   writes.push({ type: 'create', ...req.body });
   detail = { ...detail, session: { ...session('created', 'gate', 'running', req.body.prompt), cwd: req.body.cwd },
     items: [{ id: 'first', kind: 'user', text: req.body.prompt }], turnId: 'turn-one', nextCursor: null };
@@ -231,7 +235,7 @@ try {
   const headerRunning = page.getByRole('button', { name: 'Running sessions', exact: true });
   assert.match(await headerRunning.innerText(), /Running\s*3/, 'Running count includes the current running conversation');
   await headerRunning.click();
-  assert.equal(await page.getByRole('button', { name: /^Validate migrations Current/ }).isDisabled(), true);
+  assert.equal(await page.getByRole('button', { name: /^Validate migrations Codex Current/ }).isDisabled(), true);
   await page.getByRole('button', { name: 'Close session list', exact: true }).click();
   await page.getByRole('button', { name: 'All sessions', exact: true }).click();
   await page.getByRole('button', { name: /^Validate migrations Running/ }).waitFor();
@@ -718,11 +722,11 @@ try {
   assert.equal(await viewport.evaluate(node => node.scrollTop), 0);
   const attentionButton = page.getByRole('button', { name: 'Other sessions: Needs you', exact: true });
   await attentionButton.click();
-  await page.getByRole('button', { name: /website Development · Waiting for approval/ }).waitFor();
-  assert.equal(await page.getByRole('button', { name: /修复登录 · Gate Development/ }).count(), 0, 'Exclude the current session');
+  await page.getByRole('button', { name: /website Codex Development · Waiting for approval/ }).waitFor();
+  assert.equal(await page.getByRole('button', { name: /修复登录 · Gate Codex Development/ }).count(), 0, 'Exclude the current session');
   for (const width of [1365, 390, 320]) { await page.setViewportSize({ width, height: 844 }); await bounded(); }
   await shot('attention-list-mobile');
-  await page.getByRole('button', { name: /website Development · Waiting for approval/ }).click();
+  await page.getByRole('button', { name: /website Codex Development · Waiting for approval/ }).click();
   assert.equal(await page.getByLabel('Message', { exact: true }).inputValue(), 'Separate website draft');
   await page.getByRole('button', { name: /^Next needs you/ }).click();
   await page.getByRole('heading', { name: 'api', exact: true }).waitFor();
@@ -732,7 +736,7 @@ try {
   assert.equal(await page.getByRole('button', { name: 'View session', exact: true }).count(), 0, 'Polling must not repeat alerts');
   monitor.servers[0].state = 'error';
   await attentionButton.click();
-  await page.getByText('Some servers are unavailable; their status is unknown.', { exact: true }).waitFor();
+  await page.getByText('Some tools are unavailable; their session status is unknown.', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Close session list' }).click();
   monitor.servers[0].state = 'connected';
   await page.waitForResponse(response => response.url().endsWith('/api/monitor'));
@@ -756,7 +760,7 @@ try {
   await page.getByLabel('Message', { exact: true }).fill('Pending switch check');
   await page.getByRole('button', { name: 'Send message', exact: true }).click();
   await attentionButton.click();
-  await page.getByRole('button', { name: /api Development · Waiting for you/ }).click();
+  await page.getByRole('button', { name: /api Codex Development · Waiting for you/ }).click();
   await page.getByRole('heading', { name: 'api', exact: true }).waitFor();
   await page.getByRole('button', { name: /^Return to 修复登录/ }).click();
   await page.getByRole('heading', { name: '修复登录 · Gate', exact: true }).waitFor();
@@ -867,8 +871,88 @@ try {
   await page.getByLabel('Host', { exact: true }).fill('fallback.local');
   assert.equal(await page.getByLabel('SSH host', { exact: true }).inputValue(), '@manual');
   await page.keyboard.press('Escape');
+  // Different agents can return the same native ID. Group only the presentation, never their action routes or drafts.
+  const agy = db.createServer({ ...server, name: 'Development · Antigravity', tool: 'agy', executablePath: 'agy', defaultWorkingDir: '/work/agy' });
+  const shared = { ...session('shared-native', 'Shared conversation', 'running', ''), cwd: '/home/alex/projects/shared' };
+  monitor.servers[0].tool = 'codex'; monitor.servers[0].toolName = 'Codex'; monitor.servers[0].createdAt = 1;
+  monitor.servers[0].sessions.push(shared);
+  const agyMonitor = { ...agy, toolName: 'Antigravity', state: 'connected', sessions: [{ ...shared }], hasMore: false };
+  monitor.servers.push(agyMonitor);
+  for (const [connectionId, toolName] of [[server.id, 'Codex'], [agy.id, 'Antigravity']]) separateDetails.set(`${connectionId}/${shared.id}`,
+    { ...detail, toolName, session: shared, turnId: 'shared-turn', requests: [], nextCursor: null, items: [{ id: 'native-output', kind: 'assistant', text: `${toolName} native context` }] });
+  await page.reload();
+  const sharedCard = page.getByRole('region', { name: 'Development sessions', exact: true });
+  const codexRow = page.getByRole('button', { name: 'Shared conversation Running · Codex', exact: true });
+  const agyRow = page.getByRole('button', { name: 'Shared conversation Running · Antigravity', exact: true });
+  await agyRow.waitFor();
+  assert.equal(await page.locator('.server-group').count(), 2);
+  assert.equal(await page.getByRole('region', { name: 'Development · Antigravity sessions', exact: true }).count(), 0);
+  assert.match(await page.getByRole('group', { name: 'Session summary', exact: true }).innerText(), /Servers\s*2/);
+  assert.equal(await sharedCard.getByRole('group', { name: 'Project /home/alex/projects/shared', exact: true }).count(), 1);
+  assert.equal(await codexRow.getByText('Codex', { exact: true }).isVisible(), true);
+  assert.equal(await agyRow.getByText('Antigravity', { exact: true }).isVisible(), true);
+  for (const width of [1365, 390, 320]) { await page.setViewportSize({ width, height: 900 }); await bounded(); await shot(`grouped-server-${width}`); }
+  await codexRow.click(); await page.getByText('Codex native context', { exact: true }).waitFor();
+  await page.getByLabel('Message', { exact: true }).fill('Codex-only draft');
+  await page.getByRole('button', { name: 'All sessions', exact: true }).click();
+  await agyRow.click(); await page.getByText('Antigravity native context', { exact: true }).waitFor();
+  assert.equal(new URL(page.url()).hash, `#session/${agy.id}/${shared.id}`);
+  assert.equal(await page.getByLabel('Message', { exact: true }).inputValue(), '');
+  await page.getByLabel('Message', { exact: true }).fill('Antigravity-only draft');
+  await page.getByRole('button', { name: 'All sessions', exact: true }).click();
+  await codexRow.click();
+  assert.equal(await page.getByLabel('Message', { exact: true }).inputValue(), 'Codex-only draft');
+  await page.getByRole('button', { name: 'Running sessions', exact: true }).click();
+  await page.getByRole('button', { name: /Shared conversation Antigravity Development/ }).click();
+  await page.getByText('Antigravity native context', { exact: true }).waitFor();
+  assert.equal(await page.getByLabel('Message', { exact: true }).inputValue(), 'Antigravity-only draft');
+  await page.getByRole('button', { name: 'Return to Shared conversation', exact: true }).click();
+  await page.getByRole('button', { name: 'All sessions', exact: true }).click();
+  await agyRow.locator('..').getByRole('button', { name: 'Archive Shared conversation', exact: true }).click();
+  await agyRow.waitFor({ state: 'hidden' }); await codexRow.waitFor();
+  assert.ok(db.getVisibility(agy.id).archivedSessions.some(s => s.id === shared.id));
+  assert.equal(db.getVisibility(server.id).archivedSessions.some(s => s.id === shared.id), false);
+  await page.getByRole('button', { name: 'Filter sessions on Development', exact: true }).click();
+  await page.getByLabel('Tool', { exact: true }).selectOption(agy.id);
+  await page.getByText('Archived sessions (1)', { exact: true }).click();
+  await page.getByRole('button', { name: 'Restore Shared conversation', exact: true }).click();
+  await page.getByRole('button', { name: `Hide ${shared.cwd}`, exact: true }).click();
+  await page.getByRole('button', { name: 'Save filters', exact: true }).click();
+  await agyRow.waitFor({ state: 'hidden' }); await codexRow.waitFor();
+  assert.deepEqual(db.getVisibility(agy.id).excludedDirectories, [shared.cwd]);
+  assert.equal(db.getVisibility(server.id).excludedDirectories.includes(shared.cwd), false);
+  await page.getByRole('button', { name: 'Filter sessions on Development', exact: true }).click();
+  await page.getByLabel('Tool', { exact: true }).selectOption(agy.id);
+  await page.getByText('Blocked directories (1)', { exact: true }).click();
+  await page.getByRole('button', { name: `Show ${shared.cwd}`, exact: true }).click();
+  await page.getByRole('button', { name: 'Save filters', exact: true }).click(); await agyRow.waitFor();
+  await page.getByRole('button', { name: 'Edit Development', exact: true }).click();
+  await page.getByLabel('Tool', { exact: true }).selectOption(agy.id);
+  assert.equal(await page.getByLabel('Tool executable', { exact: true }).inputValue(), 'agy');
+  const codexSettings = db.getServer(server.id);
+  await page.getByLabel('Tool executable', { exact: true }).fill('/tools/agy');
+  await page.getByRole('button', { name: 'Save server', exact: true }).click();
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
+  assert.equal(db.getServer(agy.id).executablePath, '/tools/agy'); assert.deepEqual(db.getServer(server.id), codexSettings);
+  await page.getByRole('button', { name: 'New session on Development', exact: true }).click();
+  await page.getByLabel('Tool', { exact: true }).selectOption(agy.id);
+  assert.equal(await page.getByLabel('Working directory', { exact: true }).inputValue(), '/work/agy');
+  await page.getByLabel('First message', { exact: true }).fill('Create with the selected agent');
+  await page.getByRole('button', { name: 'Start session', exact: true }).click();
+  await page.getByText('Create with the selected agent', { exact: true }).waitFor();
+  assert.equal(createdOn.at(-1), agy.id); assert.equal(new URL(page.url()).hash, `#session/${agy.id}/created`);
+  assert.equal(await page.getByLabel('Message', { exact: true }).inputValue(), '');
+  await page.getByRole('button', { name: 'All sessions', exact: true }).click();
+  agyMonitor.state = 'error'; agyMonitor.error = 'Fixture tool disconnected';
+  await page.getByText('Antigravity · Fixture tool disconnected', { exact: true }).waitFor();
+  await codexRow.waitFor(); await agyRow.waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: 'Shared conversation Unknown · Antigravity', exact: true }).waitFor();
+  assert.equal(await page.locator('.server-group').count(), 2, 'A failed tool remains in its existing server card');
+  await page.getByLabel('Search sessions', { exact: true }).fill('Shared conversation');
+  await page.getByRole('button', { name: 'Needs you', exact: true }).click();
+  await page.getByText('No matching sessions.', { exact: true }).waitFor();
   assert.deepEqual(errors, []);
-  console.log('Browser smoke passed: persistent filters, archive/restore, project grouping, collapsed history, search, monitor, history, create, send, steer, interrupt, approvals, questions, reconnect, 320/390/1365px.');
+  console.log('Browser smoke passed: grouped servers, tool tags and routing, SSH import, filters, archive/restore, projects, history, chat, attention, approvals, reconnect, 320/390/1365px.');
 } catch (error) {
   await shot('failure');
   console.error(await page.locator('body').innerText());

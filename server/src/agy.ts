@@ -161,6 +161,7 @@ export class AgyService extends EventEmitter implements AgentBackend {
     return { servers: [...this.entries.values()].map((entry) => {
       if (Date.now() - entry.checkedAt > 3000) void this.refresh(entry.settings.id);
       return { id: entry.settings.id, name: entry.settings.name, host: entry.settings.host, username: entry.settings.username,
+        port: entry.settings.port, createdAt: entry.settings.createdAt,
         tool: 'agy', toolName: 'Antigravity', statusNote, state: entry.error ? 'error' : entry.rpc ? 'connected' : 'connecting', error: entry.error,
         hasMore: entry.hasMore, sessions: entry.sessions.map((session) => ({ ...session, state: entry.error ? 'unknown' : session.state })) };
     }) };

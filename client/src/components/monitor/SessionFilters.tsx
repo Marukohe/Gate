@@ -4,10 +4,26 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { api } from '@/lib/api';
-import type { VisibilityOptions } from '../../../../server/src/types';
+import type { MonitorServer, VisibilityOptions } from '../../../../server/src/types';
+import { ToolConnectionSelect } from '@/components/server/ToolConnectionSelect';
 
-export function SessionFilters({ serverId, serverName, onClose, onChanged }: {
-  serverId: string; serverName: string; onClose: () => void; onChanged: () => void;
+export function SessionFilters({ connections, serverName, onClose, onChanged }: {
+  connections: MonitorServer[]; serverName: string; onClose: () => void; onChanged: () => void;
+}) {
+  const [selected, setSelected] = useState(connections[0].id);
+  const [busy, setBusy] = useState(false);
+  const serverId = connections.some((c) => c.id === selected) ? selected : connections[0].id;
+  return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+    <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
+      <DialogHeader><DialogTitle>Session filters</DialogTitle><DialogDescription>{serverName} · Saved for everyone using this Gate.</DialogDescription></DialogHeader>
+      {connections.length > 1 && <ToolConnectionSelect connections={connections} value={serverId} onChange={setSelected} disabled={busy} />}
+      <FilterSettings key={serverId} serverId={serverId} busy={busy} setBusy={setBusy} onClose={onClose} onChanged={onChanged} />
+    </DialogContent>
+  </Dialog>;
+}
+
+function FilterSettings({ serverId, busy, setBusy, onClose, onChanged }: {
+  serverId: string; busy: boolean; setBusy: (value: boolean) => void; onClose: () => void; onChanged: () => void;
 }) {
   const base = `/servers/${encodeURIComponent(serverId)}`;
   const [settings, setSettings] = useState<VisibilityOptions | null>(null);
@@ -15,7 +31,6 @@ export function SessionFilters({ serverId, serverName, onClose, onChanged }: {
   const [query, setQuery] = useState('');
   const [customDirectory, setCustomDirectory] = useState('');
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
     void api<VisibilityOptions>(`${base}/visibility`, { signal: controller.signal }).then((value) => {
@@ -59,9 +74,7 @@ export function SessionFilters({ serverId, serverName, onClose, onChanged }: {
     path !== directory && path.startsWith(directory === '/' ? '/' : `${directory}/`));
   const available = (settings?.directories ?? []).filter((path) => !directories.includes(path) && !coveredBy(path));
   const matching = available.filter((path) => path.toLowerCase().includes(query.trim().toLowerCase()));
-  return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-    <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
-      <DialogHeader><DialogTitle>Session filters</DialogTitle><DialogDescription>{serverName} · Saved for everyone using this Gate.</DialogDescription></DialogHeader>
+  return <>
       {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}
       {!settings && !error && <p className="text-sm text-muted-foreground">Loading filters…</p>}
       {settings && <>
@@ -108,7 +121,7 @@ export function SessionFilters({ serverId, serverName, onClose, onChanged }: {
         </form>
         <details className="border-t pt-3">
           <summary className="cursor-pointer text-sm">Archived sessions ({settings.archivedSessions.length})</summary>
-          <p className="mt-2 text-xs text-muted-foreground">Hidden only in Gate. Codex sessions keep running. Restore takes effect immediately; directory filters still apply.</p>
+          <p className="mt-2 text-xs text-muted-foreground">Hidden only in Gate. Sessions keep running. Restore takes effect immediately; directory filters still apply.</p>
           <div className="mt-3 max-h-64 overflow-y-auto">
             {settings.archivedSessions.map((session) => <div key={session.id} className="flex items-center gap-3 py-2">
               <span className="min-w-0 flex-1 truncate text-sm" title={session.cwd}>{session.name}</span>
@@ -119,6 +132,5 @@ export function SessionFilters({ serverId, serverName, onClose, onChanged }: {
           </div>
         </details>
       </>}
-    </DialogContent>
-  </Dialog>;
+  </>;
 }

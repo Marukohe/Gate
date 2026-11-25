@@ -4,6 +4,14 @@ Each saved connection selects a tool and an SSH account. The same host can have 
 Routes use `AgentService` and the `AgentBackend` contract; tool adapters own protocol translation. New tools register a
 definition and backend implementation. Session capabilities determine available UI controls.
 
+The homepage presents one server card per SSH hostname and port, regardless of tool or account. The oldest saved
+connection supplies its display name. Repository groups combine sessions across those connections; session titles and
+attention lists show tool tags. Server counts use these display groups. Different SSH ports stay separate.
+Navigation, draft/cache keys, native actions and archive/restore retain the owning connection ID and native session ID.
+Do not deduplicate sessions by native ID alone. A disconnected tool shows an error within its card without hiding healthy tools.
+The existing new-session, settings and filter dialogs select a tool when needed. Filter/archival preferences remain
+per connection; combining the display never combines or overwrites stored rules.
+
 Add server first offers concrete Host aliases from Gate's local `~/.ssh/config`, including Include files, with manual
 entry always available. Selecting an alias runs local `ssh -G` to fill editable host, port, user and identity-file fields.
 The imported connection summary is collapsed unless a password is needed. Saving stores a snapshot in Gate; SSH config

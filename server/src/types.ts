@@ -18,6 +18,7 @@ export interface ModelOption {
 }
 export interface MonitorServer {
   id: string; name: string; host: string; username: string;
+  port?: number; createdAt?: number;
   state: 'connecting' | 'connected' | 'error'; error?: string; hasFilters?: boolean; sessions: Session[]; hasMore: boolean;
   tool?: string; toolName?: string; statusNote?: string;
 }

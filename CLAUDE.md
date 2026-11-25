@@ -1,6 +1,6 @@
 # Gate
 
-Gate is a simple Server/tool connection → repository groups → native sessions panel. Keep it simple.
+Gate is a simple Server → repository groups → native sessions panel. Keep it simple.
 Codex uses its native shared app-server daemon through SSH Unix socket forwarding. Antigravity (agy) uses a persistent
 ACP stdio connection over SSH. Add tools through the backend contract and registration, not protocol branches in the UI.
 Do not add task/project workflows, a Gate remote runtime, transcript scanners, hook observers, or per-message CLI execution.
@@ -10,6 +10,11 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - React browser → HTTP actions and WebSocket events → Gate backend adapter → SSH → native tool.
 - HTTP routes use `AgentService`; protocol implementations satisfy `AgentBackend`. Connection settings select the tool
   and executable. SSH, SFTP, repository lookup and direct shell execution live outside tool-specific transports.
+- The homepage groups tool connections by SSH host and port into one server card, using the oldest connection's name.
+  Merge repository groups across tools, label session rows and attention lists with tool tags, and count server groups.
+  Keep connection ID plus native session ID on every action, draft, cache and row key; native IDs can collide across tools.
+  New-session, settings and filter dialogs select a tool within the existing server entry. Visibility settings remain scoped
+  to their original connections; regrouping must not migrate or combine saved exclusions/archives.
 - New connections offer local `~/.ssh/config` hosts first, then manual entry. Discover concrete aliases through Includes;
   use local `ssh -G` to resolve fields. Import an editable snapshot without modifying SSH config or exposing key contents.
   Do not silently import proxy/certificate configurations as direct connections. Config import is independent of the tool.
@@ -69,6 +74,7 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - `server/src/db.ts`: server settings, persistent visibility rules/archives, and one-time preservation of old Gate data.
 - `server/src/routes.ts` / `index.ts`: HTTP API and browser event delivery.
 - `client/src/components/monitor/SessionMonitor.tsx`: the single server/session panel and creation form.
+- `client/src/lib/server-groups.ts`: server display groups, owning connection metadata and tool labels.
 - `client/src/components/chat/SessionView.tsx`: conversation history, live events, input, and approvals.
 - `client/src/components/layout/SessionAttention.tsx`: cross-session status, transient notices, and quick switching.
 - `client/src/stores/monitor-store.ts` / `session-view-store.ts`: shared polling and per-conversation view state.
@@ -97,8 +103,8 @@ Data defaults to `~/.gate/gate.db`. Preserve existing user data when removing ol
 - Commit completed steps with small, meaningful Conventional Commits.
 - Run relevant tests, clear compiler warnings, and build broad frontend/server changes before committing.
 - Validate real tool behavior, including existing native sessions; mocked UI alone does not prove attachment.
-- Keep one tool per saved connection; add a separate connection to use another tool on the same host. Changing provider
-  on an existing connection would mix session IDs, drafts and persistent visibility preferences.
+- Keep one tool per internal connection while displaying one card per SSH endpoint. Changing provider on an existing
+  connection would mix session IDs, drafts and persistent visibility preferences; tool selection edits the correct connection.
 - Gate archives are display preferences, not native archives. Filtering/archiving must not mutate native tool sessions.
 - Never kill a shared backend to test reconnection. Close only Gate's own connection or an isolated test fixture.
 - Preserve passwords on an unchanged edit and never return them in browser API responses or logs.
