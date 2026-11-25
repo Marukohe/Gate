@@ -36,6 +36,8 @@ let detail = { session: { ...sessions[2], model: 'fixture-current', effort: 'hig
   { id: 'a1', kind: 'assistant', text: 'The panel now groups sessions by server.\n\n- Running work stays visible.\n- Questions appear in the conversation.\n- Each session has one place to continue.' }],
   nextCursor: 'older', turnId: null, requests: [] };
 const writes = [];
+let sshHostsUnavailable = false;
+let releaseSshHost;
 let modelsUnavailable = false;
 let holdInput = false;
 let releaseInput;
@@ -118,7 +120,14 @@ app.use('/api', routes(db, { tools: () => [{ id: 'codex', name: 'Codex', executa
   detail.session.name = name;
   for (const s of sessions) if (s.id === threadId) s.name = name;
   emit();
-} }));
+} }, {
+  async list() { if (sshHostsUnavailable) throw new Error('SSH config unavailable'); return ['configured', 'delayed', 'broken']; },
+  async resolve(alias) {
+    if (alias === 'broken') throw new Error('This host requires a proxy that Gate cannot import.');
+    if (alias === 'delayed') await new Promise(resolve => { releaseSshHost = resolve; });
+    return { alias, host: 'configured.local', port: 2200, username: 'configured-user', identityFiles: ['/keys/configured'] };
+  },
+}));
 app.use((error, _req, res, _next) => res.status(400).json({ error: error.message }));
 app.use(express.static(fileURLToPath(new URL('../client/dist/', import.meta.url))));
 await new Promise(resolve => http.listen(0, '127.0.0.1', resolve));
@@ -815,6 +824,7 @@ try {
   assert.equal(await page.getByLabel('Message', { exact: true }).inputValue(), 'Keep this draft while agy runs');
   await page.getByRole('button', { name: 'All sessions' }).click();
   await page.getByRole('button', { name: 'Add server', exact: true }).click();
+  await page.getByLabel('SSH host', { exact: true }).selectOption('@manual');
   await page.getByLabel('Tool', { exact: true }).selectOption('agy');
   assert.equal(await page.getByLabel('Tool executable', { exact: true }).inputValue(), 'agy');
   await page.getByLabel('Name', { exact: true }).fill('Another tool');
@@ -824,6 +834,39 @@ try {
   await page.getByRole('button', { name: 'Save server', exact: true }).click();
   await page.getByRole('dialog').waitFor({ state: 'hidden' });
   assert.ok(db.listServers().some(server => server.tool === 'agy' && server.executablePath === 'agy'));
+  await page.getByRole('button', { name: 'Add server', exact: true }).click();
+  await page.getByLabel('SSH host', { exact: true }).selectOption('configured');
+  await page.getByText('configured-user@configured.local:2200', { exact: true }).waitFor();
+  assert.equal(await page.getByLabel('Name', { exact: true }).inputValue(), 'configured');
+  assert.equal(await page.getByLabel('Host', { exact: true }).isVisible(), false, 'Imported connection details stay collapsed');
+  for (const width of [1365, 390, 320]) { await page.setViewportSize({ width, height: 900 }); await bounded(); await shot(`ssh-host-${width}`); }
+  await page.getByText('configured-user@configured.local:2200', { exact: true }).click();
+  assert.equal(await page.getByLabel('Host', { exact: true }).inputValue(), 'configured.local');
+  assert.equal(await page.getByLabel('Port', { exact: true }).inputValue(), '2200');
+  assert.equal(await page.getByLabel("Key path on Gate's machine", { exact: true }).inputValue(), '/keys/configured');
+  await page.getByLabel('Host', { exact: true }).fill('overridden.local');
+  await page.getByLabel('Name', { exact: true }).fill('Imported host');
+  await page.getByRole('button', { name: 'Save server', exact: true }).click();
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
+  assert.ok(db.listServers().some(s => s.name === 'Imported host' && s.host === 'overridden.local' && s.port === 2200 && s.privateKeyPath === '/keys/configured'));
+  await page.getByRole('button', { name: 'Add server', exact: true }).click();
+  await page.getByLabel('SSH host', { exact: true }).selectOption('delayed');
+  await page.getByRole('status').filter({ hasText: 'Reading connection settings' }).waitFor();
+  await page.getByLabel('SSH host', { exact: true }).selectOption('@manual');
+  await page.getByLabel('Host', { exact: true }).fill('manual.local');
+  while (!releaseSshHost) await new Promise(resolve => setTimeout(resolve, 10));
+  releaseSshHost(); await new Promise(resolve => setTimeout(resolve, 100));
+  assert.equal(await page.getByLabel('Host', { exact: true }).inputValue(), 'manual.local', 'Late resolution must not overwrite manual input');
+  await page.getByLabel('SSH host', { exact: true }).selectOption('broken');
+  await page.getByText('This host requires a proxy that Gate cannot import.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Save server', exact: true }).isDisabled(), true);
+  await page.keyboard.press('Escape');
+  sshHostsUnavailable = true;
+  await page.getByRole('button', { name: 'Add server', exact: true }).click();
+  await page.getByText('Could not read SSH hosts. You can enter the connection manually.', { exact: true }).waitFor();
+  await page.getByLabel('Host', { exact: true }).fill('fallback.local');
+  assert.equal(await page.getByLabel('SSH host', { exact: true }).inputValue(), '@manual');
+  await page.keyboard.press('Escape');
   assert.deepEqual(errors, []);
   console.log('Browser smoke passed: persistent filters, archive/restore, project grouping, collapsed history, search, monitor, history, create, send, steer, interrupt, approvals, questions, reconnect, 320/390/1365px.');
 } catch (error) {

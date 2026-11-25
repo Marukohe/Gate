@@ -4,6 +4,7 @@ export interface Server {
   defaultWorkingDir?: string; tool?: string; executablePath?: string; codexPath?: string; createdAt: number;
 }
 export type PublicServer = Omit<Server, 'password'> & { hasPassword: boolean };
+export interface SshHost { alias: string; host: string; port: number; username: string; identityFiles: string[] }
 export interface ToolDefinition { id: string; name: string; executable: string; description: string }
 export type SessionState = 'running' | 'waiting' | 'idle' | 'saved' | 'error' | 'unknown';
 export interface Session {

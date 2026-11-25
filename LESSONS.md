@@ -50,6 +50,8 @@
   Include supported/default reasoning efforts, reset the effort draft when changing models, and pass effort on new turns only.
   `turn/steer` cannot override a model or effort. A catalog failure must not disable ordinary chat.
 - Non-interactive SSH can have a different PATH. Support explicit tool executables and their adjacent runtime binaries.
+  SSH config import reads Gate's machine, not the browser's. Use OpenSSH for effective values, preserve manual entry,
+  abort stale selections, and reject proxy/certificate settings instead of silently discarding their connection requirements.
 - Native addons follow the active Node.js ABI. For `ERR_DLOPEN_FAILED`, rebuild `better-sqlite3` with that Node installation.
 - Inspect port ownership before stopping development services. Never stop an unrelated project or a shared Codex daemon.
 - Preserve old database history when removing workflows; connection removal must not erase archived conversations.

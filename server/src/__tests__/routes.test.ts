@@ -13,9 +13,10 @@ const codex = { tools: () => [
   { id: 'codex', name: 'Codex', executable: 'codex', description: '' },
   { id: 'agy', name: 'Antigravity', executable: 'agy', description: '' },
 ], sync: vi.fn(), monitor: vi.fn(), create: vi.fn(), input: vi.fn(), rename: vi.fn(), models: vi.fn(), file: vi.fn(), shell: vi.fn() };
+const hosts = { list: vi.fn(), resolve: vi.fn() };
 beforeEach(async () => {
   vi.resetAllMocks(); db = createDb(':memory:');
-  const app = express(); app.use(express.json({ limit: INPUT_BODY_LIMIT })); app.use(routes(db, codex as unknown as AgentService));
+  const app = express(); app.use(express.json({ limit: INPUT_BODY_LIMIT })); app.use(routes(db, codex as unknown as AgentService, hosts));
   app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => res.status(400).json({ error: error.message }));
   http = app.listen(0, '127.0.0.1'); await new Promise<void>((resolve) => http.once('listening', resolve));
   const address = http.address(); origin = `http://127.0.0.1:${typeof address === 'object' && address?.port}`;
@@ -23,6 +24,17 @@ beforeEach(async () => {
 afterEach(async () => { await new Promise<void>((resolve) => http.close(() => resolve())); db.close(); });
 const send = (path: string, body: object, method = 'POST') => fetch(origin + path,
   { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+it('lists local SSH hosts and imports resolved fields without connecting to a tool', async () => {
+  hosts.list.mockResolvedValue(['development']);
+  hosts.resolve.mockResolvedValue({ alias: 'development', host: '127.0.0.1', port: 2222, username: 'tester', identityFiles: ['/keys/test'] });
+  expect(await (await fetch(origin + '/ssh/hosts')).json()).toEqual({ hosts: ['development'] });
+  expect(await (await fetch(origin + '/ssh/hosts/development')).json()).toMatchObject({ port: 2222, identityFiles: ['/keys/test'] });
+  expect(hosts.resolve).toHaveBeenCalledWith('development'); expect(codex.create).not.toHaveBeenCalled();
+  hosts.resolve.mockRejectedValue(new Error('Host is no longer configured'));
+  expect((await fetch(origin + '/ssh/hosts/deleted')).status).toBe(400);
+  expect(db.listServers()).toEqual([]);
+});
 
 it('exposes registered tools, persists separate tool connections, and preserves legacy executable settings', async () => {
   expect((await (await fetch(origin + '/tools')).json()).tools.map((tool: any) => tool.id)).toEqual(['codex', 'agy']);

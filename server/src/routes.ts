@@ -5,16 +5,19 @@ import { publicServer } from './db.js';
 import type { AgentService } from './agents.js';
 import type { Server } from './types.js';
 import { sendSessionFile } from './session-files.js';
+import { sshHosts } from './ssh-config.js';
 
 function text(value: unknown, name: string, max = 200_000): string {
   if (typeof value !== 'string' || !value.trim() || value.length > max || value.includes('\0')) throw new Error(`Invalid ${name}`);
   return value.trim();
 }
-export function routes(db: Database, agents: AgentService) {
+export function routes(db: Database, agents: AgentService, hosts = sshHosts) {
   const router = Router();
   const sync = () => agents.sync(db.listServers());
   sync();
   router.get('/tools', (_req, res) => res.json({ tools: agents.tools() }));
+  router.get('/ssh/hosts', async (_req, res) => res.json({ hosts: await hosts.list() }));
+  router.get('/ssh/hosts/:alias', async (req, res) => res.json(await hosts.resolve(req.params.alias)));
   router.get('/health', (_req, res) => res.json({ status: 'ok' }));
   router.get('/servers', (_req, res) => res.json(db.listServers().map(publicServer)));
   router.get('/servers/:id/models', async (req, res) => res.json({ models: await agents.models(req.params.id, typeof req.query.session === 'string' ? req.query.session : undefined) }));

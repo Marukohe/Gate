@@ -10,6 +10,9 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - React browser → HTTP actions and WebSocket events → Gate backend adapter → SSH → native tool.
 - HTTP routes use `AgentService`; protocol implementations satisfy `AgentBackend`. Connection settings select the tool
   and executable. SSH, SFTP, repository lookup and direct shell execution live outside tool-specific transports.
+- New connections offer local `~/.ssh/config` hosts first, then manual entry. Discover concrete aliases through Includes;
+  use local `ssh -G` to resolve fields. Import an editable snapshot without modifying SSH config or exposing key contents.
+  Do not silently import proxy/certificate configurations as direct connections. Config import is independent of the tool.
 - Repository groups are derived from read-only Git metadata over the existing SSH connection, with cwd fallback.
   They are display groups, not persisted project workflows. Project headings reveal history and collapse sessions, including running-only groups.
   Active sessions show by default; search reveals matches without changing the chosen collapsed state.
@@ -57,6 +60,7 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - `server/src/codex-connection.ts`: SSH, native daemon discovery/start, Unix socket forwarding, JSON-RPC correlation.
 - `server/src/agent-backend.ts` / `agents.ts`: backend contract, registration, connection routing and event isolation.
 - `server/src/ssh.ts`: shared SSH connection, quoting, shell commands and Git metadata lookup.
+- `server/src/ssh-config.ts`: local SSH alias discovery and OpenSSH-resolved connection-field import.
 - `server/src/agy.ts` / `acp-connection.ts`: Antigravity native session adapter and persistent ACP transport.
 - `server/src/codex.ts`: native session listing, history, subscriptions, messages, decisions, and interruption.
 - `server/src/codex-requests.ts`: offered approval choices and structured question answers.

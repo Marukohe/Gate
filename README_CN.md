@@ -37,9 +37,16 @@ Gate 通过统一后端接口路由操作。工具适配器负责原生协议，
    gate
    ```
 
-4. 打开 `http://localhost:3030`，点击 **Add server**，在 **Tool** 中选择工具，填写 SSH 连接信息。
+4. 打开 `http://localhost:3030`，点击 **Add server**。优先从 **SSH host** 选择运行 Gate 的机器上
+   `~/.ssh/config` 已有的主机，也可选择 **Enter manually…** 手动填写，然后选择 **Tool** 并保存。
+   导入会填入名称、地址、端口、用户名和首个可用密钥路径。展开连接摘要可修改这些字段或切换密码认证，密码需单独输入。
    如果登录 PATH 中找不到工具，在 **Tool executable** 填写绝对路径。
    同一台机器同时使用 Codex 和 agy 时分别添加连接；已有 Codex 配置会自动迁移。
+
+导入需要 Gate 所在机器安装 OpenSSH。主机列表包含 `Include` 文件里的明确 `Host` 别名，通过 `ssh -G` 解析配置。
+保存的是可编辑的连接配置副本，不会修改 `~/.ssh/config`，也不自动跟随该文件之后的变化。
+依赖 ProxyJump、ProxyCommand 或证书的配置不能直接导入，需手动填写可直连的服务器。
+导入字段使用 Gate 原有的密钥／密码 SSH 连接方式，不代表支持全部 OpenSSH 选项。
 
 Codex 连接原生共享后台；后台尚未运行时会启动它，已有后台不会被重启。
 SSH 服务器需要允许 Unix socket 转发，无需公开 Codex 网络端口。

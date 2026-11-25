@@ -4,6 +4,11 @@ Each saved connection selects a tool and an SSH account. The same host can have 
 Routes use `AgentService` and the `AgentBackend` contract; tool adapters own protocol translation. New tools register a
 definition and backend implementation. Session capabilities determine available UI controls.
 
+Add server first offers concrete Host aliases from Gate's local `~/.ssh/config`, including Include files, with manual
+entry always available. Selecting an alias runs local `ssh -G` to fill editable host, port, user and identity-file fields.
+The imported connection summary is collapsed unless a password is needed. Saving stores a snapshot in Gate; SSH config
+is never written or watched. Import does not open an SSH connection, return key contents, or import proxy/certificate setups.
+
 For Codex, Gate uses one connection to the shared app-server daemon. SSH forwards the native Unix socket;
 Gate installs no remote files and opens no public Codex port. It starts an absent daemon without restarting an existing one.
 The Codex executable is resolved through the SSH login shell or an explicit path in server settings.

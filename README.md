@@ -39,9 +39,17 @@ SSH access, repository grouping and the browser panel remain independent of it.
    gate
    ```
 
-4. Open `http://localhost:3030`, choose **Add server**, select **Tool**, and enter your SSH connection details.
+4. Open `http://localhost:3030` and choose **Add server**. Select an existing **SSH host** from `~/.ssh/config`
+   on the machine running Gate, or choose **Enter manually…**. Select **Tool** and save.
+   Importing fills the name, host, port, username and first available identity-file path; expand the connection summary
+   to edit these fields or switch to password authentication. Passwords must be entered separately.
    Set **Tool executable** to an absolute path if it is not on the SSH login PATH.
    Add separate connections to use Codex and agy on the same machine; existing Codex settings migrate automatically.
+
+SSH import requires local OpenSSH. It lists concrete `Host` aliases, including `Include` files, and uses `ssh -G`
+to resolve their settings. Gate saves an editable copy, does not change `~/.ssh/config`, and does not track later config edits.
+ProxyJump, ProxyCommand and certificate-based configurations cannot be imported as direct connections; use manual settings
+for a directly reachable server. Imported fields use Gate's existing key/password SSH connection, not every OpenSSH option.
 
 For Codex, Gate connects to the native daemon, starting it if necessary without restarting an existing backend.
 The SSH server must allow Unix socket forwarding. No public Codex port is required.
