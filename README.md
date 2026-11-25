@@ -108,6 +108,7 @@ Use the same remote OS user and Codex configuration as your terminal.
 - **File sidebar:** click the panel icon at the top right of a conversation to browse its server's files, starting in
   the session's working directory. Open folders, go up, return home, enter a path, or refresh. Click a file for a read-only
   text/image preview, with buttons to open a new tab or download. Each directory shows up to 1,000 entries.
+  Text shows source line numbers; **Wrap lines** toggles automatic wrapping and remembers the choice in this browser.
   The pane follows the selected session; its last directory/file stays in tab memory. Narrow windows temporarily hide
   the session list; phones show files full-screen. Closing it returns to the conversation with drafts and reading position intact.
   Browsing uses SFTP for both tools and does not send a model request.

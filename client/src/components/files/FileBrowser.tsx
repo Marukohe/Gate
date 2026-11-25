@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, ArrowUp, Download, ExternalLink, File, Folder, House, Link, LoaderCircle, PanelRightClose, RefreshCw } from 'lucide-react';
+import { memo, useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { ArrowLeft, ArrowUp, Download, ExternalLink, File, Folder, House, Link, LoaderCircle, PanelRightClose, RefreshCw, WrapText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
 import { sessionKey, useSessionViewStore } from '@/stores/session-view-store';
+import { useUIStore } from '@/stores/ui-store';
 import type { DirectoryListing, FilePreview } from '../../../../server/src/types';
 
 const initialFiles = { directory: '.', file: null as string | null };
@@ -12,12 +13,26 @@ const parent = (path: string) => path.replace(/\/+$/, '').split('/').slice(0, -1
 const sizeLabel = (bytes: number) => bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 type Loaded = { target: string; directory: DirectoryListing } | { target: string; preview: FilePreview };
 
+// One row per source line keeps numbers aligned when the content wraps; numbers never enter copied text.
+const TextPreview = memo(function TextPreview({ text, wrap }: { text: string; wrap: boolean }) {
+  const lines = text.split('\n');
+  return <pre aria-label="File content" className="file-text" data-wrap={wrap} tabIndex={0}
+    style={{ '--line-number-width': `${Math.max(2, String(lines.length).length)}ch` } as CSSProperties}>
+    {lines.map((line, index) => <span className="file-line" key={index}>
+      <span className="file-line-number" aria-hidden="true">{index + 1}</span>
+      <span className="file-line-content">{line}{index < lines.length - 1 ? '\n' : ''}</span>
+    </span>)}
+  </pre>;
+});
+
 export function FileBrowser({ serverId, threadId, open, onClose }: {
   serverId: string; threadId: string; open: boolean; onClose: () => void;
 }) {
   const key = sessionKey(serverId, threadId);
   const { directory, file } = useSessionViewStore((state) => state.views[key]?.files ?? initialFiles);
   const update = useSessionViewStore((state) => state.update);
+  const wrap = useUIStore((state) => state.fileWrap);
+  const toggleWrap = useUIStore((state) => state.toggleFileWrap);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [loading, setLoading] = useState(open);
   const [error, setError] = useState('');
@@ -68,6 +83,8 @@ export function FileBrowser({ serverId, threadId, open, onClose }: {
     {file ? <div className="flex min-w-0 items-center gap-1 border-b px-2 py-2">
       <Button size="icon-sm" variant="ghost" aria-label="Back to files" title="Back to files" onClick={goBack}><ArrowLeft /></Button>
       <span className="min-w-0 flex-1 truncate text-xs font-medium" title={file}>{basename(file)}</span>
+      {preview?.kind === 'text' && <Button size="icon-sm" variant={wrap ? 'secondary' : 'ghost'} aria-label="Wrap lines"
+        title={wrap ? 'Disable line wrapping' : 'Wrap lines'} aria-pressed={wrap} onClick={toggleWrap}><WrapText /></Button>}
       <a href={fileUrl} target="_blank" rel="noreferrer" aria-label="Open file in new tab" title="Open in new tab" className="file-action"><ExternalLink className="size-3.5" /></a>
       <a href={`${fileUrl}&download=1`} download aria-label="Download file" title="Download" className="file-action"><Download className="size-3.5" /></a>
     </div> : <form onSubmit={submitPath} className="flex items-center gap-1 border-b px-2 py-2">
@@ -98,7 +115,7 @@ export function FileBrowser({ serverId, threadId, open, onClose }: {
         {!listing.entries.length && <li className="px-2 py-4 text-xs text-muted-foreground">This folder is empty.</li>}
         {listing.truncated && <li className="px-2 py-3 text-xs text-muted-foreground">Showing the first {listing.entries.length} entries. Enter a folder path above to browse further.</li>}
       </ul>}
-      {!error && file && preview?.kind === 'text' && <pre aria-label="File content" className="min-w-full w-max p-3 font-mono text-[11px] leading-relaxed" tabIndex={0}>{preview.text}</pre>}
+      {!error && file && preview?.kind === 'text' && <TextPreview text={preview.text} wrap={wrap} />}
       {!error && file && preview?.kind === 'image' && (imageFailed ? <p role="alert" className="p-4 text-xs text-destructive">This image could not be displayed. Refresh or download it.</p>
         : <img key={`${fileUrl}:${revision}`} src={fileUrl} alt={basename(file)} onError={() => setImageFailed(true)} className="mx-auto max-w-full p-3" />)}
       {!error && file && preview?.kind === 'download' && <p className="p-4 text-xs leading-relaxed text-muted-foreground">Preview is unavailable for this file ({sizeLabel(preview.size)}). Use Download to open it locally.</p>}

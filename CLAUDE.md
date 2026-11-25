@@ -58,6 +58,7 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
   Resolve relative paths against native thread cwd; file contents must never execute on Gate's origin.
 - A collapsible right file pane browses the owning session's server through the same SFTP path, without agent turns.
   Keep directory listing bounded, text/image previews read-only, and download/open-in-new-tab available.
+  Text previews show source line numbers and a browser-persisted wrap toggle; soft wraps must not renumber lines.
   Browser-memory directory/file selection is keyed by connection and native session; abort stale reads on navigation.
   Compact windows temporarily hide the left sidebar; mobile shows one pane. Preserve chat drafts/scroll and exclude file-pane paste.
 - Scrolling upward near the chat top loads one native history page at a time. Prepending anchors the visible message
