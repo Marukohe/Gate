@@ -294,21 +294,27 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
       {isShell ? <p className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"><Terminal className="size-3.5 shrink-0" />
         <span className="truncate" title={detail?.session.cwd}>Shell · {detail?.session.cwd}</span></p>
         : <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        <span className="relative inline-flex min-w-0 max-w-full">
         <select aria-label="Model" value={detail?.turnId ? '' : model} onChange={(e) => { setModel(e.target.value); setEffort(''); }}
           disabled={busy || offline || !detail?.session.canInput || !!detail?.turnId || loadingModels || !!modelError || !models.length}
           title={detail?.turnId ? 'Change model after this turn finishes' : 'Model for your next message'}
-          className="h-7 max-w-full min-w-0 rounded-md border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60">
+          className="peer h-7 max-w-full min-w-0 appearance-none rounded-md border bg-background pl-2 pr-7 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60">
           <option value="">{detail?.session.model || 'Current model'}</option>
           {models.filter((option) => option.id !== detail?.session.model).map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
         </select>
+        <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 peer-disabled:opacity-60" />
+        </span>
+        <span className="relative inline-flex min-w-0 max-w-full">
         <select aria-label="Reasoning effort" value={detail?.turnId ? '' : selectedEffort} onChange={(e) => setEffort(e.target.value)}
           disabled={busy || offline || !detail?.session.canInput || !!detail?.turnId || loadingModels || !!modelError || !efforts.length}
           title={detail?.turnId ? 'Change reasoning effort after this turn finishes' : 'Reasoning effort for your next message'}
-          className="h-7 max-w-full min-w-0 rounded-md border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60">
+          className="peer h-7 max-w-full min-w-0 appearance-none rounded-md border bg-background pl-2 pr-7 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60">
           <option value="">{defaultEffort ? `${draftModel ? 'Default' : 'Current'}: ${defaultEffort}` : 'Model default'}</option>
           {efforts.map((option) => <option key={option.id} value={option.id} title={option.description}>
             {option.id === 'xhigh' ? 'Extra high' : option.id.charAt(0).toUpperCase() + option.id.slice(1)}</option>)}
         </select>
+        <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 peer-disabled:opacity-60" />
+        </span>
         {modelError ? <span role="status" className="min-w-0 break-words">Models unavailable. {modelError} <button type="button" className="underline" onClick={() => setModelRevision((value) => value + 1)}>Retry models</button></span>
           : detail?.turnId ? <span>Change settings between turns</span> : model || selectedEffort ? <span>Applies to your next message</span> : null}
       </div>}

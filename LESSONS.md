@@ -50,6 +50,7 @@
 - Inspect port ownership before stopping development services. Never stop an unrelated project or a shared Codex daemon.
 - Preserve old database history when removing workflows; connection removal must not erase archived conversations.
 - Check actual control bounds at 320px and 390px. Hidden overflow can conceal clipped controls.
+  Native select arrows can ignore padding; position an explicit chevron and reserve space between it and the text.
 - Enter-to-send must respect composition events and IME keyCode 229; isComposing can be false on the confirming Enter.
 - Keep generated output out of Git, and clean the server build directory so removed modules are not shipped in npm packages.
 - Group repositories by their full Git root, sharing the common directory for linked worktrees; names and remote URLs
