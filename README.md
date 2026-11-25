@@ -64,7 +64,8 @@ Use the same remote OS user and Codex configuration as your terminal.
   the whole pane and closes when you choose a session. Search, filters and expanded groups stay while switching sessions.
 - **Monitor:** the sidebar groups sessions by server and repository. Worktrees share their repository group.
   Connections with the same SSH host and port share one group, including sessions from different tools in the same repository.
-  Each session name has a tool tag. The **Servers** count reflects these server groups, not the number of tools.
+  Each session name has a tool tag: green for Codex, purple for Antigravity, in both themes.
+  The **Servers** count reflects these server groups, not the number of tools.
   Projects needing attention come first. Groups containing an active or current session start expanded; others start collapsed.
   An expanded group shows all its visible sessions, including idle/saved sessions from every tool.
   Click a project heading to expand or collapse the entire list.
