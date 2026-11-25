@@ -1,6 +1,4 @@
-import type { ModelOption, MonitorServer, Server, ServerEvent, Session, SessionDetail, ShellResult } from './types.js';
-
-export interface ToolDefinition { id: string; name: string; executable: string; description: string }
+import type { ModelOption, MonitorServer, Server, ServerEvent, Session, SessionDetail, ShellResult, ToolDefinition } from './types.js';
 
 // Backends translate native protocols into Gate data. HTTP and UI never issue native RPCs.
 export interface AgentBackend {

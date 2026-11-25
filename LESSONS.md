@@ -13,6 +13,8 @@
   never replay a send, and refresh native state before acting on cached history. Do not restore cached approval IDs.
   A refresh response may predate live events received during the request. Preserve those updated items instead of
   overwriting them with the snapshot; test a delayed response after streamed output, including conversation height.
+  Merge live status after asynchronous metadata lookup. A tool's own saved timestamp must not discard completed output
+  or an error notice by triggering an unnecessary history replay.
 - Keep chat navigation, title, and status in one header row, including after attention jumps. Move metadata into the title
   popover and verify the conversation starts directly below the header at 320px, 390px, and desktop widths.
 - Auto-load history only on upward scrolling near the top, with a synchronous in-flight guard. Anchor the visible message
@@ -34,6 +36,8 @@
   with a files fallback, never both; do not intercept text paste or other editors/dialogs.
 - A saved conversation ID does not identify a live process. Use the same Codex shared backend as the terminal;
   a fresh `exec resume` process cannot take over an in-flight turn.
+  ACP session list/load provides history, not other clients' live status or takeover. Keep protocols inside adapters,
+  derive controls from capabilities, preserve native approval options, and replace replayed history when IDs are unstable.
 - Correlate JSON-RPC responses by ID. Server requests with IDs are approvals/questions, not ordinary responses.
   Approval IDs belong to their connection. Do not replay inputs or decisions after timeout/disconnection.
 - `!` commands use the owning session's native cwd and existing SSH connection, never model input. Group the command
@@ -45,7 +49,7 @@
 - Model choices come from paginated `model/list`; send the model slug, not the catalog entry ID, on `turn/start` only.
   Include supported/default reasoning efforts, reset the effort draft when changing models, and pass effort on new turns only.
   `turn/steer` cannot override a model or effort. A catalog failure must not disable ordinary chat.
-- Non-interactive SSH can have a different PATH. Support an explicit Codex executable and its adjacent Node.js binary.
+- Non-interactive SSH can have a different PATH. Support explicit tool executables and their adjacent runtime binaries.
 - Native addons follow the active Node.js ABI. For `ERR_DLOPEN_FAILED`, rebuild `better-sqlite3` with that Node installation.
 - Inspect port ownership before stopping development services. Never stop an unrelated project or a shared Codex daemon.
 - Preserve old database history when removing workflows; connection removal must not erase archived conversations.

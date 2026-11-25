@@ -56,19 +56,20 @@ export function SessionMonitor({ onOpen, onAddServer, onEditServer, statusFilter
     {error && <p role="alert" className="break-words text-sm text-destructive">Updates paused. {error} Retrying automatically.</p>}
     {!servers && !error && <p className="py-12 text-center text-sm text-muted-foreground">Connecting to your servers…</p>}
     {servers?.length === 0 && <div className="monitor-empty"><ServerIcon className="mx-auto mb-4 size-7 text-muted-foreground" />
-      <h2 className="font-medium">Your servers. Your sessions.</h2><p className="mt-2 text-sm text-muted-foreground">Add a server to see your Codex sessions.</p>
+      <h2 className="font-medium">Your servers. Your sessions.</h2><p className="mt-2 text-sm text-muted-foreground">Add a server and choose a coding tool to see its sessions.</p>
       <Button className="mt-5" onClick={onAddServer}><Plus />Add server</Button></div>}
     {filtered?.map((server) => <section key={server.id} aria-label={`${server.name} sessions`} className="server-group">
       <div className="server-group-header"><ServerIcon className="size-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1"><h2 className="truncate text-sm font-semibold">{server.name}<span className="ml-2 font-normal text-muted-foreground">{server.sessions.length}</span></h2>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{server.username}@{server.host}</p></div>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">{server.username}@{server.host}{server.toolName && ` · ${server.toolName}`}</p></div>
         <Button variant="ghost" size="icon-sm" aria-label={`Filter sessions on ${server.name}`} title="Session filters"
           className={server.hasFilters ? 'text-primary bg-accent' : ''} onClick={() => setFilterServer(server.id)}><Filter /></Button>
         <Button variant="ghost" size="icon-sm" aria-label={`Edit ${server.name}`} onClick={() => onEditServer(server.id)}><Settings2 /></Button>
         <Button variant="outline" size="sm" aria-label={`New session on ${server.name}`} onClick={() => setCreating(server.id)}><Plus /><span className="hidden min-[380px]:inline">Session</span></Button>
       </div>
       {server.error && <p role="alert" className="break-words border-b px-5 py-3 text-xs text-destructive">{server.error}</p>}
-      {server.state === 'connecting' && <p className="px-5 py-4 text-sm text-muted-foreground">Connecting to Codex…</p>}
+      {server.state === 'connecting' && <p className="px-5 py-4 text-sm text-muted-foreground">Connecting to {server.toolName || 'agent'}…</p>}
+      {server.statusNote && <p className="border-b px-5 py-2 text-xs text-muted-foreground">{server.statusNote}</p>}
       {groupProjects(server.sessions).map((project) => <ProjectSessions key={project.path} project={project}
         searching={!!search || !!statusFilter} stale={!!error} onOpen={(id) => onOpen(server.id, id)} onArchive={async (session) => {
           await post(`/servers/${encodeURIComponent(server.id)}/sessions/${encodeURIComponent(session.id)}/archive`, { name: session.name, cwd: session.cwd });
@@ -161,7 +162,7 @@ function NewSession({ serverId, onCreated }: { serverId: string; onCreated: (ses
   }
   return <form onSubmit={submit} className="space-y-4">
     <label className="block space-y-2 text-sm">Working directory<Input name="cwd" required defaultValue={server?.defaultWorkingDir} placeholder="/home/me/project" /></label>
-    <label className="block space-y-2 text-sm">What should Codex do?<Textarea name="prompt" required autoFocus rows={4} placeholder="Describe the work…" /></label>
+    <label className="block space-y-2 text-sm">First message<Textarea name="prompt" required autoFocus rows={4} placeholder="Describe the work…" /></label>
     {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}
     <Button disabled={busy} className="w-full">{busy ? 'Starting…' : 'Start session'}</Button>
   </form>;

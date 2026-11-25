@@ -1,5 +1,4 @@
 import { EventEmitter } from 'node:events';
-import { randomUUID } from 'node:crypto';
 import { sessionFilePath } from './session-files.js';
 import { connectCodex, type CodexRpc, type RpcMessage } from './codex-connection.js';
 import { describeRequest, decision } from './codex-requests.js';
@@ -135,6 +134,7 @@ export class CodexService extends EventEmitter implements AgentBackend {
     return { servers: [...this.entries.values()].map((entry) => {
       if (Date.now() - entry.checkedAt > 3000) void this.refresh(entry.settings.id);
       return { id: entry.settings.id, name: entry.settings.name, host: entry.settings.host, username: entry.settings.username,
+        tool: 'codex', toolName: 'Codex',
         state: entry.error ? 'error' : entry.rpc ? 'connected' : 'connecting', error: entry.error, hasMore: entry.hasMore,
         sessions: entry.sessions.map((s) => ({ ...s, state: entry.error ? 'unknown' : s.state })) };
     }) };
@@ -163,6 +163,7 @@ export class CodexService extends EventEmitter implements AgentBackend {
     if (latest?.status === 'failed') items.push({ id: `error-${latest.id}`, kind: 'notice',
       text: `Turn failed: ${latest.error?.message ?? 'Codex could not finish this turn.'}` });
     return { session: sessionFromThread(thread.thread), items,
+      toolName: 'Codex', capabilities: { rename: true, images: true, steer: true, models: true, effort: true, interrupt: true },
       nextCursor: history.nextCursor, turnId: latest?.status === 'inProgress' ? latest.id : null,
       requests: [...entry.requests.values()].map((v) => v.request).filter((r) => r.threadId === threadId) };
   }
@@ -207,28 +208,6 @@ export class CodexService extends EventEmitter implements AgentBackend {
   async input(serverId: string, threadId: string, text: string, turnId?: string, model?: string, effort?: string, attachments?: unknown) {
     const images = imageInputs(attachments);
     if (!text.trim() && !images.length) throw new Error('Enter a message or attach an image.');
-    if (text.trimStart().startsWith('!')) {
-      if (images.length) throw new Error('Remove image attachments before running a shell command.');
-      const command = text.trimStart().slice(1).trim();
-      if (!command || command.length > 32_000 || command.includes('\0')) throw new Error('Invalid shell command');
-      // Older open pages still post to /input. Classify here before any native turn RPC.
-      const item: Item = { id: `shell-${randomUUID()}`, kind: 'tool', title: `$ ${command}`, text: '', status: 'Running…' };
-      const publish = () => this.publish({ serverId, threadId, type: 'item', item: { ...item } });
-      publish();
-      try {
-        const result = await this.shell(serverId, threadId, command);
-        item.status = result.error ? 'Unconfirmed' : result.timedOut ? 'Timed out' : result.signal ? `Signal ${result.signal}`
-          : result.exitCode === null ? 'Exit unknown' : `Exit ${result.exitCode}`;
-        item.text = [result.stdout, result.stderr && `Standard error:\n${result.stderr}`, result.error,
-          result.timedOut && 'Stopped waiting after 60 seconds and requested termination. Check before running again.',
-          result.truncated && 'Output truncated after 128,000 characters.'].filter(Boolean).join('\n') || 'No output.';
-        publish();
-        return { shell: result };
-      } catch (error) {
-        item.status = 'Unconfirmed'; item.text = `${(error as Error).message}. Check the command before running it again.`;
-        publish(); throw error;
-      }
-    }
     if (turnId && (model || effort)) throw new Error('Models and reasoning effort can only be changed between turns');
     const entry = this.entry(serverId);
     const rpc = await this.subscribe(entry, threadId);

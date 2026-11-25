@@ -103,7 +103,7 @@ app.post('/api/servers/:id/sessions/:thread/interrupt', (req, res) => {
 app.post('/api/servers/:id/sessions/:thread/requests/:request', (req, res) => {
   writes.push({ type: 'answer', ...req.body }); detail.requests = []; res.json({}); emit();
 });
-app.use('/api', routes(db, { tools: () => [{ id: 'codex', name: 'Codex', executable: 'codex', description: '' }], sync() {}, monitor: () => structuredClone(monitor), async shell(serverId, threadId, command) {
+app.use('/api', routes(db, { tools: () => [{ id: 'codex', name: 'Codex', executable: 'codex', description: '' }, { id: 'agy', name: 'Antigravity (agy)', executable: 'agy', description: '' }], sync() {}, monitor: () => structuredClone(monitor), async shell(serverId, threadId, command) {
   writes.push({ type: 'shell', serverId, threadId, command });
   if (holdShell) await new Promise(resolve => { releaseShell = resolve; });
   return { stdout: command === 'pwd' ? '/home/alex/projects/gate\n' : 'shell-ok\n', stderr: command === 'pwd' ? '' : 'shell-error\n',
@@ -486,7 +486,7 @@ try {
   await page.getByRole('button', { name: 'Earlier messages' }).click();
   await page.getByText('Earlier context.', { exact: true }).waitFor();
   // Attachments are drafts scoped to a session, then become native user-message content.
-  const imageComposer = page.getByLabel('Message Codex');
+  const imageComposer = page.getByLabel('Message', { exact: true });
   const imageInput = page.getByLabel('Image files', { exact: true });
   const previews = page.getByLabel('Image attachments', { exact: true });
   await imageInput.setInputFiles(imageFile);
@@ -609,7 +609,7 @@ try {
   await page.waitForResponse(response => response.url().includes('/sessions/gate') && !response.url().includes('cursor'));
   assert.equal(await page.getByLabel('Model', { exact: true }).inputValue(), 'fixture-other', 'Polling must retain an unsent model selection');
   assert.equal(await reasoning.inputValue(), 'medium', 'Polling must retain an unsent effort selection');
-  const composer = page.getByLabel('Message Codex');
+  const composer = page.getByLabel('Message', { exact: true });
   await composer.fill('!');
   assert.equal(await page.getByRole('button', { name: 'Run shell command', exact: true }).isDisabled(), true);
   const beforeShell = writes.length;
@@ -661,7 +661,7 @@ try {
   await composer.press('Shift+Enter');
   await composer.press('End');
   assert.equal(await composer.inputValue(), 'Line one\n');
-  await page.getByLabel('Message Codex').fill('Continue from the browser.');
+  await page.getByLabel('Message', { exact: true }).fill('Continue from the browser.');
   await composer.press('Enter');
   await page.getByRole('button', { name: 'Stop current turn' }).waitFor();
   assert.equal(writes.at(-1).turnId, null);
@@ -677,7 +677,7 @@ try {
   await page.waitForFunction(() => !document.querySelector('textarea').disabled);
   assert.equal(writes.length, beforeRunningShell + 1);
   assert.equal(writes.at(-1).type, 'shell', 'Even during an active turn, shell commands bypass steering');
-  await page.getByLabel('Message Codex').fill('Use the existing theme.');
+  await page.getByLabel('Message', { exact: true }).fill('Use the existing theme.');
   await page.getByRole('button', { name: 'Send update', exact: true }).click();
   await page.getByText('Use the existing theme.', { exact: true }).waitFor();
   assert.equal(writes.at(-1).turnId, 'turn-two');
@@ -687,7 +687,7 @@ try {
   await page.getByRole('button', { name: 'Send message', exact: true }).waitFor();
   assert.equal(writes.at(-1).type, 'interrupt');
   // The monitor and all conversations share snapshots; switching preserves local work.
-  await page.getByLabel('Message Codex').fill('Unsaved original draft');
+  await page.getByLabel('Message', { exact: true }).fill('Unsaved original draft');
   await page.getByLabel('Model', { exact: true }).selectOption('fixture-current');
   await reasoning.selectOption('high');
   const viewport = page.getByRole('region', { name: 'Conversation', exact: true });
@@ -699,10 +699,10 @@ try {
   await bounded(); await shot('attention-notice-mobile');
   await page.getByRole('button', { name: 'View session', exact: true }).click();
   await page.getByRole('heading', { name: 'website', exact: true }).waitFor();
-  await page.getByLabel('Message Codex').fill('Separate website draft');
+  await page.getByLabel('Message', { exact: true }).fill('Separate website draft');
   await page.getByRole('button', { name: /^Return to 修复登录/ }).click();
   await page.getByRole('heading', { name: '修复登录 · Gate', exact: true }).waitFor();
-  assert.equal(await page.getByLabel('Message Codex').inputValue(), 'Unsaved original draft');
+  assert.equal(await page.getByLabel('Message', { exact: true }).inputValue(), 'Unsaved original draft');
   await page.waitForFunction(() => !document.querySelector('select[aria-label="Model"]').disabled);
   assert.equal(await page.getByLabel('Model', { exact: true }).inputValue(), 'fixture-current');
   assert.equal(await reasoning.inputValue(), 'high');
@@ -714,7 +714,7 @@ try {
   for (const width of [1365, 390, 320]) { await page.setViewportSize({ width, height: 844 }); await bounded(); }
   await shot('attention-list-mobile');
   await page.getByRole('button', { name: /website Development · Waiting for approval/ }).click();
-  assert.equal(await page.getByLabel('Message Codex').inputValue(), 'Separate website draft');
+  assert.equal(await page.getByLabel('Message', { exact: true }).inputValue(), 'Separate website draft');
   await page.getByRole('button', { name: /^Next needs you/ }).click();
   await page.getByRole('heading', { name: 'api', exact: true }).waitFor();
   await page.getByRole('button', { name: /^Return to 修复登录/ }).click();
@@ -735,7 +735,7 @@ try {
   await page.waitForResponse(response => response.url().endsWith('/api/monitor'));
   assert.equal(await page.getByRole('button', { name: 'View session', exact: true }).count(), 0, 'Dismissed pending work must not toast again');
   sessions[1].state = 'running'; delete sessions[1].attentionReason;
-  await page.getByLabel('Message Codex').fill('');
+  await page.getByLabel('Message', { exact: true }).fill('');
   await reasoning.selectOption('');
   await page.getByLabel('Model', { exact: true }).selectOption('');
   assert.equal(await reasoning.getByRole('option', { selected: true }).textContent(), 'Current: medium');
@@ -744,7 +744,7 @@ try {
   await imageInput.setInputFiles(imageFile);
   await previews.getByRole('img').waitFor();
   await page.waitForFunction(() => !document.querySelector('textarea').disabled);
-  await page.getByLabel('Message Codex').fill('Pending switch check');
+  await page.getByLabel('Message', { exact: true }).fill('Pending switch check');
   await page.getByRole('button', { name: 'Send message', exact: true }).click();
   await attentionButton.click();
   await page.getByRole('button', { name: /api Development · Waiting for you/ }).click();
@@ -754,7 +754,7 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Send message', exact: true }).isDisabled(), true, 'A pending send stays pending across switches');
   holdInput = false; releaseInput();
   await page.getByRole('button', { name: 'Stop current turn', exact: true }).waitFor();
-  assert.equal(await page.getByLabel('Message Codex').inputValue(), '', 'Confirmed send clears the original draft');
+  assert.equal(await page.getByLabel('Message', { exact: true }).inputValue(), '', 'Confirmed send clears the original draft');
   assert.equal(writes.slice(writesBeforeSwitch).filter(w => w.type === 'input').length, 1, 'Switching must not replay pending sends');
   assert.deepEqual(writes.at(-1).images, [imageUrl]);
   assert.equal(await previews.count(), 0, 'Confirmed send clears attachments even after switching away and back');
@@ -763,7 +763,7 @@ try {
   modelsUnavailable = true;
   await page.reload();
   await page.getByText('Catalog unavailable', { exact: false }).waitFor();
-  assert.equal(await page.getByLabel('Message Codex').isEnabled(), true, 'Catalog failure must not disable chat');
+  assert.equal(await page.getByLabel('Message', { exact: true }).isEnabled(), true, 'Catalog failure must not disable chat');
   modelsUnavailable = false;
   await page.getByRole('button', { name: 'Retry models', exact: true }).click();
   await page.getByLabel('Model', { exact: true }).selectOption('fixture-current');
@@ -788,12 +788,42 @@ try {
   await page.getByRole('button', { name: 'All sessions' }).click();
   await page.getByRole('button', { name: 'New session on Development' }).click();
   assert.equal(await page.getByLabel('Working directory').inputValue(), server.defaultWorkingDir);
-  await page.getByLabel('What should Codex do?').fill('Add a focused regression test.');
+  await page.getByLabel('First message').fill('Add a focused regression test.');
   await page.getByRole('button', { name: 'Start session', exact: true }).click();
   await page.getByText('Add a focused regression test.', { exact: true }).waitFor();
   assert.deepEqual(writes.at(-1), { type: 'create', cwd: server.defaultWorkingDir, prompt: 'Add a focused regression test.' });
   assert.equal(new URL(page.url()).hash, `#session/${server.id}/created`);
   await bounded();
+  detail = { ...detail, toolName: 'Antigravity', historyVersion: 'agy-first',
+    capabilities: { rename: false, steer: false, images: true, models: true, effort: true, interrupt: true } };
+  await page.reload();
+  await page.getByRole('button', { name: 'Stop current turn', exact: true }).waitFor();
+  await page.getByLabel('Message', { exact: true }).fill('Keep this draft while agy runs');
+  assert.equal(await page.getByRole('button', { name: 'Send update', exact: true }).isDisabled(), true);
+  await page.getByRole('button', { name: 'Session details', exact: true }).click();
+  assert.equal(await page.getByRole('button', { name: 'Rename session', exact: true }).count(), 0);
+  await page.keyboard.press('Escape');
+  detail.requests = [{ id: 'acp-choice', threadId: 'created', kind: 'approval', title: 'Allow file edit?', detail: 'fixture.txt',
+    choices: ['allow-once', 'reject-once'], choiceLabels: { 'allow-once': 'Allow this edit', 'reject-once': 'Reject this edit' }, questions: [], answering: false }]; emit();
+  await page.getByRole('button', { name: 'Reject this edit', exact: true }).click();
+  assert.equal(writes.at(-1).decision, 'reject-once');
+  await page.getByRole('button', { name: 'Stop current turn', exact: true }).click();
+  await page.getByRole('button', { name: 'Send message', exact: true }).waitFor();
+  detail = { ...detail, historyVersion: 'agy-reconnected', items: [{ id: 'replayed', kind: 'assistant', text: 'Restored native ACP history' }] }; emit();
+  await page.getByText('Restored native ACP history', { exact: true }).waitFor();
+  assert.equal(await page.getByText('Add a focused regression test.', { exact: true }).count(), 0, 'A fresh ACP replay replaces unstable cached message IDs');
+  assert.equal(await page.getByLabel('Message', { exact: true }).inputValue(), 'Keep this draft while agy runs');
+  await page.getByRole('button', { name: 'All sessions' }).click();
+  await page.getByRole('button', { name: 'Add server', exact: true }).click();
+  await page.getByLabel('Tool', { exact: true }).selectOption('agy');
+  assert.equal(await page.getByLabel('Tool executable', { exact: true }).inputValue(), 'agy');
+  await page.getByLabel('Name', { exact: true }).fill('Another tool');
+  await page.getByLabel('Host', { exact: true }).fill('other.local');
+  await page.getByLabel('Username', { exact: true }).fill('alex');
+  await page.getByLabel("Key path on Gate's machine", { exact: true }).fill('~/.ssh/id_ed25519');
+  await page.getByRole('button', { name: 'Save server', exact: true }).click();
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
+  assert.ok(db.listServers().some(server => server.tool === 'agy' && server.executablePath === 'agy'));
   assert.deepEqual(errors, []);
   console.log('Browser smoke passed: persistent filters, archive/restore, project grouping, collapsed history, search, monitor, history, create, send, steer, interrupt, approvals, questions, reconnect, 320/390/1365px.');
 } catch (error) {

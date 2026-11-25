@@ -1,5 +1,6 @@
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
+import { AgentService } from '../agents.js';
 import { CodexService, itemFromCodex, sessionFromThread } from '../codex.js';
 import type { CodexRpc } from '../codex-connection.js';
 import type { Server } from '../types.js';
@@ -69,7 +70,6 @@ it('sends images through native start and steer, including an image-only message
   expect(peer.request).toHaveBeenLastCalledWith('turn/steer', { threadId: 'native', expectedTurnId: 'turn', input: [{ type: 'image', url: image }] });
   peer.request.mockClear();
   await expect(service.input(server.id, 'native', '')).rejects.toThrow('message or attach');
-  await expect(service.input(server.id, 'native', '!pwd', undefined, undefined, undefined, [image])).rejects.toThrow('Remove image');
   await expect(service.input(server.id, 'native', 'Test', undefined, undefined, undefined, ['file:///tmp/x.png'])).rejects.toThrow('Use PNG');
   expect(peer.request).not.toHaveBeenCalled(); expect(peer.shell).not.toHaveBeenCalled();
 });
@@ -204,8 +204,9 @@ it('executes shell commands using native cwd without starting or steering an LLM
 });
 
 it('intercepts bang input from older pages before any model turn and publishes shell output', async () => {
-  const events: any[] = []; service.on('event', (event) => events.push(structuredClone(event)));
-  const result = await service.input(server.id, 'native', '  !pwd', 'turn');
+  const gateway = new AgentService([{ tool: { id: 'codex', name: 'Codex', executable: 'codex', description: '' }, backend: service }]); gateway.sync([server]);
+  const events: any[] = []; gateway.on('event', (event) => events.push(structuredClone(event)));
+  const result = await gateway.input(server.id, 'native', '  !pwd', 'turn');
   expect(result).toMatchObject({ shell: { stdout: 'done', exitCode: 0 } });
   expect(peer.shell).toHaveBeenCalledWith('/repo', 'pwd');
   expect(peer.request.mock.calls).toEqual([['thread/read', { threadId: 'native' }]]);
@@ -214,19 +215,20 @@ it('intercepts bang input from older pages before any model turn and publishes s
     { serverId: 'server', threadId: 'native', type: 'item', item: { kind: 'tool', text: 'done', status: 'Exit 0' } },
   ]);
   expect(events[0].item.id).toBe(events[1].item.id);
-  await service.input(server.id, 'native', '!pwd', 'turn', 'old-model-selection', 'high');
+  await gateway.input(server.id, 'native', '!pwd', 'turn', 'old-model-selection', 'high');
   expect(peer.request.mock.calls.every(([method]) => method === 'thread/read')).toBe(true);
   peer.request.mockClear(); peer.shell.mockClear();
   for (const text of ['!', '!  ', '!' + 'x'.repeat(32001), '!bad\0command']) {
-    await expect(service.input(server.id, 'native', text)).rejects.toThrow('Invalid shell command');
+    await expect(gateway.input(server.id, 'native', text)).rejects.toThrow('Invalid shell command');
   }
   expect(peer.request).not.toHaveBeenCalled(); expect(peer.shell).not.toHaveBeenCalled();
 });
 
 it('never falls back to model input if a bang command fails', async () => {
+  const gateway = new AgentService([{ tool: { id: 'codex', name: 'Codex', executable: 'codex', description: '' }, backend: service }]); gateway.sync([server]);
   peer.shell.mockRejectedValueOnce(new Error('SSH unavailable'));
-  const events: any[] = []; service.on('event', (event) => events.push(event));
-  await expect(service.input(server.id, 'native', '!pwd')).rejects.toThrow('SSH unavailable');
+  const events: any[] = []; gateway.on('event', (event) => events.push(event));
+  await expect(gateway.input(server.id, 'native', '!pwd')).rejects.toThrow('SSH unavailable');
   expect(peer.request.mock.calls).toEqual([['thread/read', { threadId: 'native' }]]);
   expect(events.at(-1)).toMatchObject({ type: 'item', item: { status: 'Unconfirmed', text: expect.stringContaining('SSH unavailable') } });
   expect(peer.shell).toHaveBeenCalledOnce();

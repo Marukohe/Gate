@@ -2,17 +2,25 @@
 
 [English](README.md) | [中文](README_CN.md)
 
-Gate is a simple panel for Codex sessions across SSH servers.
-See what is running, open a conversation, and continue the same session from your browser or terminal.
+Gate is a simple panel for coding-agent sessions across SSH servers, supporting **Codex** and **Google Antigravity CLI (agy)**.
+See what needs attention, open conversations, and continue work from your browser.
 
 ![Session panel](assets/session-monitor.png)
 
 ## How it works
 
-Gate connects through SSH to each server's **existing Codex shared backend**. Codex owns the sessions,
-conversation history, tools, and execution. Gate provides the panel, messages, approvals, and interruption controls.
-Closing Gate does not stop Codex. There is one connection model: no Gate runtime, task orchestration, hooks,
-transcript scanning, or per-message CLI processes.
+Each connection chooses a tool and an SSH account. The tool owns its sessions, history and execution;
+Gate provides the panel, messages, approvals and interruption controls. There is no Gate remote runtime,
+task orchestration, hook observer, transcript scanning or per-message CLI process.
+
+| Tool | Connection | Session behavior |
+| --- | --- | --- |
+| Codex | Native shared app-server, with SSH Unix socket forwarding | Shares live terminal sessions. Closing Gate leaves Codex running. |
+| Antigravity (agy) | One persistent `agy acp` process over SSH | Lists and loads native conversations. Live state and approvals cover work started through this connection. Disconnecting may interrupt that work; other terminal processes are untouched. |
+
+Antigravity's ACP interface does not report other terminal clients' live activity or provide session rename/steering.
+Saved sessions are historical entries, not proof that a terminal is idle. Avoid concurrent input to the same conversation
+from different clients. Gate hides unsupported controls; a new agy message waits until the current turn ends or is stopped.
 
 Gate routes connection actions through a small backend interface. Native protocol handling belongs to the tool adapter;
 SSH access, repository grouping and the browser panel remain independent of it.
@@ -20,8 +28,10 @@ SSH access, repository grouping and the browser panel remain independent of it.
 ## Get started
 
 1. Install Node.js 20+ on the machine running Gate.
-2. Install a Codex CLI with `codex app-server daemon` support on each SSH server (tested with 0.166.0).
-   Sign in to Codex there. Older CLI versions must be updated; Gate does not use a fallback execution mode.
+2. Install and sign in to your chosen tool on the SSH server:
+   - Codex with `codex app-server daemon` support (tested with 0.171.0).
+   - [Antigravity CLI with ACP](https://antigravity.google/docs/ide/extensions/acp/) (tested with agy 1.5.16).
+     Run `agy acp --login` on that server if you have not signed in.
 3. Run:
 
    ```bash
@@ -29,10 +39,11 @@ SSH access, repository grouping and the browser panel remain independent of it.
    gate
    ```
 
-4. Open `http://localhost:3030`, choose **Add server**, and enter your SSH connection details.
-   If `codex` is not on the SSH login PATH, set its absolute executable path.
+4. Open `http://localhost:3030`, choose **Add server**, select **Tool**, and enter your SSH connection details.
+   Set **Tool executable** to an absolute path if it is not on the SSH login PATH.
+   Add separate connections to use Codex and agy on the same machine; existing Codex settings migrate automatically.
 
-Gate connects to the native daemon, starting it if necessary without restarting an existing backend.
+For Codex, Gate connects to the native daemon, starting it if necessary without restarting an existing backend.
 The SSH server must allow Unix socket forwarding. No public Codex port is required.
 Use the same remote OS user and Codex configuration as your terminal.
 
@@ -58,8 +69,8 @@ Use the same remote OS user and Codex configuration as your terminal.
   Use **Add another directory** for a custom parent path.
   Saved rules include existing and future descendants and match session working paths.
 - **Archive:** use the archive icon on a session to hide it in Gate. Restore it under **Session filters → Archived sessions**.
-  Filtering and archiving affect this Gate only; running Codex sessions continue.
-- **Continue:** open a session to read history and send messages. During a running turn, messages steer that turn.
+  Filtering and archiving affect this Gate only; running sessions continue.
+- **Continue:** open a session to read history and send messages. Codex also accepts updates during a running turn.
   Scroll up to load earlier messages automatically without losing your reading position. **Earlier messages** also
   works for manual loading. If loading fails, click it to retry; scrolling does not keep retrying the failed request.
   Scrolling up pauses automatic following; scroll back down near the bottom to follow new output again.
@@ -69,7 +80,8 @@ Use the same remote OS user and Codex configuration as your terminal.
   Pasting adds a preview and focuses the input so you can type a description; it does not send the message.
   Review thumbnails and remove attachments before sending; text is optional. Supports PNG, JPEG, WebP and GIF,
   up to 4 images, 5 MB each and 10 MB total per message. Unsent attachments survive session switching in this tab;
-  page reload clears drafts. Sent images are part of native Codex history and can be clicked to enlarge.
+  page reload clears drafts. Click a sent image to enlarge it. Codex restores images from native history;
+  agy 1.5.16 accepts images but omits them when replaying saved history, so they disappear after the tool connection resets.
   Remove attachments before using a `!` shell command.
 - **Files and images:** local Markdown links open files from the session's server in a new tab, including line references
   such as `main.ts:42` or `main.ts#L42`. Relative paths use the session's working directory; local images display inline.
@@ -79,22 +91,22 @@ Use the same remote OS user and Codex configuration as your terminal.
   clear on page reload and are never added to model context. Each command uses a fresh, non-interactive shell, with a
   60-second wait limit and up to 128,000 output characters. Directory/environment changes do not carry to later commands.
 - **Model and reasoning:** select a model and its supported reasoning effort above the message input before a new turn.
-  Choices and default efforts come from that server's Codex catalog. Changes take effect when the message is sent
+  Choices and default efforts come from that tool's native catalog. Changes take effect when the message is sent
   and become the session defaults; running turns keep their current settings.
-- **Rename:** click the conversation title, then **Rename**. Names are saved in Codex and shared with the terminal.
-- **Start:** click **+ Session**, enter a working directory and first instruction. This creates a native Codex session.
-- **Respond:** answer questions or allow/decline requested operations in the conversation. Requests unsupported by
-  Gate remain visible and can be handled in the Codex terminal.
-- **Interrupt:** stop the current turn without shutting down the shared backend.
+- **Rename (Codex):** click the conversation title, then **Rename**. Names are saved in Codex and shared with the terminal.
+- **Start:** click **+ Session**, enter a working directory and first instruction. This creates a native session in the chosen tool.
+- **Respond:** allow/decline the tool's requested operations in the conversation. Codex also supports structured questions;
+  unsupported Codex requests remain visible for handling in its terminal.
+- **Interrupt:** stop the current turn without closing the tool connection.
 
-Gate only controls sessions through the connected shared backend. It cannot attach to a separate
+For Codex, Gate controls sessions through the connected shared backend. It cannot attach to a separate
 `codex --no-daemon` process. Missing connections show an error; uncertain writes are never resent automatically.
 See [session behavior](docs/session-monitor.md) for status and connection details.
 
 Gate is intended for trusted internal networks and has no authentication.
 SSH settings, directory filters, and Gate archives are stored in `~/.gate/gate.db`; passwords are not returned to the browser.
 Display preferences survive Gate restarts and apply to every browser using this Gate.
-Existing databases retain their older Gate data as inactive archives. Active history lives in Codex.
+Existing databases retain their older Gate data as inactive archives. Active history lives in the native tools.
 
 ```bash
 gate --port 8080

@@ -40,6 +40,8 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
   const setEffort = (effort: string) => update(key, { effort });
   const setBusy = (busy: boolean) => update(key, { busy });
   const [detail, setDetail] = useState<SessionDetail | null>(() => saved.detail ? { ...saved.detail, requests: [] } : null);
+  const capabilities = detail?.capabilities;
+  const runningInputBlocked = !!detail?.turnId && capabilities?.steer === false;
   const [error, setError] = useState(initialError);
   const [offline, setOffline] = useState(!!saved.detail);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -84,12 +86,12 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
   useEffect(() => {
     const controller = new AbortController();
     setLoadingModels(true); setModelError('');
-    void api<{ models: ModelOption[] }>(`/servers/${encodeURIComponent(serverId)}/models`, { signal: controller.signal })
+    void api<{ models: ModelOption[] }>(`/servers/${encodeURIComponent(serverId)}/models?session=${encodeURIComponent(threadId)}`, { signal: controller.signal })
       .then((result) => { if (!controller.signal.aborted) setModels(result.models); })
       .catch((e: Error) => { if (!controller.signal.aborted) setModelError(e.message); })
       .finally(() => { if (!controller.signal.aborted) setLoadingModels(false); });
     return () => controller.abort();
-  }, [serverId, modelRevision]);
+  }, [serverId, threadId, modelRevision]);
   const refresh = useCallback(async () => {
     const current = ++revision.current;
     const startingItems = new Map(latestDetail.current?.items.map((item) => [item.id, item]));
@@ -97,14 +99,15 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
       const data = await api<SessionDetail>(base);
       if (!alive.current || current !== revision.current) return;
       setDetail((previous) => {
-        const currentItems = new Map(previous?.items.map((item) => [item.id, item]));
+        const sameHistory = previous?.historyVersion === data.historyVersion;
+        const currentItems = new Map(sameHistory ? previous?.items.map((item) => [item.id, item]) : []);
         // HTTP can arrive after newer live output. Reconcile only items unchanged since this read began.
         const items = data.items.map((item) => {
           const latest = currentItems.get(item.id);
           return latest && latest !== startingItems.get(item.id) ? latest : item;
         });
-        return { ...data, items: mergeItems(previous?.items ?? [], items),
-          nextCursor: previous ? previous.nextCursor : data.nextCursor };
+        return { ...data, items: mergeItems(sameHistory ? previous?.items ?? [] : [], items),
+          nextCursor: previous && sameHistory ? previous.nextCursor : data.nextCursor };
       });
       setOffline(false);
     } catch (e) { if (alive.current && current === revision.current) { setError((e as Error).message); setOffline(true); } }
@@ -140,7 +143,7 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
     else return;
     lastScrollTop.current = node.scrollTop;
   }, [detail, shellRuns]);
-  const canAttach = !!detail?.session.canInput && !offline;
+  const canAttach = !!detail?.session.canInput && !offline && capabilities?.images !== false;
   const attach = useCallback(async (files: File[]) => {
     const draft = useSessionViewStore.getState().views[key] ?? emptyView;
     if (!files.length || draft.busy || !canAttach) return;
@@ -178,7 +181,7 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if ((!text.trim() && !images.length) || (isShell && (!command || images.length)) ||
-      useSessionViewStore.getState().views[key]?.busy || offline || !detail?.session.canInput) return;
+      (!isShell && runningInputBlocked) || useSessionViewStore.getState().views[key]?.busy || offline || !detail?.session.canInput) return;
     setBusy(true); setError('');
     if (isShell) {
       const run = { id: `shell-${Date.now()}-${Math.random().toString(36).slice(2)}`, command, afterItemId: detail?.items.at(-1)?.id };
@@ -224,6 +227,7 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
     try {
       const page = await api<SessionDetail>(`${base}?cursor=${encodeURIComponent(detail.nextCursor)}`);
       if (!alive.current) return;
+      if (page.historyVersion !== latestDetail.current?.historyVersion) { await refresh(); return; }
       if (node) {
         const edge = node.getBoundingClientRect().top;
         const anchor = [...node.querySelectorAll<HTMLElement>('[data-message-id]')].find((item) => item.getBoundingClientRect().bottom > edge);
@@ -248,9 +252,11 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
         <dl className="space-y-2 text-xs"><div><dt className="text-muted-foreground">Server</dt><dd className="mt-1 break-words">{serverName}</dd></div>
           <div><dt className="text-muted-foreground">Working directory</dt><dd className="mt-1 break-all">{detail?.session.cwd || 'Loading…'}</dd></div>
           <div><dt className="text-muted-foreground">Status</dt><dd className="mt-1">{offline ? 'Reconnecting…' : detail ? labels[detail.session.state] : 'Loading…'}</dd></div></dl>
+        {detail?.toolName && <p className="text-xs text-muted-foreground">{detail.toolName}</p>}
+        {detail?.statusNote && <p className="text-xs text-muted-foreground">{detail.statusNote}</p>}
         <div className="flex flex-wrap gap-2 border-t pt-3">
-          <Button variant="outline" size="sm" aria-label="Rename session" disabled={!detail || offline}
-            onClick={() => { setName(detail!.session.name); setRenameError(''); setShowDetails(false); setRenaming(true); }}><Pencil />Rename</Button>
+          {capabilities?.rename !== false && <Button variant="outline" size="sm" aria-label="Rename session" disabled={!detail || offline}
+            onClick={() => { setName(detail!.session.name); setRenameError(''); setShowDetails(false); setRenaming(true); }}><Pencil />Rename</Button>}
           <Button variant="ghost" size="sm" aria-label="Toggle theme" onClick={toggleDark}>{dark ? <Sun /> : <Moon />}Theme</Button>
           <Button variant="ghost" size="sm" aria-label="All sessions" onClick={() => { setShowDetails(false); onHome(); }}>All sessions</Button>
         </div>
@@ -294,7 +300,7 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
       {isShell ? <p className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"><Terminal className="size-3.5 shrink-0" />
         <span className="truncate" title={detail?.session.cwd}>Shell · {detail?.session.cwd}</span></p>
         : <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        <span className="relative inline-flex min-w-0 max-w-full">
+        {capabilities?.models !== false && <span className="relative inline-flex min-w-0 max-w-full">
         <select aria-label="Model" value={detail?.turnId ? '' : model} onChange={(e) => { setModel(e.target.value); setEffort(''); }}
           disabled={busy || offline || !detail?.session.canInput || !!detail?.turnId || loadingModels || !!modelError || !models.length}
           title={detail?.turnId ? 'Change model after this turn finishes' : 'Model for your next message'}
@@ -303,8 +309,8 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
           {models.filter((option) => option.id !== detail?.session.model).map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
         </select>
         <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 peer-disabled:opacity-60" />
-        </span>
-        <span className="relative inline-flex min-w-0 max-w-full">
+        </span>}
+        {capabilities?.effort !== false && <span className="relative inline-flex min-w-0 max-w-full">
         <select aria-label="Reasoning effort" value={detail?.turnId ? '' : selectedEffort} onChange={(e) => setEffort(e.target.value)}
           disabled={busy || offline || !detail?.session.canInput || !!detail?.turnId || loadingModels || !!modelError || !efforts.length}
           title={detail?.turnId ? 'Change reasoning effort after this turn finishes' : 'Reasoning effort for your next message'}
@@ -314,9 +320,10 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
             {option.id === 'xhigh' ? 'Extra high' : option.id.charAt(0).toUpperCase() + option.id.slice(1)}</option>)}
         </select>
         <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 peer-disabled:opacity-60" />
-        </span>
+        </span>}
         {modelError ? <span role="status" className="min-w-0 break-words">Models unavailable. {modelError} <button type="button" className="underline" onClick={() => setModelRevision((value) => value + 1)}>Retry models</button></span>
-          : detail?.turnId ? <span>Change settings between turns</span> : model || selectedEffort ? <span>Applies to your next message</span> : null}
+          : runningInputBlocked ? <span>Wait for this turn to finish, or stop it to send another message.</span>
+            : detail?.turnId ? <span>Change settings between turns</span> : model || selectedEffort ? <span>Applies to your next message</span> : null}
       </div>}
       <form onSubmit={send} className="space-y-2"
         onDragOver={(event) => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
@@ -333,9 +340,9 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
         <div className="flex items-end gap-2">
         <input ref={fileInput} type="file" aria-label="Image files" accept={IMAGE_TYPES.join(',')} multiple hidden
           onChange={(event) => { void attach(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
-        <Button type="button" size="icon-lg" variant="ghost" aria-label="Attach images" title="Attach images (or paste / drop)"
-          disabled={busy || offline || !detail?.session.canInput || isShell} onClick={() => fileInput.current?.click()}><ImagePlus className="size-5" /></Button>
-        <Textarea ref={messageInput} aria-label="Message Codex" placeholder="Message or paste an image…" value={text}
+        {capabilities?.images !== false && <Button type="button" size="icon-lg" variant="ghost" aria-label="Attach images" title="Attach images (or paste / drop)"
+          disabled={busy || offline || !detail?.session.canInput || isShell} onClick={() => fileInput.current?.click()}><ImagePlus className="size-5" /></Button>}
+        <Textarea ref={messageInput} aria-label="Message" placeholder={capabilities?.images === false ? 'Send a message…' : 'Message or paste an image…'} value={text}
           onChange={(e) => setText(e.target.value)} rows={1} className="max-h-32 min-h-10 min-w-0 flex-1 resize-none py-[9px] leading-5"
           onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
           onBlur={() => { composing.current = false; }}
@@ -344,15 +351,15 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
             if (composing.current || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); }
           }} />
-        {!isShell && detail?.turnId && <Button type="button" size="icon-lg" variant="outline" aria-label="Stop current turn" disabled={busy || offline} onClick={() => void stop()}><Square className="size-4" /></Button>}
+        {!isShell && detail?.turnId && capabilities?.interrupt !== false && <Button type="button" size="icon-lg" variant="outline" aria-label="Stop current turn" disabled={busy || offline} onClick={() => void stop()}><Square className="size-4" /></Button>}
         <Button type="submit" size="icon-lg" aria-label={isShell ? 'Run shell command' : detail?.turnId ? 'Send update' : 'Send message'}
-          disabled={busy || offline || !detail?.session.canInput || (isShell ? !command || !!images.length : !text.trim() && !images.length)}>{isShell ? <Terminal /> : <ArrowUp />}</Button>
+          disabled={busy || offline || !detail?.session.canInput || (isShell ? !command || !!images.length : runningInputBlocked || !text.trim() && !images.length)}>{isShell ? <Terminal /> : <ArrowUp />}</Button>
         </div>
       </form>
     </div></div>
     <Dialog open={renaming} onOpenChange={(open) => { if (!savingName) setRenaming(open); }}>
       <DialogContent><DialogHeader><DialogTitle>Rename session</DialogTitle>
-        <DialogDescription>Saved in Codex and shared with your terminal.</DialogDescription></DialogHeader>
+        <DialogDescription>Saved in {detail?.toolName || 'the agent'} and shared with your terminal.</DialogDescription></DialogHeader>
         <form onSubmit={rename} className="space-y-4">
           <label className="block space-y-2 text-sm">Session name<Input value={name} onChange={(e) => setName(e.target.value)}
             maxLength={1000} required autoFocus disabled={savingName} /></label>

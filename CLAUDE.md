@@ -1,12 +1,13 @@
 # Gate
 
-Gate is a simple Server → repository groups → Codex sessions panel. Keep it simple.
-All AI conversations use Codex's native shared app-server daemon, reached through SSH Unix socket forwarding.
+Gate is a simple Server/tool connection → repository groups → native sessions panel. Keep it simple.
+Codex uses its native shared app-server daemon through SSH Unix socket forwarding. Antigravity (agy) uses a persistent
+ACP stdio connection over SSH. Add tools through the backend contract and registration, not protocol branches in the UI.
 Do not add task/project workflows, a Gate remote runtime, transcript scanners, hook observers, or per-message CLI execution.
 
 ## Architecture
 
-- React browser → HTTP actions and WebSocket events → Gate → SSH → Codex shared backend.
+- React browser → HTTP actions and WebSocket events → Gate backend adapter → SSH → native tool.
 - HTTP routes use `AgentService`; protocol implementations satisfy `AgentBackend`. Connection settings select the tool
   and executable. SSH, SFTP, repository lookup and direct shell execution live outside tool-specific transports.
 - Repository groups are derived from read-only Git metadata over the existing SSH connection, with cwd fallback.
@@ -22,16 +23,22 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
   Refresh snapshots preserve message items updated while the request was in flight.
 - Chats use one compact header. SessionView portals its title/details into AppHeader so live metadata and rename state
   stay with the conversation; return/next attention navigation shares the same row. Directory and theme controls are on demand.
-- Codex owns sessions, history, approvals, and execution. Gate stores SSH settings and per-server display preferences.
-- Opening a session subscribes to the existing native thread. Sending messages uses `turn/start` or `turn/steer`.
-- Image attachments use native `image` data URLs on the same start/steer path; text is optional. Validate formats,
-  count and decoded byte limits before any RPC. Draft images stay in per-session browser memory; Codex owns sent history.
+- Tools own sessions, history, approvals, and execution. Gate stores connection/tool settings and display preferences.
+- Codex subscribes to native threads and sends via `turn/start` or `turn/steer`. ACP lists/loads native sessions and uses
+  `session/prompt`, updates, offered permission choices, and `session/cancel`. Never infer external live status from saved
+  history. agy shows saved sessions without claiming terminal takeover; only Gate-initiated turns have known live state.
+  ACP may stop its own work when its connection closes; never close another client's process or automatically replay input.
+- UI controls follow per-session capabilities. agy does not expose rename or steering. ACP config options provide its
+  model/effort choices. A changed history version replaces cached items after replay when native message IDs are unavailable.
+  agy currently omits images from history replay; disclose this limitation without adding a second persistent message store.
+- Image attachments use native Codex `image` data URLs or ACP image content blocks; text is optional. Validate formats,
+  count and decoded byte limits before any RPC. Draft images stay in per-session browser memory; tools own sent history.
   Preserve native `image` URLs and `localImage` paths when rendering user messages. Shell commands reject attachments.
   Conversation-level paste accepts image clipboard items/files without duplicate attachments; preserve normal text paste
   and leave other editors/dialogs alone. Paste adds a draft and focuses the composer, never submits it.
 - Inputs prefixed with `!` run a non-interactive shell command over the existing SSH connection in native thread cwd.
   Classify the prefix in backend input handling too; older open pages receive results through existing item events.
-  They never start/steer a model turn. Output and exit status stay in per-session browser memory, outside Codex history.
+  They never start/steer a model turn. Output and exit status stay in per-session browser memory, outside native history.
   Commands have a 60-second wait limit and bounded output; uncertain execution is never automatically replayed.
 - Local Markdown file/image URLs use a session-scoped HTTP endpoint and SFTP over the existing SSH connection.
   Resolve relative paths against native thread cwd; file contents must never execute on Gate's origin.
@@ -39,8 +46,8 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
   before paint; manual loading/retry remains available. Initial bottom positioning must not drain history pages.
   Auto-load once per entry into the top zone; failed requests wait for explicit retry.
   Keep the history control stable during loading, with a delayed progress indicator in reserved space.
-- Session renaming uses native `thread/name/set`; names belong to Codex and are shared with terminal clients.
-- Model and reasoning pickers read native `model/list`, including supported/default efforts, and pass optional `model`/`effort`
+- Codex session renaming uses native `thread/name/set`; names belong to Codex and are shared with terminal clients.
+- Codex model and reasoning pickers read native `model/list`, including supported/default efforts, and pass optional `model`/`effort`
   to `turn/start`. `turn/steer` cannot change either setting. Current values come from native thread metadata.
 - Backend disconnect/restart must never restart a turn, resend an uncertain input, or stop Codex.
 - Gate is for trusted internal networks and has no authentication.
@@ -50,6 +57,7 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - `server/src/codex-connection.ts`: SSH, native daemon discovery/start, Unix socket forwarding, JSON-RPC correlation.
 - `server/src/agent-backend.ts` / `agents.ts`: backend contract, registration, connection routing and event isolation.
 - `server/src/ssh.ts`: shared SSH connection, quoting, shell commands and Git metadata lookup.
+- `server/src/agy.ts` / `acp-connection.ts`: Antigravity native session adapter and persistent ACP transport.
 - `server/src/codex.ts`: native session listing, history, subscriptions, messages, decisions, and interruption.
 - `server/src/codex-requests.ts`: offered approval choices and structured question answers.
 - `server/src/session-files.ts`: bounded SFTP reads, inert text previews with line anchors, images, and downloads.
@@ -84,8 +92,10 @@ Data defaults to `~/.gate/gate.db`. Preserve existing user data when removing ol
 - Read `LESSONS.md` and recent `git log` before changing behavior.
 - Commit completed steps with small, meaningful Conventional Commits.
 - Run relevant tests, clear compiler warnings, and build broad frontend/server changes before committing.
-- Validate real shared-backend behavior, including existing native threads; mocked UI alone does not prove attachment.
-- Gate archives are display preferences, not native Codex archives. Filtering/archiving must not send Codex mutations.
+- Validate real tool behavior, including existing native sessions; mocked UI alone does not prove attachment.
+- Keep one tool per saved connection; add a separate connection to use another tool on the same host. Changing provider
+  on an existing connection would mix session IDs, drafts and persistent visibility preferences.
+- Gate archives are display preferences, not native archives. Filtering/archiving must not mutate native tool sessions.
 - Never kill a shared backend to test reconnection. Close only Gate's own connection or an isolated test fixture.
 - Preserve passwords on an unchanged edit and never return them in browser API responses or logs.
 - Keep `README.md`, `README_CN.md`, and these instructions consistent with shipped behavior.

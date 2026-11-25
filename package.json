@@ -1,7 +1,7 @@
 {
   "name": "@marukohe/gate",
   "version": "1.1.0",
-  "description": "Monitor and continue shared Codex sessions across SSH servers",
+  "description": "Monitor and continue Codex and Antigravity sessions across SSH servers",
   "type": "module",
   "bin": {
     "gate": "bin/gate.js"

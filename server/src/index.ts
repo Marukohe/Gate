@@ -8,6 +8,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { createDb } from './db.js';
 import { CodexService } from './codex.js';
 import { AgentService } from './agents.js';
+import { AgyService } from './agy.js';
 import { routes } from './routes.js';
 import { INPUT_BODY_LIMIT } from './images.js';
 
@@ -16,7 +17,10 @@ app.use(express.json({ limit: INPUT_BODY_LIMIT }));
 const dataDir = process.env.GATE_DATA_DIR || path.join(os.homedir(), '.gate');
 fs.mkdirSync(dataDir, { recursive: true });
 const db = createDb(path.join(dataDir, 'gate.db'));
-const agents = new AgentService([{ tool: { id: 'codex', name: 'Codex', executable: 'codex', description: 'Native shared app-server over SSH.' }, backend: new CodexService() }]);
+const agents = new AgentService([
+  { tool: { id: 'codex', name: 'Codex', executable: 'codex', description: 'Connect to existing terminal sessions through the native shared backend.' }, backend: new CodexService() },
+  { tool: { id: 'agy', name: 'Antigravity (agy)', executable: 'agy', description: 'Sign in on this SSH server with agy acp --login. Live status covers work started through Gate.' }, backend: new AgyService() },
+]);
 app.use('/api', routes(db, agents));
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

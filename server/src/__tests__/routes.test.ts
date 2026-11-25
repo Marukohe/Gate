@@ -9,7 +9,10 @@ import { INPUT_BODY_LIMIT } from '../images.js';
 let db: ReturnType<typeof createDb>;
 let http: HttpServer;
 let origin: string;
-const codex = { tools: () => [{ id: 'codex', name: 'Codex', executable: 'codex', description: '' }], sync: vi.fn(), monitor: vi.fn(), create: vi.fn(), input: vi.fn(), rename: vi.fn(), models: vi.fn(), file: vi.fn(), shell: vi.fn() };
+const codex = { tools: () => [
+  { id: 'codex', name: 'Codex', executable: 'codex', description: '' },
+  { id: 'agy', name: 'Antigravity', executable: 'agy', description: '' },
+], sync: vi.fn(), monitor: vi.fn(), create: vi.fn(), input: vi.fn(), rename: vi.fn(), models: vi.fn(), file: vi.fn(), shell: vi.fn() };
 beforeEach(async () => {
   vi.resetAllMocks(); db = createDb(':memory:');
   const app = express(); app.use(express.json({ limit: INPUT_BODY_LIMIT })); app.use(routes(db, codex as unknown as AgentService));
@@ -20,6 +23,20 @@ beforeEach(async () => {
 afterEach(async () => { await new Promise<void>((resolve) => http.close(() => resolve())); db.close(); });
 const send = (path: string, body: object, method = 'POST') => fetch(origin + path,
   { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+it('exposes registered tools, persists separate tool connections, and preserves legacy executable settings', async () => {
+  expect((await (await fetch(origin + '/tools')).json()).tools.map((tool: any) => tool.id)).toEqual(['codex', 'agy']);
+  const fields = { name: 'Same server', host: 'localhost', username: 'user', authType: 'password', password: 'private', port: 22 };
+  const legacy = await (await send('/servers', { ...fields, codexPath: '/old/codex' })).json();
+  expect(legacy).toMatchObject({ tool: 'codex', executablePath: '/old/codex', hasPassword: true });
+  const agy = await (await send('/servers', { ...fields, tool: 'agy', executablePath: '/tools/agy' })).json();
+  expect(agy).toMatchObject({ tool: 'agy', executablePath: '/tools/agy', hasPassword: true });
+  expect(agy.password).toBeUndefined(); expect(agy.id).not.toBe(legacy.id);
+  expect((await send(`/servers/${agy.id}`, { ...fields, password: '', tool: 'agy', executablePath: '/new/agy' }, 'PUT')).status).toBe(200);
+  expect(db.getServer(agy.id)).toMatchObject({ password: 'private', executablePath: '/new/agy' });
+  expect((await send(`/servers/${legacy.id}`, { ...fields, tool: 'agy' }, 'PUT')).status).toBe(400);
+  expect((await send('/servers', { ...fields, tool: 'unknown' })).status).toBe(400);
+});
 
 it('validates session names before sending a native rename and surfaces failures', async () => {
   const path = '/servers/server/sessions/native/rename';

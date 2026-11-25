@@ -25,9 +25,9 @@ export function ApprovalRequest({ request, onAnswer }: { request: Request; onAns
       <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all text-xs text-muted-foreground">{request.detail}</pre>
       <div className="mt-3 flex flex-wrap gap-2">{request.choices.map((choice) => <Button key={choice} size="sm"
         variant={choice === 'accept' ? 'default' : 'outline'} disabled={busy || request.answering} onClick={() => void answer({ decision: choice })}>
-        {choice === 'accept' ? 'Allow once' : choice === 'decline' ? 'Decline' : 'Cancel'}</Button>)}</div>
+        {request.choiceLabels?.[choice] ?? (choice === 'accept' ? 'Allow once' : choice === 'decline' ? 'Decline' : 'Cancel')}</Button>)}</div>
     </>}
-    {request.answering && <p className="mt-2 text-xs text-muted-foreground">Waiting for Codex to confirm…</p>}
+    {request.answering && <p className="mt-2 text-xs text-muted-foreground">Waiting for the agent to confirm…</p>}
     {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
   </div>;
 }
