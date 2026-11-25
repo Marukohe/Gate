@@ -2,6 +2,14 @@ import { IMAGE_LIMITS, IMAGE_TYPES } from '../../../server/src/images';
 
 export interface ImageAttachment { id: string; name: string; url: string; size: number }
 
+export function clipboardImages(data: DataTransfer): File[] {
+  // Some browsers expose pasted images as items without populating the files list.
+  const images = Array.from(data.items ?? []).filter((item) => item.kind === 'file')
+    .map((item) => item.getAsFile()).filter((file): file is File => !!file?.type.startsWith('image/'));
+  // These are two representations of the same clipboard, not two sets of attachments.
+  return images.length ? images : Array.from(data.files ?? []).filter((file) => file.type.startsWith('image/'));
+}
+
 export async function readImages(files: File[], current: ImageAttachment[]): Promise<ImageAttachment[]> {
   if (current.length + files.length > IMAGE_LIMITS.count) throw new Error('Attach up to 4 images.');
   let total = current.reduce((sum, image) => sum + image.size, 0);

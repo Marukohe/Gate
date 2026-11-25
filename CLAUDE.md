@@ -25,6 +25,8 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - Image attachments use native `image` data URLs on the same start/steer path; text is optional. Validate formats,
   count and decoded byte limits before any RPC. Draft images stay in per-session browser memory; Codex owns sent history.
   Preserve native `image` URLs and `localImage` paths when rendering user messages. Shell commands reject attachments.
+  Conversation-level paste accepts image clipboard items/files without duplicate attachments; preserve normal text paste
+  and leave other editors/dialogs alone. Paste adds a draft and focuses the composer, never submits it.
 - Inputs prefixed with `!` run a non-interactive shell command over the existing SSH connection in native thread cwd.
   Classify the prefix in backend input handling too; older open pages receive results through existing item events.
   They never start/steer a model turn. Output and exit status stay in per-session browser memory, outside Codex history.

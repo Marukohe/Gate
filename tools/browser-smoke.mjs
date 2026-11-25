@@ -527,6 +527,47 @@ try {
   await sentImage.evaluate(image => { window.attachmentNode = image; });
   await page.waitForResponse(response => response.url().endsWith('/sessions/gate'));
   assert.equal(await sentImage.evaluate(image => image === window.attachmentNode), true, 'Polling must not remount images');
+  // Use the system clipboard and a real keyboard paste, not only constructed ClipboardEvents.
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.evaluate(async () => {
+    const canvas = document.createElement('canvas'); canvas.width = 32; canvas.height = 32;
+    const ctx = canvas.getContext('2d'); ctx.fillStyle = '#2563eb'; ctx.fillRect(0, 0, 32, 32);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    window.imagePastes = [];
+    document.addEventListener('paste', event => window.imagePastes.push({ trusted: event.isTrusted, target: event.target.tagName }));
+    document.activeElement?.blur();
+  });
+  const beforePaste = writes.length;
+  await page.keyboard.press('Control+V');
+  await previews.getByRole('img').waitFor();
+  await page.waitForFunction(() => document.activeElement === document.querySelector('textarea') && !document.querySelector('textarea').disabled);
+  assert.equal(await previews.getByRole('img').count(), 1, 'Clipboard items and files must not duplicate attachments');
+  assert.deepEqual(await page.evaluate(() => window.imagePastes[0]), { trusted: true, target: 'BODY' });
+  assert.equal(writes.length, beforePaste, 'Pasting only adds a draft, never sends a message');
+  await previews.getByRole('button').click();
+  await page.getByRole('button', { name: 'Session details', exact: true }).click();
+  await page.getByRole('button', { name: 'Rename session', exact: true }).click();
+  await page.getByLabel('Session name', { exact: true }).focus();
+  await page.keyboard.press('Control+V');
+  assert.equal(await previews.count(), 0, 'Paste in another dialog must not attach to the conversation');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.evaluate(() => navigator.clipboard.writeText('Pasted notes'));
+  await imageComposer.fill('Before '); await imageComposer.press('End'); await page.keyboard.press('Control+V');
+  assert.equal(await imageComposer.inputValue(), 'Before Pasted notes', 'Normal text paste keeps the browser default');
+  await imageComposer.fill('');
+  for (const representation of ['items', 'files']) {
+    await imageComposer.evaluate((input, { representation, bytes }) => {
+      const transfer = new DataTransfer(); transfer.items.add(new File([Uint8Array.from(bytes)], 'clipboard.png', { type: 'image/png' }));
+      const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'clipboardData', { value: {
+        items: representation === 'items' ? transfer.items : [], files: representation === 'files' ? transfer.files : [],
+      } });
+      input.dispatchEvent(event);
+    }, { representation, bytes: [...imageFile.buffer] });
+    await previews.getByRole('img', { name: 'clipboard.png' }).waitFor();
+    await previews.getByRole('button').click();
+  }
   // Clipboard and drop work without navigating the page or inserting file paths as text.
   for (const type of ['paste', 'drop']) {
     await imageComposer.evaluate((input, { type, bytes }) => {

@@ -61,7 +61,9 @@ Use the same remote OS user and Codex configuration as your terminal.
   works for manual loading. If loading fails, click it to retry; scrolling does not keep retrying the failed request.
   Scrolling up pauses automatic following; scroll back down near the bottom to follow new output again.
   History loads in place; background refreshes preserve newer live output received during the request.
-- **Attach images:** click the image button beside the input, paste a screenshot, or drop images onto the composer.
+- **Attach images:** click the image button beside the input or drop images onto the composer. Copy an image or screenshot
+  and press **Ctrl+V** (**⌘V** on macOS) in the conversation to attach it, even without focusing the input first.
+  Pasting adds a preview and focuses the input so you can type a description; it does not send the message.
   Review thumbnails and remove attachments before sending; text is optional. Supports PNG, JPEG, WebP and GIF,
   up to 4 images, 5 MB each and 10 MB total per message. Unsent attachments survive session switching in this tab;
   page reload clears drafts. Sent images are part of native Codex history and can be clicked to enlarge.

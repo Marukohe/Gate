@@ -30,6 +30,8 @@
 - Image attachments must survive the entire native input/history path, not just preview in the composer. Check actual
   start/steer input, image-only sends, native history after reload, and draft retention on failed sends or navigation.
   Budget JSON for base64 expansion, validate image limits on the server, and reserve thumbnail space to keep scrolling stable.
+  Exercise real keyboard paste with and without composer focus, not only synthetic clipboard events. Read image items
+  with a files fallback, never both; do not intercept text paste or other editors/dialogs.
 - A saved conversation ID does not identify a live process. Use the same Codex shared backend as the terminal;
   a fresh `exec resume` process cannot take over an in-flight turn.
 - Correlate JSON-RPC responses by ID. Server requests with IDs are approvals/questions, not ordinary responses.

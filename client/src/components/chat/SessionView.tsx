@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { api, post } from '@/lib/api';
-import { readImages } from '@/lib/image-attachments';
+import { clipboardImages, readImages } from '@/lib/image-attachments';
 import { IMAGE_TYPES } from '../../../../server/src/images';
 import { useEvents } from '@/hooks/use-events';
 import { MessageBubble } from './MessageBubble';
@@ -57,6 +57,8 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
   const [loadingModels, setLoadingModels] = useState(true);
   const viewport = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const messageInput = useRef<HTMLTextAreaElement>(null);
+  const focusAfterPaste = useRef(false);
   const lastScrollTop = useRef(0);
   const olderPending = useRef(false);
   const prepend = useRef<{ anchor?: HTMLElement; offset: number; top: number; height: number } | null>(null);
@@ -138,13 +140,41 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
     else return;
     lastScrollTop.current = node.scrollTop;
   }, [detail, shellRuns]);
-  async function attach(files: File[]) {
-    if (!files.length || useSessionViewStore.getState().views[key]?.busy || offline || !detail?.session.canInput) return;
-    setBusy(true); setError('');
-    try { update(key, { images: [...images, ...await readImages(files, images)] }); }
+  const canAttach = !!detail?.session.canInput && !offline;
+  const attach = useCallback(async (files: File[]) => {
+    const draft = useSessionViewStore.getState().views[key] ?? emptyView;
+    if (!files.length || draft.busy || !canAttach) return;
+    update(key, { busy: true }); setError('');
+    try {
+      update(key, { images: [...draft.images, ...await readImages(files, draft.images)] });
+    }
     catch (e) { if (alive.current) setError((e as Error).message); }
-    finally { setBusy(false); }
-  }
+    finally { update(key, { busy: false }); }
+  }, [key, canAttach, update]);
+  useLayoutEffect(() => {
+    if (!busy && focusAfterPaste.current) {
+      focusAfterPaste.current = false;
+      if (!document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) {
+        messageInput.current?.focus({ preventScroll: true });
+      }
+    }
+  });
+  useEffect(() => {
+    const paste = (event: ClipboardEvent) => {
+      if (event.defaultPrevented || !event.clipboardData || !canAttach || useSessionViewStore.getState().views[key]?.busy) return;
+      const target = event.target instanceof Element ? event.target : null;
+      // Leave other editors and dialogs alone; ordinary text keeps the browser's normal paste behavior.
+      if (target?.closest('[role="dialog"], [role="alertdialog"]') || document.querySelector('[role="dialog"][data-state="open"]')) return;
+      if (target?.closest('input, textarea, [contenteditable]:not([contenteditable="false"]), [role="textbox"]') && target !== messageInput.current) return;
+      const files = clipboardImages(event.clipboardData);
+      if (!files.length) return;
+      event.preventDefault();
+      focusAfterPaste.current = true;
+      void attach(files);
+    };
+    document.addEventListener('paste', paste);
+    return () => document.removeEventListener('paste', paste);
+  }, [attach, canAttach, key]);
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if ((!text.trim() && !images.length) || (isShell && (!command || images.length)) ||
@@ -299,11 +329,7 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
           onChange={(event) => { void attach(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
         <Button type="button" size="icon-lg" variant="ghost" aria-label="Attach images" title="Attach images (or paste / drop)"
           disabled={busy || offline || !detail?.session.canInput || isShell} onClick={() => fileInput.current?.click()}><ImagePlus className="size-5" /></Button>
-        <Textarea aria-label="Message Codex" placeholder="Send a message…" value={text}
-          onPaste={(event) => {
-            const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith('image/'));
-            if (files.length) { event.preventDefault(); void attach(files); }
-          }}
+        <Textarea ref={messageInput} aria-label="Message Codex" placeholder="Message or paste an image…" value={text}
           onChange={(e) => setText(e.target.value)} rows={1} className="max-h-32 min-h-10 min-w-0 flex-1 resize-none py-[9px] leading-5"
           onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
           onBlur={() => { composing.current = false; }}
