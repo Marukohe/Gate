@@ -1,5 +1,7 @@
 # Gate
 
+Gate 通过统一的后端接口路由连接操作。工具适配器负责原生协议，SSH 访问、仓库分组和界面展示独立于具体工具。
+
 [English](README.md) | [中文](README_CN.md)
 
 Gate 是监控多台 SSH 服务器上 Codex 会话的简单面板。

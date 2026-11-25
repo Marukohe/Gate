@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { projectPathsCommand } from '../codex-connection.js';
+import { projectPathsCommand } from '../ssh.js';
 import { groupProjects } from '../../../client/src/lib/project-groups.js';
 import type { Session } from '../types.js';
 

@@ -7,6 +7,8 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 ## Architecture
 
 - React browser → HTTP actions and WebSocket events → Gate → SSH → Codex shared backend.
+- HTTP routes use `AgentService`; protocol implementations satisfy `AgentBackend`. Connection settings select the tool
+  and executable. SSH, SFTP, repository lookup and direct shell execution live outside tool-specific transports.
 - Repository groups are derived from read-only Git metadata over the existing SSH connection, with cwd fallback.
   They are display groups, not persisted project workflows. Project headings reveal history and collapse sessions, including running-only groups.
   Active sessions show by default; search reveals matches without changing the chosen collapsed state.
@@ -46,6 +48,8 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 ## Key files
 
 - `server/src/codex-connection.ts`: SSH, native daemon discovery/start, Unix socket forwarding, JSON-RPC correlation.
+- `server/src/agent-backend.ts` / `agents.ts`: backend contract, registration, connection routing and event isolation.
+- `server/src/ssh.ts`: shared SSH connection, quoting, shell commands and Git metadata lookup.
 - `server/src/codex.ts`: native session listing, history, subscriptions, messages, decisions, and interruption.
 - `server/src/codex-requests.ts`: offered approval choices and structured question answers.
 - `server/src/session-files.ts`: bounded SFTP reads, inert text previews with line anchors, images, and downloads.

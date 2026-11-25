@@ -29,7 +29,7 @@ it('migrates server settings once and preserves legacy history when a connection
       INSERT INTO sessions VALUES ('history', 'existing');`);
     old.close();
     const db = createDb(file);
-    expect(db.getServer('existing')).toMatchObject({ name: 'Original', password: 'secret' });
+    expect(db.getServer('existing')).toMatchObject({ name: 'Original', password: 'secret', tool: 'codex', executablePath: 'codex' });
     db.deleteServer('existing'); db.close();
     const reopened = createDb(file);
     expect(reopened.listServers()).toEqual([]); reopened.close();

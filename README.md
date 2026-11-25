@@ -14,6 +14,9 @@ conversation history, tools, and execution. Gate provides the panel, messages, a
 Closing Gate does not stop Codex. There is one connection model: no Gate runtime, task orchestration, hooks,
 transcript scanning, or per-message CLI processes.
 
+Gate routes connection actions through a small backend interface. Native protocol handling belongs to the tool adapter;
+SSH access, repository grouping and the browser panel remain independent of it.
+
 ## Get started
 
 1. Install Node.js 20+ on the machine running Gate.

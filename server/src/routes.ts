@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { availableDirectories, excludedDirectories, visibleSessions } from './visibility.js';
 import type { Database } from './db.js';
 import { publicServer } from './db.js';
-import type { CodexService } from './codex.js';
+import type { AgentService } from './agents.js';
 import type { Server } from './types.js';
 import { sendSessionFile } from './session-files.js';
 
@@ -10,14 +10,20 @@ function text(value: unknown, name: string, max = 200_000): string {
   if (typeof value !== 'string' || !value.trim() || value.length > max || value.includes('\0')) throw new Error(`Invalid ${name}`);
   return value.trim();
 }
-export function routes(db: Database, codex: CodexService) {
+export function routes(db: Database, agents: AgentService) {
   const router = Router();
-  const sync = () => codex.sync(db.listServers());
+  const sync = () => agents.sync(db.listServers());
   sync();
+  router.get('/tools', (_req, res) => res.json({ tools: agents.tools() }));
   router.get('/health', (_req, res) => res.json({ status: 'ok' }));
   router.get('/servers', (_req, res) => res.json(db.listServers().map(publicServer)));
-  router.get('/servers/:id/models', async (req, res) => res.json({ models: await codex.models(req.params.id) }));
+  router.get('/servers/:id/models', async (req, res) => res.json({ models: await agents.models(req.params.id, typeof req.query.session === 'string' ? req.query.session : undefined) }));
   const settings = (body: any, existing?: Server) => {
+    const toolId = body.tool ?? existing?.tool ?? 'codex';
+    const tool = agents.tools().find((tool) => tool.id === toolId);
+    if (!tool) throw new Error('Unsupported tool');
+    if (existing && toolId !== (existing.tool || 'codex')) throw new Error('Add a separate connection for another tool.');
+    const executable = body.executablePath ?? body.codexPath ?? existing?.executablePath ?? tool.executable;
     const port = Number(body.port ?? 22);
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid SSH port');
     if (!['password', 'privateKey'].includes(body.authType)) throw new Error('Invalid authentication method');
@@ -25,7 +31,8 @@ export function routes(db: Database, codex: CodexService) {
       port, authType: body.authType as Server['authType'], password: body.password || existing?.password || '',
       privateKeyPath: body.privateKeyPath ? text(body.privateKeyPath, 'key path', 4096) : '',
       defaultWorkingDir: body.defaultWorkingDir ? text(body.defaultWorkingDir, 'directory', 4096) : '',
-      codexPath: body.codexPath ? text(body.codexPath, 'Codex executable', 4096) : 'codex' };
+      tool: tool.id, executablePath: text(executable, 'tool executable', 4096),
+      codexPath: tool.id === 'codex' ? text(executable, 'tool executable', 4096) : '' };
   };
   router.post('/servers', (req, res) => { const server = db.createServer(settings(req.body)); sync(); res.status(201).json(publicServer(server)); });
   router.put('/servers/:id', (req, res) => {
@@ -35,7 +42,7 @@ export function routes(db: Database, codex: CodexService) {
   });
   router.delete('/servers/:id', (req, res) => { db.deleteServer(req.params.id); sync(); res.sendStatus(204); });
   router.get('/monitor', (_req, res) => {
-    const snapshot = codex.monitor();
+    const snapshot = agents.monitor();
     res.json({ servers: snapshot.servers.map((server) => {
       const visibility = db.getVisibility(server.id);
       return { ...server, sessions: visibleSessions(server.sessions, visibility),
@@ -48,7 +55,7 @@ export function routes(db: Database, codex: CodexService) {
   });
   router.get('/servers/:id/visibility', (req, res) => {
     const settings = db.getVisibility(req.params.id);
-    const sessions = codex.monitor().servers.find((server) => server.id === req.params.id)?.sessions ?? [];
+    const sessions = agents.monitor().servers.find((server) => server.id === req.params.id)?.sessions ?? [];
     res.json({ ...settings, directories: availableDirectories(sessions, settings) });
   });
   router.put('/servers/:id/visibility', (req, res) => {
@@ -69,41 +76,41 @@ export function routes(db: Database, codex: CodexService) {
     const cwd = text(req.body.cwd, 'working directory', 4096);
     if (!cwd.startsWith('/')) throw new Error('Use an absolute working directory');
     const prompt = text(req.body.prompt, 'first message');
-    const session = await codex.create(req.params.id, cwd);
-    try { await codex.input(req.params.id, session.id, prompt); res.status(201).json({ session }); }
+    const session = await agents.create(req.params.id, cwd);
+    try { await agents.input(req.params.id, session.id, prompt); res.status(201).json({ session }); }
     catch (error) { res.status(201).json({ session, error: (error as Error).message }); }
   });
   router.get('/servers/:id/sessions/:thread', async (req, res) => {
     const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
-    res.json(await codex.detail(req.params.id, req.params.thread, cursor));
+    res.json(await agents.detail(req.params.id, req.params.thread, cursor));
   });
   router.get('/servers/:id/sessions/:thread/file', async (req, res) => {
     res.set('Cache-Control', 'no-store');
     try {
-      const file = await codex.file(req.params.id, req.params.thread, text(req.query.path, 'file path', 4096));
+      const file = await agents.file(req.params.id, req.params.thread, text(req.query.path, 'file path', 4096));
       sendSessionFile(res, file.path, file.data);
     } catch (error) { res.status(400).type('text/plain').send(`Cannot open file. ${(error as Error).message}`); }
   });
   router.post('/servers/:id/sessions/:thread/input', async (req, res) => {
     const message = req.body.text === undefined || (typeof req.body.text === 'string' && !req.body.text.trim()) ? '' : text(req.body.text, 'message');
-    res.json(await codex.input(req.params.id, req.params.thread, message,
+    res.json(await agents.input(req.params.id, req.params.thread, message,
       req.body.turnId ? text(req.body.turnId, 'turn ID', 200) : undefined,
       req.body.model === undefined ? undefined : text(req.body.model, 'model', 200),
       req.body.effort === undefined ? undefined : text(req.body.effort, 'reasoning effort', 50), req.body.images));
   });
   router.post('/servers/:id/sessions/:thread/shell', async (req, res) => {
     const command = text(req.body.command, 'shell command', 32_000);
-    res.json(await codex.shell(req.params.id, req.params.thread, command));
+    res.json(await agents.shell(req.params.id, req.params.thread, command));
   });
   router.post('/servers/:id/sessions/:thread/rename', async (req, res) => {
-    await codex.rename(req.params.id, req.params.thread, text(req.body.name, 'session name', 1000));
+    await agents.rename(req.params.id, req.params.thread, text(req.body.name, 'session name', 1000));
     res.json({ renamed: true });
   });
   router.post('/servers/:id/sessions/:thread/interrupt', async (req, res) => {
-    res.json(await codex.interrupt(req.params.id, req.params.thread, text(req.body.turnId, 'turn ID', 200)));
+    res.json(await agents.interrupt(req.params.id, req.params.thread, text(req.body.turnId, 'turn ID', 200)));
   });
   router.post('/servers/:id/sessions/:thread/requests/:request', async (req, res) => {
-    await codex.answer(req.params.id, req.params.thread, req.params.request, req.body);
+    await agents.answer(req.params.id, req.params.thread, req.params.request, req.body);
     res.json({ sent: true });
   });
   return router;

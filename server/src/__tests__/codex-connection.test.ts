@@ -2,7 +2,8 @@ import { afterEach, beforeEach, expect, it } from 'vitest';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import WebSocket, { WebSocketServer } from 'ws';
-import { CodexRpc, quote } from '../codex-connection.js';
+import { CodexRpc } from '../codex-connection.js';
+import { quote } from '../ssh.js';
 
 let server: WebSocketServer;
 let peer: WebSocket;

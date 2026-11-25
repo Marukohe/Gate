@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import { WebSocket, WebSocketServer } from 'ws';
 import { createDb } from './db.js';
 import { CodexService } from './codex.js';
+import { AgentService } from './agents.js';
 import { routes } from './routes.js';
 import { INPUT_BODY_LIMIT } from './images.js';
 
@@ -15,8 +16,8 @@ app.use(express.json({ limit: INPUT_BODY_LIMIT }));
 const dataDir = process.env.GATE_DATA_DIR || path.join(os.homedir(), '.gate');
 fs.mkdirSync(dataDir, { recursive: true });
 const db = createDb(path.join(dataDir, 'gate.db'));
-const codex = new CodexService();
-app.use('/api', routes(db, codex));
+const agents = new AgentService([{ tool: { id: 'codex', name: 'Codex', executable: 'codex', description: 'Native shared app-server over SSH.' }, backend: new CodexService() }]);
+app.use('/api', routes(db, agents));
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   res.status(400).json({ error: error.message });
@@ -30,7 +31,7 @@ const broadcast = (event: object) => {
     if (client.bufferedAmount > 2 * 1024 * 1024) client.terminate(); else client.send(data);
   }
 };
-codex.on('event', broadcast);
+agents.on('event', broadcast);
 const heartbeat = setInterval(() => {
   for (const client of wss.clients) {
     if (!(client as any).alive) { client.terminate(); continue; }
@@ -51,7 +52,7 @@ const port = Number(process.env.PORT) || 3030;
 const host = process.env.HOST || '0.0.0.0';
 http.listen(port, host, () => console.log(`Gate running on http://${host}:${port}`));
 function shutdown() {
-  clearInterval(heartbeat); codex.close(); db.close();
+  clearInterval(heartbeat); agents.close(); db.close();
   for (const client of wss.clients) client.terminate();
   wss.close(); http.close(() => process.exit(0));
 }

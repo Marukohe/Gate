@@ -3,16 +3,16 @@ import express from 'express';
 import type { Server as HttpServer } from 'node:http';
 import { createDb } from '../db.js';
 import { routes } from '../routes.js';
-import type { CodexService } from '../codex.js';
+import type { AgentService } from '../agents.js';
 import { INPUT_BODY_LIMIT } from '../images.js';
 
 let db: ReturnType<typeof createDb>;
 let http: HttpServer;
 let origin: string;
-const codex = { sync: vi.fn(), monitor: vi.fn(), create: vi.fn(), input: vi.fn(), rename: vi.fn(), models: vi.fn(), file: vi.fn(), shell: vi.fn() };
+const codex = { tools: () => [{ id: 'codex', name: 'Codex', executable: 'codex', description: '' }], sync: vi.fn(), monitor: vi.fn(), create: vi.fn(), input: vi.fn(), rename: vi.fn(), models: vi.fn(), file: vi.fn(), shell: vi.fn() };
 beforeEach(async () => {
   vi.resetAllMocks(); db = createDb(':memory:');
-  const app = express(); app.use(express.json({ limit: INPUT_BODY_LIMIT })); app.use(routes(db, codex as unknown as CodexService));
+  const app = express(); app.use(express.json({ limit: INPUT_BODY_LIMIT })); app.use(routes(db, codex as unknown as AgentService));
   app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => res.status(400).json({ error: error.message }));
   http = app.listen(0, '127.0.0.1'); await new Promise<void>((resolve) => http.once('listening', resolve));
   const address = http.address(); origin = `http://127.0.0.1:${typeof address === 'object' && address?.port}`;
@@ -36,7 +36,7 @@ it('validates session names before sending a native rename and surfaces failures
 it('lists server models and validates optional model overrides before input', async () => {
   codex.models.mockResolvedValue([{ id: 'model-two', name: 'Model Two' }]);
   expect(await (await fetch(origin + '/servers/server/models')).json()).toEqual({ models: [{ id: 'model-two', name: 'Model Two' }] });
-  expect(codex.models).toHaveBeenCalledWith('server');
+  expect(codex.models).toHaveBeenCalledWith('server', undefined);
   const path = '/servers/server/sessions/native/input';
   for (const model of ['', ' ', 42, 'bad\0model', 'x'.repeat(201)]) {
     expect((await send(path, { text: 'Work', model })).status).toBe(400);

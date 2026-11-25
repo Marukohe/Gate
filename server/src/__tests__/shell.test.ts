@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Client } from 'ssh2';
-import { runShell, shellCommand } from '../codex-connection.js';
+import { runShell, shellCommand } from '../ssh.js';
 
 it('runs shell syntax in the exact cwd and never runs a command when cd fails', () => {
   const root = mkdtempSync(join(tmpdir(), 'gate-shell-'));

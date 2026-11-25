@@ -4,6 +4,7 @@ import { sessionFilePath } from './session-files.js';
 import { connectCodex, type CodexRpc, type RpcMessage } from './codex-connection.js';
 import { describeRequest, decision } from './codex-requests.js';
 import { imageInputs } from './images.js';
+import type { AgentBackend } from './agent-backend.js';
 import type { Server, Session, MonitorServer, Item, Request, SessionDetail, ServerEvent, ModelOption } from './types.js';
 
 const compact = (text: unknown, length = 200) => String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, length);
@@ -46,7 +47,7 @@ type Entry = { settings: Server; signature: string; controller: AbortController;
   subscriptions: Map<string, Promise<void>>; requests: Map<string, { request: Request; message: RpcMessage }> };
 type Connector = typeof connectCodex;
 
-export class CodexService extends EventEmitter {
+export class CodexService extends EventEmitter implements AgentBackend {
   private entries = new Map<string, Entry>();
   constructor(private connector: Connector = connectCodex) { super(); }
   private publish(event: ServerEvent) { this.emit('event', event); }

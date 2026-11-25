@@ -1,7 +1,7 @@
 export interface Server {
   id: string; name: string; host: string; port: number; username: string;
   authType: 'password' | 'privateKey'; password?: string; privateKeyPath?: string;
-  defaultWorkingDir?: string; codexPath?: string; createdAt: number;
+  defaultWorkingDir?: string; tool?: string; executablePath?: string; codexPath?: string; createdAt: number;
 }
 export type PublicServer = Omit<Server, 'password'> & { hasPassword: boolean };
 export type SessionState = 'running' | 'waiting' | 'idle' | 'saved' | 'error' | 'unknown';

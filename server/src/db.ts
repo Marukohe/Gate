@@ -19,13 +19,20 @@ export function createDb(file: string) {
   for (const column of ['defaultWorkingDir', 'codexPath']) {
     if (!columns.some((c) => c.name === column)) db.exec(`ALTER TABLE servers ADD COLUMN ${column} TEXT`);
   }
-  const fields = ['name', 'host', 'port', 'username', 'authType', 'password', 'privateKeyPath', 'defaultWorkingDir', 'codexPath'] as const;
+  if (!columns.some((c) => c.name === 'tool')) db.exec("ALTER TABLE servers ADD COLUMN tool TEXT NOT NULL DEFAULT 'codex'");
+  if (!columns.some((c) => c.name === 'executablePath')) {
+    db.exec('ALTER TABLE servers ADD COLUMN executablePath TEXT');
+    db.exec("UPDATE servers SET executablePath = COALESCE(NULLIF(codexPath, ''), 'codex')");
+  }
+  const fields = ['name', 'host', 'port', 'username', 'authType', 'password', 'privateKeyPath', 'defaultWorkingDir', 'codexPath', 'tool', 'executablePath'] as const;
   const table = (name: string) => db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name);
   if (table('sessions') && !table('archived_servers')) {
     // Keep old foreign keys and history together; removing a connection must not erase the archive.
     db.transaction(() => {
       db.exec('ALTER TABLE servers RENAME TO archived_servers');
       db.exec(schema);
+      db.exec("ALTER TABLE servers ADD COLUMN tool TEXT NOT NULL DEFAULT 'codex'");
+      db.exec('ALTER TABLE servers ADD COLUMN executablePath TEXT');
       const names = ['id', ...fields, 'createdAt'].join(', ');
       db.exec(`INSERT INTO servers (${names}) SELECT ${names} FROM archived_servers`);
     })();
@@ -61,8 +68,9 @@ export function createDb(file: string) {
     listServers: () => db.prepare('SELECT * FROM servers ORDER BY createdAt DESC').all() as Server[],
     getServer: (id: string) => db.prepare('SELECT * FROM servers WHERE id = ?').get(id) as Server | undefined,
     createServer(input: Omit<Server, 'id' | 'createdAt'>): Server {
-      const server = { ...input, id: randomUUID(), createdAt: Date.now() };
-      db.prepare(`INSERT INTO servers (id, createdAt, ${fields.join(', ')}) VALUES (${Array(11).fill('?').join(', ')})`)
+      const server = { ...input, tool: input.tool || 'codex', executablePath: input.executablePath || input.codexPath,
+        id: randomUUID(), createdAt: Date.now() };
+      db.prepare(`INSERT INTO servers (id, createdAt, ${fields.join(', ')}) VALUES (${Array(fields.length + 2).fill('?').join(', ')})`)
         .run(server.id, server.createdAt, ...fields.map((f) => server[f] ?? null));
       return server;
     },
