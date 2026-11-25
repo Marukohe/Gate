@@ -27,6 +27,9 @@ it('routes local markdown URLs to the session while preserving web links and rej
     expect(messageUrl(url, endpoint)).toBe('');
   }
   expect(messageUrl('data:image/png;base64,aGVsbG8=', endpoint)).toBe('data:image/png;base64,aGVsbG8=');
+  expect(new URL(messageUrl('../images/chart%20one.png', endpoint, '/repo/docs'), 'http://gate').searchParams.get('path')).toBe('/repo/docs/../images/chart one.png');
+  expect(new URL(messageUrl('/tmp/chart.png', endpoint, '/repo/docs'), 'http://gate').searchParams.get('path')).toBe('/tmp/chart.png');
+  expect(messageUrl('https://example.com/chart.png', endpoint, '/repo/docs')).toBe('https://example.com/chart.png');
   expect(sessionFilePath('/remote/repo', '../chart.png')).toBe('/remote/chart.png');
   expect(sessionFilePath('/remote/repo', '/tmp/chart.png')).toBe('/tmp/chart.png');
   expect(() => sessionFilePath('/repo', 'bad\0path')).toThrow('Invalid');

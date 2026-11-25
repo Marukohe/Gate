@@ -59,6 +59,9 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - A collapsible right file pane browses the owning session's server through the same SFTP path, without agent turns.
   Keep directory listing bounded, text/image previews read-only, and download/open-in-new-tab available.
   Text previews show source line numbers and a browser-persisted wrap toggle; soft wraps must not renumber lines.
+  Markdown/HTML support Source / Preview without rereading the file. Markdown shares the chat renderer; relative assets
+  resolve beside the viewed file. HTML is parsed in an inert document and rendered only in an opaque sandboxed iframe
+  with restrictive CSP; no scripts, forms, nested frames or external stylesheets. Never inject it into Gate's document.
   Browser-memory directory/file selection is keyed by connection and native session; abort stale reads on navigation.
   Compact windows temporarily hide the left sidebar; mobile shows one pane. Preserve chat drafts/scroll and exclude file-pane paste.
 - Scrolling upward near the chat top loads one native history page at a time. Prepending anchors the visible message
@@ -88,6 +91,7 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - `client/src/lib/server-groups.ts`: server display groups, owning connection metadata and tool labels.
 - `client/src/components/chat/SessionView.tsx`: conversation history, live events, input, and approvals.
 - `client/src/components/files/FileBrowser.tsx`: session-scoped directory browsing and read-only previews in the right sidebar.
+- `client/src/components/Markdown.tsx` / `client/src/lib/html-preview.ts`: shared Markdown rendering and isolated static HTML preparation.
 - `client/src/components/layout/SessionAttention.tsx`: cross-session status, transient notices, and quick switching.
 - `client/src/stores/monitor-store.ts` / `session-view-store.ts`: shared polling and per-conversation view state.
 - `client/src/components/monitor/SessionFilters.tsx`: available directories, collapsed blocked-directory list, custom parent paths, and Gate archive restoration.

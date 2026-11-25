@@ -124,12 +124,14 @@ app.use('/api', routes(db, { tools: () => [{ id: 'codex', name: 'Codex', executa
   if (path.endsWith('/denied')) throw new Error('Permission denied');
   const file = (name, kind = 'file') => ({ name, kind, symlink: false, size: 40 });
   const entries = path.endsWith('/empty') ? [] : path.endsWith('/src') ? [file('main.ts')]
-    : [file('src', 'directory'), file('empty', 'directory'), file('denied', 'directory'), file('文档 #1 %.txt '), file('chart.png'), file('archive.bin'), file('slow.txt')];
+    : [file('src', 'directory'), file('empty', 'directory'), file('denied', 'directory'), file('文档 #1 %.txt '), file('chart.png'), file('archive.bin'), file('slow.txt'), file('guide.md'), file('page.html')];
   return { path, cwd, entries, truncated: false };
 }, async file(serverId, threadId, path) {
   assert.ok(serverId === server.id || separateDetails.has(`${serverId}/${threadId}`));
   if (path.endsWith('/slow.txt')) await new Promise(resolve => { releaseSlowFile = resolve; });
   if (path.endsWith('/archive.bin')) return { path, data: Buffer.from([0, 255]) };
+  if (path.endsWith('/guide.md')) return { path, data: Buffer.from('# File guide\n\n**Rendered markdown**\n\n| Name | Value |\n| --- | --- |\n| Gate | Ready |\n\n![Guide chart](images/chart.png)\n\n[Source](src/main.ts:2)\n\n[File guide](#file-guide)') };
+  if (path.endsWith('/page.html')) return { path, data: Buffer.from('<!doctype html><html><head><style>h1{color:rgb(20, 90, 150)}</style><script>window.previewRan=true; parent.fileExecuted=true</script></head><body style="padding:16px"><h1>HTML document</h1><img alt="HTML chart" src="images/chart.png" onload="parent.fileExecuted=true"><iframe src="/api/forbidden-preview-read"></iframe><form action="/api/forbidden-preview-write" method="post"><button>Submit preview form</button></form></body></html>') };
   if (path.endsWith('.png')) return { path, data: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64') };
   if (path === 'missing.txt') throw new Error('No such file');
   return { path: '/remote/repo/' + path, data: Buffer.from('first line\n<script>window.fileExecuted = true</script>\nthird line') };
@@ -150,7 +152,12 @@ app.use((error, _req, res, _next) => res.status(400).json({ error: error.message
 app.use(express.static(fileURLToPath(new URL('../client/dist/', import.meta.url))));
 await new Promise(resolve => http.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
-const page = await browser.newPage({ viewport: { width: 1365, height: 1200 }, serviceWorkers: 'block' });
+const page = await browser.newPage({ viewport: { width: 1365, height: 1200 } });
+// Playwright's built-in block mode reads navigator.serviceWorker inside opaque sandboxed frames.
+// Disable registration only in the app document so static HTML previews retain their sandbox.
+await page.addInitScript(() => {
+  if (window === window.top && navigator.serviceWorker) navigator.serviceWorker.register = async () => {};
+});
 page.setDefaultTimeout(10000);
 const errors = []; page.on('pageerror', error => errors.push(error.message));
 const shotDir = process.env.GATE_SCREENSHOT_DIR;
@@ -465,6 +472,46 @@ try {
   assert.equal(await filePanel.getByLabel('File content', { exact: true }).count(), 0, 'A late file response cannot replace the new selection');
   await filePanel.getByRole('button', { name: 'Close files', exact: true }).click();
   assert.equal(writes.length, writesBeforeFiles, 'File browsing must never send model input or shell commands');
+  // Format previews reuse source content, resolve assets beside the file, and isolate untrusted HTML.
+  await page.getByRole('button', { name: 'Open files', exact: true }).click();
+  await filePanel.getByRole('button', { name: 'Back to files', exact: true }).click();
+  await filePanel.getByRole('button', { name: 'Open file guide.md', exact: true }).click();
+  await filePanel.getByLabel('File content', { exact: true }).waitFor();
+  await filePanel.getByRole('button', { name: 'Preview', exact: true }).click();
+  await filePanel.getByRole('heading', { name: 'File guide', exact: true }).waitFor();
+  assert.equal(await filePanel.locator('strong').innerText(), 'Rendered markdown');
+  assert.equal(await filePanel.getByRole('cell', { name: 'Ready', exact: true }).count(), 1);
+  await page.waitForFunction(() => document.querySelector('#session-files img[alt="Guide chart"]')?.naturalWidth === 1);
+  const guideImage = new URL(await filePanel.getByAltText('Guide chart').getAttribute('src'), page.url());
+  assert.equal(guideImage.searchParams.get('path'), detail.session.cwd + '/images/chart.png');
+  const routeBeforeAnchor = page.url(); await filePanel.getByRole('link', { name: 'File guide', exact: true }).click();
+  assert.equal(page.url(), routeBeforeAnchor, 'Markdown anchors cannot replace the session route');
+  await bounded(); await shot('files-markdown');
+  await filePanel.getByRole('button', { name: 'Source', exact: true }).click();
+  await filePanel.getByLabel('File content', { exact: true }).waitFor();
+  await filePanel.getByRole('button', { name: 'Wrap lines', exact: true }).waitFor();
+  await filePanel.getByRole('button', { name: 'Back to files', exact: true }).click();
+  const forbiddenPreviewRequests = [];
+  const watchPreview = request => { if (request.url().includes('forbidden-preview-')) forbiddenPreviewRequests.push(request.url()); };
+  page.on('request', watchPreview);
+  await filePanel.getByRole('button', { name: 'Open file page.html', exact: true }).click();
+  await filePanel.getByRole('button', { name: 'Preview', exact: true }).click();
+  const htmlPreview = page.frameLocator('iframe[title="HTML preview"]');
+  await htmlPreview.getByRole('heading', { name: 'HTML document', exact: true }).waitFor();
+  assert.equal(await htmlPreview.locator('h1').evaluate(node => getComputedStyle(node).color), 'rgb(20, 90, 150)');
+  assert.equal(await htmlPreview.locator('body').evaluate(node => getComputedStyle(node).padding), '16px');
+  await htmlPreview.getByAltText('HTML chart').evaluate(image => image.decode());
+  assert.equal(await filePanel.locator('iframe').getAttribute('sandbox'), '');
+  assert.equal(await htmlPreview.locator('body').evaluate(() => window.previewRan), undefined);
+  assert.equal(await filePanel.locator('iframe').evaluate(frame => frame.contentDocument), null, 'HTML has an opaque origin');
+  await htmlPreview.getByRole('button', { name: 'Submit preview form', exact: true }).click();
+  await htmlPreview.getByRole('heading', { name: 'HTML document', exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.fileExecuted), undefined);
+  assert.deepEqual(forbiddenPreviewRequests, []); page.off('request', watchPreview);
+  await bounded(); await shot('files-html');
+  await filePanel.getByRole('button', { name: 'Source', exact: true }).click();
+  await filePanel.getByLabel('File content', { exact: true }).waitFor();
+  await filePanel.getByRole('button', { name: 'Close files', exact: true }).click();
   await page.getByLabel('Message', { exact: true }).fill('');
   detail.items = originalItems;
   historyProbe = true;

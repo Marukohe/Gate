@@ -46,6 +46,10 @@ read-only and escaped; images, new-tab opening and downloads reuse the session-s
 10 MB, with text previews up to 1 MB. Each conversation remembers its last directory/file in browser memory; stale reads
 are discarded after navigation. Compact windows temporarily hide the session list and phones show the file pane alone;
 closing it restores chat with its draft and reading position preserved.
+Markdown and HTML files offer Source / Preview using the already-loaded text. Markdown shares the chat renderer, resolving
+local links/images relative to the file and keeping heading anchors inside the preview. HTML renders inline styles and images
+in an opaque sandboxed iframe with a restrictive CSP. Parsing is inert; scripts, forms, nested frames and external stylesheets
+are disabled. Original source remains available through the file endpoint and downloads.
 
 The panel groups sessions by repository under each server. Read-only Git metadata merges repository subdirectories
 and linked worktrees; separate clones remain separate, even with the same name. Non-Git or unavailable directories

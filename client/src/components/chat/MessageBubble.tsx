@@ -1,25 +1,8 @@
 import { memo, useContext } from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { CodeBlock } from './CodeBlock';
-import { ScrollableTable } from './ScrollableTable';
+import { Markdown } from '@/components/Markdown';
 import { ChatImage } from './ChatImage';
 import type { Item } from '../../../../server/src/types';
 import { messageUrl, SessionFileContext } from '@/lib/message-url';
-
-// Stable renderer identities preserve code blocks and table state across message updates.
-const markdownComponents: Components = {
-  code({ className, children, ...props }) {
-    const language = /language-([^\s]+)/.exec(className ?? '')?.[1];
-    const code = String(children).replace(/\n$/, '');
-    return language || code.includes('\n') ? <CodeBlock code={code} language={language ?? 'text'} />
-      : <code className="break-all rounded bg-muted px-1 py-0.5" {...props}>{children}</code>;
-  },
-  pre({ children }) { return <>{children}</>; },
-  table({ children }) { return <ScrollableTable>{children}</ScrollableTable>; },
-  a({ href, children }) { return <a href={href} target={href?.startsWith('#') ? undefined : '_blank'} rel="noopener noreferrer">{children}</a>; },
-  img({ src, alt }) { return <img src={src} alt={alt || 'Session image'} loading="lazy" />; },
-};
 
 export const MessageBubble = memo(function MessageBubble({ item }: { item: Item }) {
   const fileEndpoint = useContext(SessionFileContext);
@@ -35,10 +18,7 @@ export const MessageBubble = memo(function MessageBubble({ item }: { item: Item 
         {!!item.images?.length && <div className={`flex flex-wrap gap-2 ${item.text ? 'mt-3' : ''}`}>
           {item.images.map((src, index) => <ChatImage key={`${index}:${src}`} src={messageUrl(src, fileEndpoint)} index={index} />)}
         </div>}
-      </> : <div className="markdown-prose">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}
-          urlTransform={(url) => messageUrl(url, fileEndpoint)}>{item.text}</ReactMarkdown>
-      </div>}
+      </> : <Markdown text={item.text} fileEndpoint={fileEndpoint} />}
     </div>
   </div>;
 }, ({ item: before }, { item: after }) => before.id === after.id && before.kind === after.kind &&

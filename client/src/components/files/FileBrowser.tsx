@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
 import { sessionKey, useSessionViewStore } from '@/stores/session-view-store';
 import { useUIStore } from '@/stores/ui-store';
+import { RenderedFile } from './RenderedFile';
 import type { DirectoryListing, FilePreview } from '../../../../server/src/types';
 
 const initialFiles = { directory: '.', file: null as string | null };
@@ -33,6 +34,7 @@ export function FileBrowser({ serverId, threadId, open, onClose }: {
   const update = useSessionViewStore((state) => state.update);
   const wrap = useUIStore((state) => state.fileWrap);
   const toggleWrap = useUIStore((state) => state.toggleFileWrap);
+  const [rendered, setRendered] = useState(false);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [loading, setLoading] = useState(open);
   const [error, setError] = useState('');
@@ -62,6 +64,8 @@ export function FileBrowser({ serverId, threadId, open, onClose }: {
   }, [target, file, open, revision]);
   const listing = loaded?.target === target && 'directory' in loaded ? loaded.directory : null;
   const preview = loaded?.target === target && 'preview' in loaded ? loaded.preview : null;
+  const format = file && /\.(md|markdown)$/i.test(file) ? 'markdown' : file && /\.html?$/i.test(file) ? 'html' : null;
+  const showRendered = rendered && format !== null && preview?.kind === 'text';
   const displayedPath = listing?.path ?? directory;
   const fileUrl = file ? `/api${base}/file?${new URLSearchParams({ path: file })}` : '';
   const navigate = (path: string) => update(key, { files: { directory: path, file: null } });
@@ -75,6 +79,10 @@ export function FileBrowser({ serverId, threadId, open, onClose }: {
     onKeyDown={(event) => { if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); onClose(); } }}>
     <div className="file-sidebar-header">
       <Folder className="size-4 text-muted-foreground" /><h2 className="min-w-0 flex-1 text-sm font-semibold">Files</h2>
+      {format && preview?.kind === 'text' && <div className="flex gap-0.5" role="group" aria-label="File display">
+        <Button size="xs" variant={!rendered ? 'secondary' : 'ghost'} aria-pressed={!rendered} onClick={() => setRendered(false)}>Source</Button>
+        <Button size="xs" variant={rendered ? 'secondary' : 'ghost'} aria-pressed={rendered} onClick={() => setRendered(true)}>Preview</Button>
+      </div>}
       <Button size="icon-sm" variant="ghost" aria-label="Refresh files" title="Refresh" disabled={loading} onClick={() => setRevision((value) => value + 1)}>
         {loading ? <LoaderCircle className="motion-safe:animate-spin" /> : <RefreshCw />}
       </Button>
@@ -83,7 +91,7 @@ export function FileBrowser({ serverId, threadId, open, onClose }: {
     {file ? <div className="flex min-w-0 items-center gap-1 border-b px-2 py-2">
       <Button size="icon-sm" variant="ghost" aria-label="Back to files" title="Back to files" onClick={goBack}><ArrowLeft /></Button>
       <span className="min-w-0 flex-1 truncate text-xs font-medium" title={file}>{basename(file)}</span>
-      {preview?.kind === 'text' && <Button size="icon-sm" variant={wrap ? 'secondary' : 'ghost'} aria-label="Wrap lines"
+      {preview?.kind === 'text' && !showRendered && <Button size="icon-sm" variant={wrap ? 'secondary' : 'ghost'} aria-label="Wrap lines"
         title={wrap ? 'Disable line wrapping' : 'Wrap lines'} aria-pressed={wrap} onClick={toggleWrap}><WrapText /></Button>}
       <a href={fileUrl} target="_blank" rel="noreferrer" aria-label="Open file in new tab" title="Open in new tab" className="file-action"><ExternalLink className="size-3.5" /></a>
       <a href={`${fileUrl}&download=1`} download aria-label="Download file" title="Download" className="file-action"><Download className="size-3.5" /></a>
@@ -115,7 +123,9 @@ export function FileBrowser({ serverId, threadId, open, onClose }: {
         {!listing.entries.length && <li className="px-2 py-4 text-xs text-muted-foreground">This folder is empty.</li>}
         {listing.truncated && <li className="px-2 py-3 text-xs text-muted-foreground">Showing the first {listing.entries.length} entries. Enter a folder path above to browse further.</li>}
       </ul>}
-      {!error && file && preview?.kind === 'text' && <TextPreview text={preview.text} wrap={wrap} />}
+      {!error && file && preview?.kind === 'text' && (showRendered && format
+        ? <RenderedFile text={preview.text} kind={format} endpoint={`/api${base}/file`} directory={parent(file)} />
+        : <TextPreview text={preview.text} wrap={wrap} />)}
       {!error && file && preview?.kind === 'image' && (imageFailed ? <p role="alert" className="p-4 text-xs text-destructive">This image could not be displayed. Refresh or download it.</p>
         : <img key={`${fileUrl}:${revision}`} src={fileUrl} alt={basename(file)} onError={() => setImageFailed(true)} className="mx-auto max-w-full p-3" />)}
       {!error && file && preview?.kind === 'download' && <p className="p-4 text-xs leading-relaxed text-muted-foreground">Preview is unavailable for this file ({sizeLabel(preview.size)}). Use Download to open it locally.</p>}

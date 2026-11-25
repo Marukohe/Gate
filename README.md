@@ -109,6 +109,10 @@ Use the same remote OS user and Codex configuration as your terminal.
   the session's working directory. Open folders, go up, return home, enter a path, or refresh. Click a file for a read-only
   text/image preview, with buttons to open a new tab or download. Each directory shows up to 1,000 entries.
   Text shows source line numbers; **Wrap lines** toggles automatic wrapping and remembers the choice in this browser.
+  Markdown (`.md`, `.markdown`) and HTML (`.html`, `.htm`) offer **Source / Preview** in the file header.
+  Markdown renders headings, tables, code and images. Relative links/images resolve beside the file.
+  HTML shows a sandboxed static page with inline CSS and images; scripts, forms, embedded pages and external stylesheets
+  are disabled. Switching views reuses the loaded file; opening a new tab and downloading still use the original source.
   The pane follows the selected session; its last directory/file stays in tab memory. Narrow windows temporarily hide
   the session list; phones show files full-screen. Closing it returns to the conversation with drafts and reading position intact.
   Browsing uses SFTP for both tools and does not send a model request.
