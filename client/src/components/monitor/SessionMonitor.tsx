@@ -110,7 +110,7 @@ function ProjectSessions({ project, current, searching, stale, onOpen, onArchive
         aria-label={`${searching ? 'Matching sessions in' : canCollapse ? 'Collapse sessions in' : 'Show all sessions in'} ${project.name}${project.context ? ` (${project.context})` : ''}`}
         onClick={() => setView(canCollapse ? 'collapsed' : 'all')}>
         <span className="min-w-0 flex-1 truncate font-semibold">{project.name}
-          {project.context && <span className="ml-2 font-normal text-muted-foreground">· {project.context}</span>}
+          {project.context && <span className="ml-2 text-xs font-normal text-muted-foreground">· {project.context}</span>}
         </span>
         <span className="max-w-[55%] truncate text-xs font-normal text-muted-foreground" title={summary}>
           {summary || `${project.sessions.length} ${project.sessions.length === 1 ? 'session' : 'sessions'}`}
@@ -137,7 +137,7 @@ function SessionRow({ session, selected, stale, onOpen, onArchive }: {
     <div className="session-row" data-selected={selected}>
       <button aria-current={selected ? 'page' : undefined} title={`${session.name} · ${stale ? 'Unknown' : labels[session.state]}`} className="monitor-session min-w-0 flex-1" aria-label={`${session.name} ${stale ? 'Unknown' : labels[session.state]} · ${session.toolName}`} onClick={() => onOpen(session)}>
         <span className={`monitor-dot monitor-${stale ? 'unknown' : session.state}`} aria-hidden="true" />
-        <span className="flex min-w-0 flex-1 items-center gap-1.5"><span className="min-w-0 flex-1 truncate text-[13px]">{session.name}</span>
+        <span className="flex min-w-0 flex-1 items-center gap-1.5"><span className="min-w-0 flex-1 truncate text-xs">{session.name}</span>
           <ToolTag name={session.toolName} title={[session.toolName, session.username, session.toolNote].filter(Boolean).join(' · ')} /></span>
       </button>
       <Button variant="ghost" size="icon-sm" className="session-archive shrink-0 text-muted-foreground" disabled={busy}

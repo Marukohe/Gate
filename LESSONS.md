@@ -6,6 +6,7 @@
   preserve connection-plus-native-ID identity for navigation, drafts and archives even when native IDs collide.
 - Keep each project heading to one row and use it to reveal history or collapse sessions, including running-only groups.
   Paths and history controls should not add extra rows. Polling must preserve the user's collapsed state.
+  Repository names should stand out above smaller, regular-weight session names; keep path hints secondary.
 - Keep quick status filters above the monitor's component lifetime so returning from chat preserves the choice.
   Summary counts use the visible server snapshot before quick status/search filtering; filtered results expand automatically.
 - Keep monitoring alive while viewing a session, with one shared poller. Notify on observed waiting/error transitions,
