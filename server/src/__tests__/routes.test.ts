@@ -12,7 +12,7 @@ let origin: string;
 const codex = { tools: () => [
   { id: 'codex', name: 'Codex', executable: 'codex', description: '' },
   { id: 'agy', name: 'Antigravity', executable: 'agy', description: '' },
-], sync: vi.fn(), monitor: vi.fn(), create: vi.fn(), input: vi.fn(), rename: vi.fn(), models: vi.fn(), file: vi.fn(), shell: vi.fn() };
+], sync: vi.fn(), monitor: vi.fn(), create: vi.fn(), input: vi.fn(), rename: vi.fn(), models: vi.fn(), file: vi.fn(), directory: vi.fn(), shell: vi.fn() };
 const hosts = { list: vi.fn(), resolve: vi.fn() };
 beforeEach(async () => {
   vi.resetAllMocks(); db = createDb(':memory:');
@@ -179,4 +179,29 @@ it('validates direct shell commands and never forwards them to model input', asy
   expect(await (await send(path, { command: 'pwd | head' })).json()).toMatchObject({ stdout: 'ok', exitCode: 0 });
   expect(codex.shell).toHaveBeenCalledWith('server', 'native', 'pwd | head');
   expect(codex.input).not.toHaveBeenCalled(); expect(codex.create).not.toHaveBeenCalled();
+});
+
+
+it('lists and previews session files without mutating native sessions, preserving exact path bytes', async () => {
+  const path = '/servers/remote/sessions/native';
+  codex.directory.mockResolvedValue({ path: '/repo', cwd: '/repo', entries: [], truncated: false });
+  const listing = await fetch(origin + path + '/files');
+  expect(listing.headers.get('cache-control')).toBe('no-store');
+  expect(codex.directory).toHaveBeenCalledWith('remote', 'native', '.');
+  expect(await listing.json()).toMatchObject({ path: '/repo', entries: [] });
+  for (const query of ['?path=', '?path=a&path=b', '?path=bad%00path']) {
+    expect((await fetch(origin + path + '/files' + query)).status).toBe(400);
+  }
+  const filename = '/repo/ 文档 #1 %.html ';
+  const query = new URLSearchParams({ path: filename, view: 'preview' });
+  codex.file.mockResolvedValue({ path: filename, data: Buffer.from('<script>window.bad = true</script>') });
+  const preview = await fetch(origin + path + '/file?' + query);
+  expect(await preview.json()).toMatchObject({ path: filename, kind: 'text', text: '<script>window.bad = true</script>' });
+  expect(codex.file).toHaveBeenCalledWith('remote', 'native', filename);
+  const download = await fetch(origin + path + '/file?' + new URLSearchParams({ path: filename, download: '1' }));
+  expect(download.headers.get('content-disposition')).toMatch(/^attachment/);
+  expect(download.headers.get('content-security-policy')).toContain('sandbox');
+  codex.file.mockRejectedValueOnce(new Error('Permission denied'));
+  expect(await (await fetch(origin + path + '/file?' + query)).json()).toEqual({ error: 'Cannot open file. Permission denied' });
+  expect(codex.input).not.toHaveBeenCalled(); expect(codex.create).not.toHaveBeenCalled(); expect(codex.shell).not.toHaveBeenCalled();
 });

@@ -30,6 +30,12 @@ export interface ShellResult {
   stdout: string; stderr: string; exitCode: number | null; signal?: string;
   timedOut: boolean; truncated: boolean; error?: string;
 }
+export interface DirectoryListing {
+  cwd: string; path: string; truncated: boolean;
+  entries: { name: string; kind: 'directory' | 'file' | 'other'; symlink: boolean; size: number }[];
+}
+export type FilePreview = { path: string; size: number } &
+  ({ kind: 'text'; text: string } | { kind: 'image' | 'download' });
 export interface Question { id: string; text: string; options: string[]; secret: boolean }
 export interface Request {
   id: string; threadId: string; turnId?: string; method: string; title: string; detail: string;

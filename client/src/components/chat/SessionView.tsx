@@ -171,7 +171,7 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
       if (!visible || event.defaultPrevented || !event.clipboardData || !canAttach || useSessionViewStore.getState().views[key]?.busy) return;
       const target = event.target instanceof Element ? event.target : null;
       // Leave other editors and dialogs alone; ordinary text keeps the browser's normal paste behavior.
-      if (target?.closest('#session-sidebar, [role="dialog"], [role="alertdialog"]') || document.querySelector('[role="dialog"][data-state="open"]')) return;
+      if (target?.closest('#session-sidebar, #session-files, [role="dialog"], [role="alertdialog"]') || document.querySelector('[role="dialog"][data-state="open"]')) return;
       if (target?.closest('input, textarea, [contenteditable]:not([contenteditable="false"]), [role="textbox"]') && target !== messageInput.current) return;
       const files = clipboardImages(event.clipboardData);
       if (!files.length) return;

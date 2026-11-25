@@ -1,4 +1,4 @@
-import type { ModelOption, MonitorServer, Server, ServerEvent, Session, SessionDetail, ShellResult, ToolDefinition } from './types.js';
+import type { DirectoryListing, ModelOption, MonitorServer, Server, ServerEvent, Session, SessionDetail, ShellResult, ToolDefinition } from './types.js';
 
 // Backends translate native protocols into Gate data. HTTP and UI never issue native RPCs.
 export interface AgentBackend {
@@ -11,6 +11,7 @@ export interface AgentBackend {
   rename(serverId: string, sessionId: string, name: string): Promise<void>;
   interrupt(serverId: string, sessionId: string, turnId: string): Promise<unknown>;
   answer(serverId: string, sessionId: string, requestId: string, value: unknown): Promise<void>;
+  directory(serverId: string, sessionId: string, path: string): Promise<DirectoryListing>;
   file(serverId: string, sessionId: string, path: string): Promise<{ path: string; data: Buffer }>;
   shell(serverId: string, sessionId: string, command: string): Promise<ShellResult>;
   on(event: 'event', listener: (event: ServerEvent) => void): unknown;

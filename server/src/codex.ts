@@ -168,6 +168,12 @@ export class CodexService extends EventEmitter implements AgentBackend {
       nextCursor: history.nextCursor, turnId: latest?.status === 'inProgress' ? latest.id : null,
       requests: [...entry.requests.values()].map((v) => v.request).filter((r) => r.threadId === threadId) };
   }
+  async directory(serverId: string, threadId: string, directory: string) {
+    const rpc = await this.connection(this.entry(serverId));
+    const { thread } = await rpc.request('thread/read', { threadId });
+    const path = sessionFilePath(thread.cwd, directory);
+    return { cwd: thread.cwd as string, path, ...await rpc.listDirectory(path) };
+  }
   async file(serverId: string, threadId: string, filePath: string) {
     const rpc = await this.connection(this.entry(serverId));
     const { thread } = await rpc.request('thread/read', { threadId });

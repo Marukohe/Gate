@@ -279,6 +279,13 @@ export class AgyService extends EventEmitter implements AgentBackend {
     this.publish(entry, id);
   }
   async rename(_serverId: string, _id: string, _name: string): Promise<void> { throw new Error('Antigravity ACP does not offer session renaming.'); }
+  async directory(serverId: string, id: string, directory: string) {
+    const entry = this.entry(serverId); const rpc = await this.connection(entry);
+    if (!entry.sessions.some((session) => session.id === id)) await this.refresh(serverId);
+    const cwd = this.session(entry, id).cwd;
+    const path = sessionFilePath(cwd, directory);
+    return { cwd, path, ...await rpc.listDirectory(path) };
+  }
   async file(serverId: string, id: string, filePath: string) {
     const entry = this.entry(serverId); const rpc = await this.connection(entry);
     if (!entry.sessions.some((session) => session.id === id)) await this.refresh(serverId);

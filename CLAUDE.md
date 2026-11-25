@@ -56,6 +56,10 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
   Commands have a 60-second wait limit and bounded output; uncertain execution is never automatically replayed.
 - Local Markdown file/image URLs use a session-scoped HTTP endpoint and SFTP over the existing SSH connection.
   Resolve relative paths against native thread cwd; file contents must never execute on Gate's origin.
+- A collapsible right file pane browses the owning session's server through the same SFTP path, without agent turns.
+  Keep directory listing bounded, text/image previews read-only, and download/open-in-new-tab available.
+  Browser-memory directory/file selection is keyed by connection and native session; abort stale reads on navigation.
+  Compact windows temporarily hide the left sidebar; mobile shows one pane. Preserve chat drafts/scroll and exclude file-pane paste.
 - Scrolling upward near the chat top loads one native history page at a time. Prepending anchors the visible message
   before paint; manual loading/retry remains available. Initial bottom positioning must not drain history pages.
   Auto-load once per entry into the top zone; failed requests wait for explicit retry.
@@ -75,13 +79,14 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - `server/src/agy.ts` / `acp-connection.ts`: Antigravity native session adapter and persistent ACP transport.
 - `server/src/codex.ts`: native session listing, history, subscriptions, messages, decisions, and interruption.
 - `server/src/codex-requests.ts`: offered approval choices and structured question answers.
-- `server/src/session-files.ts`: bounded SFTP reads, inert text previews with line anchors, images, and downloads.
+- `server/src/session-files.ts`: bounded SFTP directory/file reads, inert text previews with line anchors, images, and downloads.
 - `server/src/types.ts`: shared browser/server response types.
 - `server/src/db.ts`: server settings, persistent visibility rules/archives, and one-time preservation of old Gate data.
 - `server/src/routes.ts` / `index.ts`: HTTP API and browser event delivery.
 - `client/src/components/monitor/SessionMonitor.tsx`: the single server/session panel and creation form.
 - `client/src/lib/server-groups.ts`: server display groups, owning connection metadata and tool labels.
 - `client/src/components/chat/SessionView.tsx`: conversation history, live events, input, and approvals.
+- `client/src/components/files/FileBrowser.tsx`: session-scoped directory browsing and read-only previews in the right sidebar.
 - `client/src/components/layout/SessionAttention.tsx`: cross-session status, transient notices, and quick switching.
 - `client/src/stores/monitor-store.ts` / `session-view-store.ts`: shared polling and per-conversation view state.
 - `client/src/components/monitor/SessionFilters.tsx`: available directories, collapsed blocked-directory list, custom parent paths, and Gate archive restoration.

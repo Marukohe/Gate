@@ -36,6 +36,8 @@
   blocks and tables on loading/poll updates, causing flicker and losing local table state; verify node identity as well as scroll.
 - Message file paths belong to the session's SSH server, with relative paths based on native thread cwd. Rewrite links
   and image sources together; preserve URL escaping and line references, and serve file contents without executable scripts.
+  Preserve literal filename whitespace. Bound SFTP directory reads, follow valid symlinks, and close only the operation's channel.
+  Cancel stale browser reads on file/session changes so delayed content cannot replace the current selection.
 - Image attachments must survive the entire native input/history path, not just preview in the composer. Check actual
   start/steer input, image-only sends, native history after reload, and draft retention on failed sends or navigation.
   Budget JSON for base64 expansion, validate image limits on the server, and reserve thumbnail space to keep scrolling stable.

@@ -105,6 +105,12 @@ Use the same remote OS user and Codex configuration as your terminal.
 - **Files and images:** local Markdown links open files from the session's server in a new tab, including line references
   such as `main.ts:42` or `main.ts#L42`. Relative paths use the session's working directory; local images display inline.
   Gate reads through the existing SSH connection (SFTP), up to 10 MB per file. Text up to 1 MB is previewed; other files download.
+- **File sidebar:** click the panel icon at the top right of a conversation to browse its server's files, starting in
+  the session's working directory. Open folders, go up, return home, enter a path, or refresh. Click a file for a read-only
+  text/image preview, with buttons to open a new tab or download. Each directory shows up to 1,000 entries.
+  The pane follows the selected session; its last directory/file stays in tab memory. Narrow windows temporarily hide
+  the session list; phones show files full-screen. Closing it returns to the conversation with drafts and reading position intact.
+  Browsing uses SFTP for both tools and does not send a model request.
 - **Shell:** send `!pwd`, `!git status`, or another `!command` to execute directly through SSH in the session's working
   directory, without model inference. Results show stdout, stderr, and exit status; they survive switching sessions but
   clear on page reload and are never added to model context. Each command uses a fresh, non-interactive shell, with a

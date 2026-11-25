@@ -39,6 +39,14 @@ adjacent pane; list and conversation remain mounted when collapsed. Desktop coll
 Mobile uses one pane at a time and closes the sidebar after selection. Search, filters and expansion state stay across
 conversation switches. Hiding chat preserves reading position and prevents it from intercepting image paste in the list.
 
+The right-hand file pane starts at the selected session's native working directory. Directory listings and file reads use
+SFTP over that connection's existing SSH transport for both tools, without prompts or shell commands. Listings are bounded
+to 1,000 entries; valid symlinks are followed, while broken links and special files cannot be opened. Text previews are
+read-only and escaped; images, new-tab opening and downloads reuse the session-scoped file endpoint. Reads are capped at
+10 MB, with text previews up to 1 MB. Each conversation remembers its last directory/file in browser memory; stale reads
+are discarded after navigation. Compact windows temporarily hide the session list and phones show the file pane alone;
+closing it restores chat with its draft and reading position preserved.
+
 The panel groups sessions by repository under each server. Read-only Git metadata merges repository subdirectories
 and linked worktrees; separate clones remain separate, even with the same name. Non-Git or unavailable directories
 use their working path. This metadata is cached briefly and creates no project records.

@@ -11,6 +11,7 @@ interface ViewState {
   detail: SessionDetail | null; scrollTop: number; follow: boolean;
   shellRuns: ShellRun[];
   images: ImageAttachment[];
+  files?: { directory: string; file: string | null };
 }
 export const emptyView: ViewState = { text: '', model: '', effort: '', busy: false, detail: null, scrollTop: 0, follow: true, shellRuns: [], images: [] };
 // In-memory only: preserve a visit without writing conversations or drafts into browser storage.

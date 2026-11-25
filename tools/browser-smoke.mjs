@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { posix } from 'node:path';
 import { mkdir } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
@@ -37,6 +38,8 @@ let detail = { session: { ...sessions[2], model: 'fixture-current', effort: 'hig
   nextCursor: 'older', turnId: null, requests: [] };
 const writes = [];
 const createdOn = [];
+const directoryReads = [];
+let releaseSlowFile;
 const separateDetails = new Map();
 let sshHostsUnavailable = false;
 let releaseSshHost;
@@ -114,8 +117,19 @@ app.use('/api', routes(db, { tools: () => [{ id: 'codex', name: 'Codex', executa
   if (holdShell) await new Promise(resolve => { releaseShell = resolve; });
   return { stdout: command === 'pwd' ? '/home/alex/projects/gate\n' : 'shell-ok\n', stderr: command === 'pwd' ? '' : 'shell-error\n',
     exitCode: command === 'pwd' ? 0 : 7, timedOut: false, truncated: false };
+}, async directory(serverId, threadId, path) {
+  directoryReads.push({ serverId, threadId, path });
+  const cwd = separateDetails.get(`${serverId}/${threadId}`)?.session.cwd ?? detail.session.cwd;
+  path = posix.resolve(cwd, path);
+  if (path.endsWith('/denied')) throw new Error('Permission denied');
+  const file = (name, kind = 'file') => ({ name, kind, symlink: false, size: 40 });
+  const entries = path.endsWith('/empty') ? [] : path.endsWith('/src') ? [file('main.ts')]
+    : [file('src', 'directory'), file('empty', 'directory'), file('denied', 'directory'), file('文档 #1 %.txt '), file('chart.png'), file('archive.bin'), file('slow.txt')];
+  return { path, cwd, entries, truncated: false };
 }, async file(serverId, threadId, path) {
-  assert.equal(serverId, server.id); assert.equal(threadId, detail.session.id);
+  assert.ok(serverId === server.id || separateDetails.has(`${serverId}/${threadId}`));
+  if (path.endsWith('/slow.txt')) await new Promise(resolve => { releaseSlowFile = resolve; });
+  if (path.endsWith('/archive.bin')) return { path, data: Buffer.from([0, 255]) };
   if (path.endsWith('.png')) return { path, data: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64') };
   if (path === 'missing.txt') throw new Error('No such file');
   return { path: '/remote/repo/' + path, data: Buffer.from('first line\n<script>window.fileExecuted = true</script>\nthird line') };
@@ -397,6 +411,61 @@ try {
   const missing = await missingPromise; await missing.waitForLoadState();
   assert.match(await missing.locator('body').textContent(), /Cannot open file.*No such file/);
   await missing.close();
+  // Browse session files through the same routes; neither viewing nor downloads start model turns.
+  assert.equal(directoryReads.length, 0, 'Closed file sidebar performs no directory reads');
+  const writesBeforeFiles = writes.length;
+  const filePanel = page.getByRole('complementary', { name: 'Session files', exact: true });
+  await page.getByLabel('Message', { exact: true }).fill('Draft stays while browsing files');
+  for (const width of [1365, 1000, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.getByRole('button', { name: 'Open files', exact: true }).click();
+    await filePanel.getByRole('button', { name: 'Open folder src', exact: true }).waitFor();
+    if (width >= 1200) assert.equal(await sidebar.isVisible(), true);
+    else assert.equal(await sidebar.isVisible(), false, 'Narrow screens keep one sidebar open');
+    if (width < 768) assert.equal(await page.getByRole('region', { name: 'Conversation', exact: true }).isVisible(), false);
+    await filePanel.getByRole('button', { name: 'Open folder src', exact: true }).click();
+    await filePanel.getByRole('button', { name: 'Open file main.ts', exact: true }).click();
+    await filePanel.getByLabel('File content', { exact: true }).waitFor();
+    assert.match(await filePanel.getByLabel('File content', { exact: true }).innerText(), /<script>/);
+    assert.equal(await page.evaluate(() => window.fileExecuted), undefined, 'File preview must render HTML as text');
+    await bounded(); await shot(`files-text-${width}`);
+    await filePanel.getByRole('button', { name: 'Back to files', exact: true }).click();
+    await filePanel.getByRole('button', { name: 'Parent directory', exact: true }).click();
+    await filePanel.getByRole('button', { name: 'Open file 文档 #1 %.txt ', exact: true }).click();
+    await filePanel.getByLabel('File content', { exact: true }).waitFor();
+    const fileLink = new URL(await filePanel.getByRole('link', { name: 'Open file in new tab', exact: true }).getAttribute('href'), page.url());
+    assert.equal(fileLink.searchParams.get('path'), detail.session.cwd + '/文档 #1 %.txt ');
+    await filePanel.getByRole('button', { name: 'Back to files', exact: true }).click();
+    await filePanel.getByRole('button', { name: 'Open file chart.png', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('#session-files img')?.naturalWidth === 1);
+    await filePanel.getByRole('button', { name: 'Back to files', exact: true }).click();
+    await filePanel.getByRole('button', { name: 'Close files', exact: true }).click();
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Open files');
+    assert.equal(await page.getByLabel('Message', { exact: true }).inputValue(), 'Draft stays while browsing files');
+  }
+  await page.getByRole('button', { name: 'Open files', exact: true }).click();
+  await filePanel.getByRole('button', { name: 'Open folder denied', exact: true }).click();
+  await filePanel.getByText('Permission denied', { exact: true }).waitFor();
+  await filePanel.getByRole('button', { name: 'Go to working directory', exact: true }).click();
+  await filePanel.getByRole('button', { name: 'Open folder empty', exact: true }).click();
+  await filePanel.getByText('This folder is empty.', { exact: true }).waitFor();
+  await filePanel.getByRole('button', { name: 'Parent directory', exact: true }).click();
+  await filePanel.getByRole('button', { name: 'Open file archive.bin', exact: true }).click();
+  await filePanel.getByText('Preview is unavailable for this file', { exact: false }).waitFor();
+  const downloaded = page.waitForEvent('download');
+  await filePanel.getByRole('link', { name: 'Download file', exact: true }).click();
+  assert.equal((await downloaded).suggestedFilename(), 'archive.bin');
+  await filePanel.getByRole('button', { name: 'Back to files', exact: true }).click();
+  await filePanel.getByRole('button', { name: 'Open file slow.txt', exact: true }).click();
+  await filePanel.getByText('Loading files…', { exact: true }).waitFor();
+  await filePanel.getByRole('button', { name: 'Back to files', exact: true }).click();
+  await filePanel.getByRole('button', { name: 'Open file chart.png', exact: true }).click();
+  releaseSlowFile();
+  await page.waitForFunction(() => document.querySelector('#session-files img')?.naturalWidth === 1);
+  assert.equal(await filePanel.getByLabel('File content', { exact: true }).count(), 0, 'A late file response cannot replace the new selection');
+  await filePanel.getByRole('button', { name: 'Close files', exact: true }).click();
+  assert.equal(writes.length, writesBeforeFiles, 'File browsing must never send model input or shell commands');
+  await page.getByLabel('Message', { exact: true }).fill('');
   detail.items = originalItems;
   historyProbe = true;
   await page.reload();
@@ -849,7 +918,7 @@ try {
   assert.equal(writes.length, beforeReconnect, 'Reconnect must never replay writes');
   await showSidebar();
   await page.getByRole('button', { name: 'New session on Development' }).click();
-  assert.equal(await page.getByLabel('Working directory').inputValue(), server.defaultWorkingDir);
+  assert.equal(await page.getByRole('textbox', { name: 'Working directory', exact: true }).inputValue(), server.defaultWorkingDir);
   await page.getByLabel('First message').fill('Add a focused regression test.');
   await page.getByRole('button', { name: 'Start session', exact: true }).click();
   await page.getByText('Add a focused regression test.', { exact: true }).waitFor();
@@ -967,6 +1036,15 @@ try {
   shared.state = 'running'; agyMonitor.sessions[0].state = 'running';
   await codexRow.waitFor(); await agyRow.waitFor();
   await codexRow.click(); await page.getByText('Codex native context', { exact: true }).waitFor();
+  await page.setViewportSize({ width: 1365, height: 900 });
+  await page.getByRole('button', { name: 'Open files', exact: true }).click();
+  await filePanel.getByRole('button', { name: 'Open folder src', exact: true }).waitFor();
+  assert.equal(directoryReads.at(-1).serverId, server.id);
+  await agyRow.click(); await filePanel.getByRole('button', { name: 'Open folder src', exact: true }).waitFor();
+  assert.equal(directoryReads.at(-1).serverId, agy.id, 'Files follow the owning connection even when native IDs collide');
+  await filePanel.getByRole('button', { name: 'Close files', exact: true }).click();
+  await codexRow.click();
+  await page.setViewportSize({ width: 320, height: 900 });
   await page.getByLabel('Message', { exact: true }).fill('Codex-only draft');
   await showSidebar();
   await agyRow.click(); await page.getByText('Antigravity native context', { exact: true }).waitFor();

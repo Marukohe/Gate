@@ -3,8 +3,8 @@ import { posix } from 'node:path';
 import type { ClientChannel } from 'ssh2';
 import { connectSsh, execRemote, quote, projectPathsCommand, runShell, type ConnectionSettings } from './ssh.js';
 import WebSocket from 'ws';
-import { readRemoteFile } from './session-files.js';
-import type { ShellResult } from './types.js';
+import { listRemoteDirectory, readRemoteFile } from './session-files.js';
+import type { DirectoryListing, ShellResult } from './types.js';
 
 export interface RpcMessage {
   id?: number | string; method?: string; params?: Record<string, any>;
@@ -17,7 +17,8 @@ export class CodexRpc extends EventEmitter {
   constructor(private socket: WebSocket, private timeout = 30_000,
     readonly projectPaths: (directories: string[]) => Promise<string[]> = async (directories) => directories,
     readonly readFile: (path: string) => Promise<Buffer> = async () => { throw new Error('File access unavailable'); },
-    readonly shell: (cwd: string, command: string) => Promise<ShellResult> = async () => { throw new Error('Shell unavailable'); }) {
+    readonly shell: (cwd: string, command: string) => Promise<ShellResult> = async () => { throw new Error('Shell unavailable'); },
+    readonly listDirectory: (path: string) => Promise<Pick<DirectoryListing, 'entries' | 'truncated'>> = async () => { throw new Error('Directory access unavailable'); }) {
     super();
     socket.on('message', (data) => {
       let message: RpcMessage;
@@ -96,7 +97,7 @@ export async function connectCodex(settings: ConnectionSettings, signal: AbortSi
       const output = await execRemote(ssh, `sh -c ${quote(projectPathsCommand(directories))}`);
       const paths = output.split('\0');
       return directories.map((directory, i) => paths[i]?.startsWith('/') ? paths[i] : directory);
-    }, (path) => readRemoteFile(ssh, path), (cwd, command) => runShell(ssh, cwd, command));
+    }, (path) => readRemoteFile(ssh, path), (cwd, command) => runShell(ssh, cwd, command), (path) => listRemoteDirectory(ssh, path));
     ssh.once('close', () => rpc.close());
     rpc.once('disconnected', () => ssh.end());
     await new Promise<void>((resolve, reject) => {

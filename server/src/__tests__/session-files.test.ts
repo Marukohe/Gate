@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 import type { Client } from 'ssh2';
-import { readRemoteFile, sessionFilePath } from '../session-files.js';
+import { listRemoteDirectory, previewSessionFile, readRemoteFile, sessionFilePath } from '../session-files.js';
 import { messageUrl } from '../../../client/src/lib/message-url.js';
 
 it('routes local markdown URLs to the session while preserving web links and rejecting unsafe schemes', () => {
@@ -47,4 +47,62 @@ it('reads binary data over a disposable SFTP channel and rejects large or non-re
   sftp.stat.mockImplementationOnce((_path, callback) => callback(null, { size: 0, isFile: () => false }));
   await expect(readRemoteFile(ssh, '/dev/zero')).rejects.toThrow('regular file');
   expect(sftp.createReadStream).toHaveBeenCalledOnce();
+});
+
+const attrs = (kind: string, size = 12) => ({ size, isFile: () => kind === 'file', isDirectory: () => kind === 'directory', isSymbolicLink: () => kind === 'link' });
+const entry = (filename: string, kind: string) => ({ filename, attrs: attrs(kind) });
+function directorySftp(batches: ReturnType<typeof entry>[][]) {
+  const handle = Buffer.from('directory');
+  const sftp = Object.assign(new EventEmitter(), {
+    end: vi.fn(), close: vi.fn((_handle, callback) => callback()),
+    opendir: vi.fn((_path, callback) => callback(undefined, handle)),
+    readdir: vi.fn((_handle, callback) => batches.length ? callback(undefined, batches.shift()) : callback(Object.assign(new Error('EOF'), { code: 1 }))),
+    stat: vi.fn((path, callback) => path.endsWith('broken') ? callback(new Error('Missing target')) : callback(undefined, attrs('directory'))),
+  });
+  const ssh = Object.assign(new EventEmitter(), { end: vi.fn(), sftp: (callback: Function) => callback(undefined, sftp) });
+  return { sftp, ssh, handle, client: ssh as unknown as Client };
+}
+
+it('lists only one remote directory, resolves link types, and preserves special filenames', async () => {
+  const { sftp, ssh, handle, client } = directorySftp([
+    [entry('.', 'directory'), entry('..', 'directory'), entry('文档 #1 %.txt ', 'file'), entry('src', 'directory')],
+    [entry('linked', 'link'), entry('broken', 'link'), entry('pipe', 'other')],
+  ]);
+  const result = await listRemoteDirectory(client, '/remote/repo');
+  expect(result.truncated).toBe(false);
+  expect(result.entries.slice(0, 2).map(item => item.name)).toEqual(['linked', 'src']);
+  expect(result.entries).toContainEqual({ name: '文档 #1 %.txt ', kind: 'file', size: 12, symlink: false });
+  expect(result.entries.find(item => item.name === 'broken')).toMatchObject({ kind: 'other', symlink: true });
+  expect(result.entries.find(item => item.name === 'pipe')?.kind).toBe('other');
+  expect(sftp.opendir).toHaveBeenCalledExactlyOnceWith('/remote/repo', expect.any(Function));
+  expect(sftp.close).toHaveBeenCalledWith(handle, expect.any(Function));
+  expect(sftp.end).toHaveBeenCalledOnce(); expect(ssh.end).not.toHaveBeenCalled();
+  expect(ssh.listenerCount('close')).toBe(0);
+});
+
+it('bounds large directory listings and cleans up errors and stalled SFTP operations', async () => {
+  const { client, sftp } = directorySftp([Array.from({ length: 1100 }, (_, i) => entry(`file-${i}`, 'file'))]);
+  const result = await listRemoteDirectory(client, '/large');
+  expect(result.entries).toHaveLength(1000); expect(result.truncated).toBe(true);
+  expect(sftp.readdir).toHaveBeenCalledOnce(); expect(sftp.end).toHaveBeenCalledOnce();
+  sftp.opendir.mockImplementationOnce((_path, callback) => callback(new Error('Permission denied')));
+  await expect(listRemoteDirectory(client, '/private')).rejects.toThrow('Permission denied');
+  vi.useFakeTimers();
+  try {
+    const stalled = directorySftp([]);
+    stalled.sftp.readdir.mockImplementation(() => {});
+    const result = expect(listRemoteDirectory(stalled.client, '/slow')).rejects.toThrow('timed out');
+    await vi.advanceTimersByTimeAsync(20_000); await result;
+    expect(stalled.sftp.end).toHaveBeenCalledOnce(); expect(stalled.ssh.end).not.toHaveBeenCalled();
+    expect(stalled.ssh.listenerCount('close')).toBe(0);
+  } finally { vi.useRealTimers(); }
+});
+
+it('classifies file previews as inert UTF-8 text, images, or downloads', () => {
+  const text = '<script>window.bad = true</script>';
+  expect(previewSessionFile('/repo/index.html', Buffer.from(text))).toMatchObject({ kind: 'text', text });
+  expect(previewSessionFile('/repo/image.SVG', Buffer.from('<svg/>'))).toMatchObject({ kind: 'image' });
+  for (const data of [Buffer.from([0, 255]), Buffer.from([255]), Buffer.alloc(1024 * 1024 + 1, 65)]) {
+    expect(previewSessionFile('/repo/data', data)).toMatchObject({ kind: 'download', size: data.length });
+  }
 });

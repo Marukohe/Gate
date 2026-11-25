@@ -61,6 +61,7 @@ export class AgentService extends EventEmitter implements AgentBackend {
   rename(id: string, session: string, name: string) { return this.backend(id).rename(id, session, name); }
   interrupt(id: string, session: string, turn: string) { return this.backend(id).interrupt(id, session, turn); }
   answer(id: string, session: string, request: string, value: unknown) { return this.backend(id).answer(id, session, request, value); }
+  directory(id: string, session: string, path: string) { return this.backend(id).directory(id, session, path); }
   file(id: string, session: string, path: string) { return this.backend(id).file(id, session, path); }
   shell(id: string, session: string, command: string) { return this.backend(id).shell(id, session, command); }
   close() { this.owners.clear(); for (const { backend } of this.registrations) backend.close(); }

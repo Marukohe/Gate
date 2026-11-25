@@ -9,11 +9,12 @@ const server: Server = { id: 'server', name: 'Local', host: 'localhost', port: 2
 const native = { id: 'native', cwd: '/repo', name: 'Work', preview: 'First message', updatedAt: 1700000000,
   status: { type: 'active', activeFlags: [] }, canAcceptDirectInput: true };
 const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
-let peer: EventEmitter & { shell: ReturnType<typeof vi.fn>; readFile: ReturnType<typeof vi.fn>; projectPaths: ReturnType<typeof vi.fn>; request: ReturnType<typeof vi.fn>; send: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
+let peer: EventEmitter & { listDirectory: ReturnType<typeof vi.fn>; shell: ReturnType<typeof vi.fn>; readFile: ReturnType<typeof vi.fn>; projectPaths: ReturnType<typeof vi.fn>; request: ReturnType<typeof vi.fn>; send: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
 let service: CodexService;
 let connect: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   peer = Object.assign(new EventEmitter(), {
+    listDirectory: vi.fn(async () => ({ entries: [], truncated: false })),
     readFile: vi.fn(async () => Buffer.from('remote content')),
     shell: vi.fn(async () => ({ stdout: 'done', stderr: '', exitCode: 0, timedOut: false, truncated: false })),
     projectPaths: vi.fn(async (directories: string[]) => directories),
@@ -232,4 +233,14 @@ it('never falls back to model input if a bang command fails', async () => {
   expect(peer.request.mock.calls).toEqual([['thread/read', { threadId: 'native' }]]);
   expect(events.at(-1)).toMatchObject({ type: 'item', item: { status: 'Unconfirmed', text: expect.stringContaining('SSH unavailable') } });
   expect(peer.shell).toHaveBeenCalledOnce();
+});
+
+
+it('browses directories using the native cwd and existing SSH connection without creating turns', async () => {
+  expect(await service.directory(server.id, 'native', '.')).toEqual({ cwd: '/repo', path: '/repo', entries: [], truncated: false });
+  expect(peer.listDirectory).toHaveBeenCalledWith('/repo');
+  await service.directory(server.id, 'native', 'src');
+  expect(peer.listDirectory).toHaveBeenLastCalledWith('/repo/src');
+  expect(peer.request.mock.calls.every(([method]) => method === 'thread/read')).toBe(true);
+  expect(peer.shell).not.toHaveBeenCalled();
 });

@@ -2,8 +2,8 @@ import { EventEmitter } from 'node:events';
 import type { Duplex } from 'node:stream';
 import { posix } from 'node:path';
 import { connectSsh, execRemote, projectPathsCommand, quote, runShell, type ConnectionSettings } from './ssh.js';
-import { readRemoteFile } from './session-files.js';
-import type { ShellResult } from './types.js';
+import { listRemoteDirectory, readRemoteFile } from './session-files.js';
+import type { DirectoryListing, ShellResult } from './types.js';
 
 export interface AcpMessage { jsonrpc?: string; id?: string | number; method?: string; params?: any; result?: any; error?: { code: number; message: string } }
 
@@ -17,7 +17,8 @@ export class AcpRpc extends EventEmitter {
   constructor(private stream: Duplex, private disconnect: () => void = () => stream.destroy(),
     readonly projectPaths: (paths: string[]) => Promise<string[]> = async (paths) => paths,
     readonly readFile: (path: string) => Promise<Buffer> = async () => { throw new Error('File access unavailable'); },
-    readonly shell: (cwd: string, command: string) => Promise<ShellResult> = async () => { throw new Error('Shell unavailable'); }) {
+    readonly shell: (cwd: string, command: string) => Promise<ShellResult> = async () => { throw new Error('Shell unavailable'); },
+    readonly listDirectory: (path: string) => Promise<Pick<DirectoryListing, 'entries' | 'truncated'>> = async () => { throw new Error('Directory access unavailable'); }) {
     super();
     stream.setEncoding('utf8');
     stream.on('data', (chunk: string) => {
@@ -81,7 +82,7 @@ export async function connectAgy(settings: ConnectionSettings, signal: AbortSign
       if (!directories.length) return [];
       const paths = (await execRemote(ssh, `sh -c ${quote(projectPathsCommand(directories))}`)).split('\0');
       return directories.map((cwd, i) => paths[i]?.startsWith('/') ? paths[i] : cwd);
-    }, (path) => readRemoteFile(ssh, path), (cwd, command) => runShell(ssh, cwd, command));
+    }, (path) => readRemoteFile(ssh, path), (cwd, command) => runShell(ssh, cwd, command), (path) => listRemoteDirectory(ssh, path));
     ssh.once('close', () => rpc.close());
     const result = await rpc.request('initialize', { protocolVersion: 1, clientInfo: { name: 'gate', version: '1.1.0' }, clientCapabilities: {} });
     if (result.protocolVersion !== 1) throw new Error('Unsupported ACP protocol version');

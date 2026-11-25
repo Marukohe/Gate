@@ -9,7 +9,7 @@ const config = [
   { id: 'model', category: 'model', currentValue: 'vision', options: [{ value: 'vision', name: 'Vision' }] },
   { id: 'thought_level', category: 'thought_level', currentValue: 'high', options: [{ value: 'low', name: 'Low' }, { value: 'high', name: 'High' }] },
 ];
-let peer: EventEmitter & { request: ReturnType<typeof vi.fn>; send: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn>;
+let peer: EventEmitter & { listDirectory: ReturnType<typeof vi.fn>; request: ReturnType<typeof vi.fn>; send: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn>;
   projectPaths: (paths: string[]) => Promise<string[]> };
 let service: AgyService;
 let resolvePrompt: (value: unknown) => void;
@@ -17,6 +17,7 @@ const emit = (update: object) => peer.emit('event', { method: 'session/update', 
 beforeEach(() => {
   peer = Object.assign(new EventEmitter(), {
     capabilities: { promptCapabilities: { image: true } }, projectPaths: async (paths: string[]) => paths,
+    listDirectory: vi.fn(async () => ({ entries: [], truncated: false })),
     readFile: vi.fn(async () => Buffer.from('remote')), shell: vi.fn(async () => ({ stdout: '/repo', exitCode: 0 })),
     send: vi.fn(async () => {}), close: vi.fn(),
     request: vi.fn(async (method: string, params: any) => {
@@ -126,4 +127,12 @@ it('keeps completed live output when polling observes that turn in the saved ses
   expect(detail.historyVersion).toBe(previous.historyVersion); expect(detail.items.at(-1)?.text).toBe('Completed result');
   expect(detail.session.state).toBe('idle');
   expect(peer.request.mock.calls.filter(([method]) => method === 'session/load')).toHaveLength(1);
+});
+
+
+it('browses saved session directories without loading history or starting a prompt', async () => {
+  await service.refresh(server.id);
+  expect(await service.directory(server.id, 'native', 'src')).toEqual({ cwd: '/repo', path: '/repo/src', entries: [], truncated: false });
+  expect(peer.listDirectory).toHaveBeenCalledWith('/repo/src');
+  expect(peer.request.mock.calls.map(([method]) => method)).toEqual(['session/list']);
 });

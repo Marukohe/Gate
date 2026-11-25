@@ -4,12 +4,17 @@ import type { Database } from './db.js';
 import { publicServer } from './db.js';
 import type { AgentService } from './agents.js';
 import type { Server } from './types.js';
-import { sendSessionFile } from './session-files.js';
+import { previewSessionFile, sendSessionFile } from './session-files.js';
 import { sshHosts } from './ssh-config.js';
 
 function text(value: unknown, name: string, max = 200_000): string {
   if (typeof value !== 'string' || !value.trim() || value.length > max || value.includes('\0')) throw new Error(`Invalid ${name}`);
   return value.trim();
+}
+function filePath(value: unknown): string {
+  // Preserve whitespace in filenames; SFTP paths are not shell commands.
+  if (typeof value !== 'string' || !value || value.length > 4096 || /[\0\r\n]/.test(value)) throw new Error('Invalid file path');
+  return value;
 }
 export function routes(db: Database, agents: AgentService, hosts = sshHosts) {
   const router = Router();
@@ -87,12 +92,20 @@ export function routes(db: Database, agents: AgentService, hosts = sshHosts) {
     const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
     res.json(await agents.detail(req.params.id, req.params.thread, cursor));
   });
+  router.get('/servers/:id/sessions/:thread/files', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json(await agents.directory(req.params.id, req.params.thread, req.query.path === undefined ? '.' : filePath(req.query.path)));
+  });
   router.get('/servers/:id/sessions/:thread/file', async (req, res) => {
     res.set('Cache-Control', 'no-store');
     try {
-      const file = await agents.file(req.params.id, req.params.thread, text(req.query.path, 'file path', 4096));
-      sendSessionFile(res, file.path, file.data);
-    } catch (error) { res.status(400).type('text/plain').send(`Cannot open file. ${(error as Error).message}`); }
+      const file = await agents.file(req.params.id, req.params.thread, filePath(req.query.path));
+      if (req.query.view === 'preview') return res.json(previewSessionFile(file.path, file.data));
+      sendSessionFile(res, file.path, file.data, req.query.download === '1');
+    } catch (error) {
+      if (req.query.view === 'preview') return res.status(400).json({ error: `Cannot open file. ${(error as Error).message}` });
+      res.status(400).type('text/plain').send(`Cannot open file. ${(error as Error).message}`);
+    }
   });
   router.post('/servers/:id/sessions/:thread/input', async (req, res) => {
     const message = req.body.text === undefined || (typeof req.body.text === 'string' && !req.body.text.trim()) ? '' : text(req.body.text, 'message');
