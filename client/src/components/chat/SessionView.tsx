@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Popover } from 'radix-ui';
-import { ArrowUp, ChevronDown, ImagePlus, LoaderCircle, Moon, Pencil, Square, Sun, Terminal, X } from 'lucide-react';
+import { ArrowUp, ChevronDown, Image as ImageIcon, LoaderCircle, Moon, Pencil, Square, Sun, Terminal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -344,8 +344,8 @@ export function SessionView({ serverId, threadId, serverName, initialError, head
         <div className="flex items-end gap-2">
         <input ref={fileInput} type="file" aria-label="Image files" accept={IMAGE_TYPES.join(',')} multiple hidden
           onChange={(event) => { void attach(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
-        {capabilities?.images !== false && <Button type="button" size="icon-lg" variant="ghost" aria-label="Attach images" title="Attach images (or paste / drop)"
-          disabled={busy || offline || !detail?.session.canInput || isShell} onClick={() => fileInput.current?.click()}><ImagePlus className="size-5" /></Button>}
+        {capabilities?.images !== false && <Button type="button" size="icon-lg" variant="outline" aria-label="Attach images" title="Attach images (or paste / drop)"
+          disabled={busy || offline || !detail?.session.canInput || isShell} onClick={() => fileInput.current?.click()}><ImageIcon className="size-4" /></Button>}
         <Textarea ref={messageInput} aria-label="Message" placeholder={capabilities?.images === false ? 'Send a message…' : 'Message or paste an image…'} value={text}
           onChange={(e) => setText(e.target.value)} rows={1} className="max-h-32 min-h-10 min-w-0 flex-1 resize-none py-[9px] leading-5"
           onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
