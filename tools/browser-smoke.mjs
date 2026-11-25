@@ -182,14 +182,16 @@ try {
   assert.equal(await page.getByRole('group', { name: 'Project /home/alex/worktrees/api-fix', exact: true }).count(), 0);
   await project.getByRole('button', { name: /^Validate migrations/ }).waitFor();
   assert.equal(await page.getByRole('button', { name: /^gate Idle/ }).count(), 0);
-  assert.equal(await page.getByRole('button', { name: /^Past API session/ }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: /^Past API session/ }).count(), 12, 'An expanded active project includes saved history');
   assert.match(await page.getByRole('group', { name: /^Project / }).first().getAttribute('aria-label'), /projects\/api$/);
   await page.getByRole('button', { name: 'Show all sessions in api (archive)' }).waitFor();
-  const heading = project.getByRole('heading', { name: 'Show all sessions in api (projects)' });
+  const heading = project.getByRole('heading', { name: 'Collapse sessions in api (projects)' });
   assert.equal(await heading.getByRole('button').getAttribute('title'), '/home/alex/projects/api');
   assert.equal(await project.getByText('/home/alex/projects/api', { exact: true }).count(), 0);
   assert.equal(await project.getByText('Show 12 past sessions', { exact: true }).count(), 0);
   await heading.getByRole('button').focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await project.locator('.monitor-session').count(), 0, 'One click collapses the whole folder');
   await page.keyboard.press('Enter');
   assert.equal(await project.getByRole('button', { name: /^Past API session/ }).count(), 12);
   await page.waitForResponse(response => response.url().endsWith('/api/monitor'));
@@ -940,6 +942,30 @@ try {
   assert.equal(await codexRow.getByText('Codex', { exact: true }).isVisible(), true);
   assert.equal(await agyRow.getByText('Antigravity', { exact: true }).isVisible(), true);
   for (const width of [1365, 390, 320]) { await page.setViewportSize({ width, height: 900 }); await bounded(); await shot(`grouped-server-${width}`); }
+  // A refresh with a selected idle Codex session must also show saved ACP sessions in its folder.
+  shared.state = 'idle'; agyMonitor.sessions[0].state = 'saved';
+  await page.evaluate(hash => { location.hash = hash; }, `session/${server.id}/${shared.id}`);
+  // Reproduce a slower tool: its saved session arrives on the next monitor poll.
+  await page.route('**/api/monitor', async route => {
+    const response = await route.fetch(); const snapshot = await response.json();
+    snapshot.servers.find(connection => connection.id === agy.id).sessions = [];
+    await route.fulfill({ response, json: snapshot });
+  }, { times: 1 });
+  await page.reload(); await showSidebar();
+  const sharedProject = sharedCard.getByRole('group', { name: 'Project /home/alex/projects/shared', exact: true });
+  const idleCodex = sharedProject.getByRole('button', { name: 'Shared conversation Idle · Codex', exact: true });
+  const savedAgy = sharedProject.getByRole('button', { name: 'Shared conversation Saved · Antigravity', exact: true });
+  await idleCodex.waitFor();
+  assert.equal(await sharedProject.locator('.project-heading').getAttribute('aria-expanded'), 'true');
+  await savedAgy.waitFor();
+  assert.equal(await sharedProject.locator('.monitor-session').count(), 2, 'Saved tool sessions arriving later stay visible in the expanded folder');
+  await page.reload(); await showSidebar(); await savedAgy.waitFor(); await idleCodex.waitFor();
+  await sharedProject.locator('.project-heading').click();
+  await page.waitForResponse(response => response.url().endsWith('/api/monitor'));
+  assert.equal(await sharedProject.locator('.monitor-session').count(), 0, 'Polling respects an explicitly collapsed current folder');
+  await sharedProject.locator('.project-heading').click(); await savedAgy.waitFor(); await idleCodex.waitFor();
+  shared.state = 'running'; agyMonitor.sessions[0].state = 'running';
+  await codexRow.waitFor(); await agyRow.waitFor();
   await codexRow.click(); await page.getByText('Codex native context', { exact: true }).waitFor();
   await page.getByLabel('Message', { exact: true }).fill('Codex-only draft');
   await showSidebar();

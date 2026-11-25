@@ -92,12 +92,12 @@ export function SessionMonitor({ current, onOpen, onEditServer, statusFilter, on
 function ProjectSessions({ project, current, searching, stale, onOpen, onArchive }: {
   project: ProjectGroup<ServerSession>; current: SessionTarget | null; searching: boolean; stale: boolean; onOpen: (session: ServerSession) => void; onArchive: (session: ServerSession) => Promise<void>;
 }) {
-  const [view, setView] = useState<'active' | 'all' | 'collapsed'>('active');
+  const [expandedOverride, setExpandedOverride] = useState<boolean | null>(null);
   const sessionsId = useId();
-  const past = project.sessions.filter(isPastSession);
-  const visible = searching || view === 'all' ? project.sessions : view === 'collapsed' ? []
-    : project.sessions.filter((session) => !isPastSession(session) || (current?.serverId === session.connectionId && current.threadId === session.id));
-  const canCollapse = visible.length > 0 && (view === 'all' || past.length === 0);
+  // Expansion applies to the whole folder, including saved sessions arriving from another tool.
+  const expanded = searching || (expandedOverride ?? project.sessions.some((session) =>
+    !isPastSession(session) || (current?.serverId === session.connectionId && current.threadId === session.id)));
+  const visible = expanded ? project.sessions : [];
   const waiting = project.sessions.filter((session) => session.state === 'waiting').length;
   const running = project.sessions.filter((session) => session.state === 'running').length;
   const errors = project.sessions.filter((session) => session.state === 'error').length;
@@ -106,16 +106,16 @@ function ProjectSessions({ project, current, searching, stale, onOpen, onArchive
     <h3>
       <button type="button" className="project-heading" title={project.path || 'Directory unavailable'}
         disabled={searching} aria-controls={sessionsId}
-        aria-expanded={visible.length > 0}
-        aria-label={`${searching ? 'Matching sessions in' : canCollapse ? 'Collapse sessions in' : 'Show all sessions in'} ${project.name}${project.context ? ` (${project.context})` : ''}`}
-        onClick={() => setView(canCollapse ? 'collapsed' : 'all')}>
+        aria-expanded={expanded}
+        aria-label={`${searching ? 'Matching sessions in' : expanded ? 'Collapse sessions in' : 'Show all sessions in'} ${project.name}${project.context ? ` (${project.context})` : ''}`}
+        onClick={() => setExpandedOverride(!expanded)}>
         <span className="min-w-0 flex-1 truncate font-semibold">{project.name}
           {project.context && <span className="ml-2 text-xs font-normal text-muted-foreground">· {project.context}</span>}
         </span>
         <span className="max-w-[55%] truncate text-xs font-normal text-muted-foreground" title={summary}>
           {summary || `${project.sessions.length} ${project.sessions.length === 1 ? 'session' : 'sessions'}`}
         </span>
-        <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 text-muted-foreground ${visible.length ? 'rotate-90' : ''}`} />
+        <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 text-muted-foreground ${expanded ? 'rotate-90' : ''}`} />
       </button>
     </h3>
     <div id={sessionsId}>

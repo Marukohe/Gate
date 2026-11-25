@@ -65,8 +65,9 @@ Use the same remote OS user and Codex configuration as your terminal.
 - **Monitor:** the sidebar groups sessions by server and repository. Worktrees share their repository group.
   Connections with the same SSH host and port share one group, including sessions from different tools in the same repository.
   Each session name has a tool tag. The **Servers** count reflects these server groups, not the number of tools.
-  Projects needing attention come first. Active sessions show by default. Click a project heading to reveal history
-  or collapse its sessions; running-only projects can also be collapsed.
+  Projects needing attention come first. Groups containing an active or current session start expanded; others start collapsed.
+  An expanded group shows all its visible sessions, including idle/saved sessions from every tool.
+  Click a project heading to expand or collapse the entire list.
   Full paths appear on hover, with short parent paths shown only for duplicate project names. Search reveals matches.
 - **Quick filters:** click **Running** or **Needs you** to show matching sessions, grouped by server and repository.
   Click the selected filter again to show all sessions. It stays selected while you switch conversations.

@@ -4,7 +4,8 @@
   hiding task menus while retaining multiple execution systems does not reduce complexity.
   Tool connections are not separate displayed servers. Group by SSH host/port and tag sessions with their tool;
   preserve connection-plus-native-ID identity for navigation, drafts and archives even when native IDs collide.
-- Keep each project heading to one row and use it to reveal history or collapse sessions, including running-only groups.
+- Keep each project heading to one row and toggle the whole folder. An expanded folder must include saved sessions
+  from every tool, including after reload or a late monitor update; partial active-only lists falsely look complete.
   Paths and history controls should not add extra rows. Polling must preserve the user's collapsed state.
   Repository names should stand out above smaller, regular-weight session names; keep path hints secondary.
 - Keep quick status filters above the monitor's component lifetime so returning from chat preserves the choice.

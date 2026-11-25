@@ -19,8 +19,9 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
   use local `ssh -G` to resolve fields. Import an editable snapshot without modifying SSH config or exposing key contents.
   Do not silently import proxy/certificate configurations as direct connections. Config import is independent of the tool.
 - Repository groups are derived from read-only Git metadata over the existing SSH connection, with cwd fallback.
-  They are display groups, not persisted project workflows. Project headings reveal history and collapse sessions, including running-only groups.
-  Active sessions show by default; search reveals matches without changing the chosen collapsed state.
+  They are display groups, not persisted project workflows. Project headings toggle the whole session list, including
+  idle/saved sessions from every tool; never show a partial list as expanded. Groups containing an active or current session
+  default to expanded, other groups to collapsed. Search reveals matches without changing the chosen collapsed state.
 - A collapsible sidebar owns the monitor, search, status filters, creation and server settings. Desktop collapse preference
   persists in browser storage. Mobile shows one pane at a time and closes the sidebar after selecting a session.
   Keep both panes mounted: hiding must preserve list state, chat drafts and scroll. Hidden chat must not capture paste
