@@ -152,12 +152,8 @@ app.use((error, _req, res, _next) => res.status(400).json({ error: error.message
 app.use(express.static(fileURLToPath(new URL('../client/dist/', import.meta.url))));
 await new Promise(resolve => http.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
-const page = await browser.newPage({ viewport: { width: 1365, height: 1200 } });
-// Playwright's built-in block mode reads navigator.serviceWorker inside opaque sandboxed frames.
-// Disable registration only in the app document so static HTML previews retain their sandbox.
-await page.addInitScript(() => {
-  if (window === window.top && navigator.serviceWorker) navigator.serviceWorker.register = async () => {};
-});
+const context = await browser.newContext({ viewport: { width: 1365, height: 1200 } });
+const page = await context.newPage();
 page.setDefaultTimeout(10000);
 const errors = []; page.on('pageerror', error => errors.push(error.message));
 const shotDir = process.env.GATE_SCREENSHOT_DIR;
@@ -177,6 +173,8 @@ async function showSidebar() {
 }
 try {
   await page.goto(`http://127.0.0.1:${http.address().port}`);
+  // Exercise production navigation routing; disabling the worker hides file tabs opening the app shell.
+  await page.waitForFunction(() => !!navigator.serviceWorker.controller);
   await page.getByRole('button', { name: /^api Needs you/ }).waitFor();
   assert.equal(await page.getByRole('navigation', { name: 'Server sessions' }).count(), 1);
   const sidebar = page.getByRole('complementary', { name: 'Sessions', exact: true });
@@ -418,6 +416,15 @@ try {
   const missing = await missingPromise; await missing.waitForLoadState();
   assert.match(await missing.locator('body').textContent(), /Cannot open file.*No such file/);
   await missing.close();
+  const resourceTab = await page.context().newPage();
+  const imageResponse = await resourceTab.goto(new URL(await chart.getAttribute('src'), page.url()).href);
+  assert.equal(imageResponse.headers()['content-type'], 'image/png');
+  assert.equal(imageResponse.fromServiceWorker(), false, 'Image navigation must bypass the app shell');
+  await resourceTab.locator('img').evaluate(image => image.decode());
+  const apiResponse = await resourceTab.goto(new URL('/api/tools?navigation=1', page.url()).href);
+  assert.match(apiResponse.headers()['content-type'], /application\/json/);
+  assert.equal(apiResponse.fromServiceWorker(), false);
+  await resourceTab.close();
   // Browse session files through the same routes; neither viewing nor downloads start model turns.
   assert.equal(directoryReads.length, 0, 'Closed file sidebar performs no directory reads');
   const writesBeforeFiles = writes.length;
@@ -442,6 +449,15 @@ try {
     await filePanel.getByLabel('File content', { exact: true }).waitFor();
     const fileLink = new URL(await filePanel.getByRole('link', { name: 'Open file in new tab', exact: true }).getAttribute('href'), page.url());
     assert.equal(fileLink.searchParams.get('path'), detail.session.cwd + '/文档 #1 %.txt ');
+    if (width === 1365) {
+      const opened = page.waitForEvent('popup');
+      await filePanel.getByRole('link', { name: 'Open file in new tab', exact: true }).click();
+      const fileTab = await opened; await fileTab.locator('#L1').waitFor();
+      assert.equal(await fileTab.locator('#root').count(), 0, 'A file tab must show the file, not Gate');
+      const response = await fileTab.reload();
+      assert.equal(response.fromServiceWorker(), false); await fileTab.locator('#L2').waitFor();
+      await fileTab.close();
+    }
     await filePanel.getByRole('button', { name: 'Back to files', exact: true }).click();
     await filePanel.getByRole('button', { name: 'Open file chart.png', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('#session-files img')?.naturalWidth === 1);

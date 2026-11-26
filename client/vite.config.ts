@@ -24,7 +24,8 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: '/index.html',
-
+        // File previews/downloads are server responses, including when opened as a new page.
+        navigateFallbackDenylist: [/^\/api(?:\/|\?|$)/, /^\/ws(?:\/|\?|$)/],
       },
     }),
   ],

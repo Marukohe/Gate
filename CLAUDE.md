@@ -56,6 +56,8 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
   Commands have a 60-second wait limit and bounded output; uncertain execution is never automatically replayed.
 - Local Markdown file/image URLs use a session-scoped HTTP endpoint and SFTP over the existing SSH connection.
   Resolve relative paths against native thread cwd; file contents must never execute on Gate's origin.
+  PWA navigation fallback excludes `/api` and `/ws`; file tabs, downloads and API errors must retain server responses.
+  Browser smoke tests keep the production service worker active to cover navigation as well as fetch requests.
 - A collapsible right file pane browses the owning session's server through the same SFTP path, without agent turns.
   Keep directory listing bounded, text/image previews read-only, and download/open-in-new-tab available.
   Text previews show source line numbers and a browser-persisted wrap toggle; soft wraps must not renumber lines.

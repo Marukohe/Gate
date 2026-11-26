@@ -50,6 +50,8 @@ Markdown and HTML files offer Source / Preview using the already-loaded text. Ma
 local links/images relative to the file and keeping heading anchors inside the preview. HTML renders inline styles and images
 in an opaque sandboxed iframe with a restrictive CSP. Parsing is inert; scripts, forms, nested frames and external stylesheets
 are disabled. Original source remains available through the file endpoint and downloads.
+The PWA caches the app shell but excludes `/api` and `/ws` from navigation fallback. Opening file URLs in new tabs
+preserves server text/image/download responses and errors instead of substituting the Gate home page.
 
 The panel groups sessions by repository under each server. Read-only Git metadata merges repository subdirectories
 and linked worktrees; separate clones remain separate, even with the same name. Non-Git or unavailable directories
