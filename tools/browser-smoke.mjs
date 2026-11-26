@@ -171,6 +171,20 @@ async function showSidebar() {
     await page.getByRole('button', { name: 'Open sidebar', exact: true }).click();
   }
 }
+async function dragSidebar(side, dx) {
+  const handle = page.getByRole('separator', { name: `Resize ${side} sidebar` });
+  const box = await handle.boundingBox();
+  const x = box.x + box.width / 2, y = box.y + box.height / 2;
+  await page.mouse.move(x, y); await page.mouse.down();
+  await page.mouse.move(x + dx, y, { steps: 8 }); await page.mouse.up();
+  assert.equal(await handle.getAttribute('data-dragging'), 'false');
+}
+async function sidebarWidth(side, expected) {
+  await page.waitForFunction(({ side, expected }) => {
+    const pane = document.getElementById(side === 'sessions' ? 'session-sidebar' : 'session-files');
+    return Math.abs(pane.getBoundingClientRect().width - expected) < 1;
+  }, { side, expected });
+}
 try {
   await page.goto(`http://127.0.0.1:${http.address().port}`);
   // Exercise production navigation routing; disabling the worker hides file tabs opening the app shell.
@@ -437,6 +451,50 @@ try {
     if (width >= 1200) assert.equal(await sidebar.isVisible(), true);
     else assert.equal(await sidebar.isVisible(), false, 'Narrow screens keep one sidebar open');
     if (width < 768) assert.equal(await page.getByRole('region', { name: 'Conversation', exact: true }).isVisible(), false);
+    if (width === 1365) {
+      const messageNode = await page.getByLabel('Message', { exact: true }).elementHandle();
+      const filesNode = await filePanel.getByRole('button', { name: 'Open folder src', exact: true }).elementHandle();
+      const readsBeforeResize = directoryReads.length;
+      await dragSidebar('sessions', 80); await sidebarWidth('sessions', 400);
+      await dragSidebar('files', -128); await sidebarWidth('files', 480);
+      await sidebarWidth('sessions', 400);
+      assert.equal(await messageNode.evaluate(node => node.isConnected), true, 'Resizing keeps the composer mounted');
+      assert.equal(await filesNode.evaluate(node => node.isConnected), true, 'Resizing keeps the file listing mounted');
+      assert.equal(directoryReads.length, readsBeforeResize, 'Resizing does not reread files');
+      assert.equal(await page.getByLabel('Message', { exact: true }).inputValue(), 'Draft stays while browsing files');
+      const preferred = await page.evaluate(() => localStorage.getItem('gate-sidebar-widths'));
+      assert.deepEqual(JSON.parse(preferred), { sessions: 400, files: 480 });
+      for (const narrow of [1200, 768, 390]) {
+        await page.setViewportSize({ width: narrow, height: 900 });
+        await page.waitForFunction(() => document.querySelector('.gate-workspace').getBoundingClientRect().width >= 440 || innerWidth < 768);
+        if (narrow < 768) {
+          await sidebarWidth('files', narrow);
+          await page.getByRole('separator', { name: 'Resize files sidebar' }).waitFor({ state: 'detached' });
+          assert.equal(await page.getByRole('separator', { name: /^Resize .* sidebar$/ }).count(), 0);
+        }
+        assert.equal(await page.evaluate(() => localStorage.getItem('gate-sidebar-widths')), preferred, 'Window size must not replace preferred widths');
+        await bounded();
+      }
+      await page.setViewportSize({ width, height: 900 });
+      await sidebarWidth('sessions', 400); await sidebarWidth('files', 480);
+      await page.getByRole('button', { name: 'Close files', exact: true }).click();
+      await page.getByRole('button', { name: 'Open files', exact: true }).click();
+      await sidebarWidth('files', 480);
+      await page.reload();
+      await sidebarWidth('sessions', 400);
+      await page.getByRole('button', { name: 'Open files', exact: true }).click();
+      await filePanel.getByRole('button', { name: 'Open folder src', exact: true }).waitFor();
+      await sidebarWidth('files', 480);
+      await page.getByLabel('Message', { exact: true }).fill('Draft stays while browsing files');
+      const leftHandle = page.getByRole('separator', { name: 'Resize sessions sidebar' });
+      const rightHandle = page.getByRole('separator', { name: 'Resize files sidebar' });
+      await leftHandle.press('ArrowLeft'); await sidebarWidth('sessions', 384);
+      await rightHandle.press('ArrowRight'); await sidebarWidth('files', 464);
+      await leftHandle.press('End'); await sidebarWidth('sessions', 461);
+      await rightHandle.press('Home'); await sidebarWidth('files', 320);
+      await leftHandle.dblclick(); await sidebarWidth('sessions', 320);
+      await rightHandle.dblclick(); await sidebarWidth('files', 352);
+    }
     await filePanel.getByRole('button', { name: 'Open folder src', exact: true }).click();
     await filePanel.getByRole('button', { name: 'Open file main.ts', exact: true }).click();
     await filePanel.getByLabel('File content', { exact: true }).waitFor();
@@ -520,6 +578,16 @@ try {
   assert.equal(await filePanel.locator('iframe').getAttribute('sandbox'), '');
   assert.equal(await htmlPreview.locator('body').evaluate(() => window.previewRan), undefined);
   assert.equal(await filePanel.locator('iframe').evaluate(frame => frame.contentDocument), null, 'HTML has an opaque origin');
+  await page.setViewportSize({ width: 1365, height: 900 });
+  await sidebarWidth('files', 352);
+  // Drag into the iframe, then back out, without losing pointer events or remounting the preview.
+  const previewNode = await filePanel.locator('iframe').elementHandle();
+  await dragSidebar('files', 32); await sidebarWidth('files', 320);
+  await dragSidebar('files', -180); await sidebarWidth('files', 500);
+  assert.equal(await previewNode.evaluate(node => node.isConnected), true);
+  await page.getByRole('separator', { name: 'Resize files sidebar' }).dblclick();
+  await sidebarWidth('files', 352);
+  await page.setViewportSize({ width: 320, height: 900 }); await sidebarWidth('files', 320);
   await htmlPreview.getByRole('button', { name: 'Submit preview form', exact: true }).click();
   await htmlPreview.getByRole('heading', { name: 'HTML document', exact: true }).waitFor();
   assert.equal(await page.evaluate(() => window.fileExecuted), undefined);

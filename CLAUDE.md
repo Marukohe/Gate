@@ -24,6 +24,8 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
   default to expanded, other groups to collapsed. Search reveals matches without changing the chosen collapsed state.
 - A collapsible sidebar owns the monitor, search, status filters, creation and server settings. Desktop collapse preference
   persists in browser storage. Mobile shows one pane at a time and closes the sidebar after selecting a session.
+  Desktop sidebar edges resize by pointer or keyboard, with independent persisted widths and double-click reset.
+  Fit widths to the viewport while reserving conversation space; viewport changes alone must not overwrite preferences.
   Keep both panes mounted: hiding must preserve list state, chat drafts and scroll. Hidden chat must not capture paste
   or use zero-sized scroll geometry; restore its reading position before paint when visible again.
 - Running and Needs you filter the sidebar in place and reveal matching sessions. App owns this transient filter

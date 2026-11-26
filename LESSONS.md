@@ -22,6 +22,8 @@
 - Keep sidebar and conversation mounted across collapse. Hidden panes report zero scroll geometry: retain the last
   visible position, skip hidden positioning/paste handlers, and restore before paint. Mobile selection should close the
   list without changing the saved desktop preference; keyboard focus must move to a visible control.
+  Resize sidebars without remounting panes. Constrain displayed widths without saving temporary viewport limits;
+  capture the pointer across preview iframes and clear drag state on cancellation, focus loss and unmount.
 - Keep chat navigation, title, and status in one header row, including after attention jumps. Move metadata into the title
   popover and verify the conversation starts directly below the header at 320px, 390px, and desktop widths.
 - Auto-load history only on upward scrolling near the top, with a synchronous in-flight guard. Anchor the visible message

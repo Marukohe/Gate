@@ -62,6 +62,8 @@ Use the same remote OS user and Codex configuration as your terminal.
   Open a session beside it without leaving the list. The current session is highlighted; rows show a status dot, name
   and tool tag. Collapse with the top-left panel button; the desktop preference survives reload. On mobile the list uses
   the whole pane and closes when you choose a session. Search, filters and expanded groups stay while switching sessions.
+  Drag either sidebar's inner edge to adjust its width; each width survives reload. Double-click the edge to reset it,
+  or focus it and use the arrow keys. Narrower windows temporarily limit widths to leave room for the conversation.
 - **Monitor:** the sidebar groups sessions by server and repository. Worktrees share their repository group.
   Connections with the same SSH host and port share one group, including sessions from different tools in the same repository.
   Each session name has a tool tag: green for Codex, purple for Antigravity, in both themes.

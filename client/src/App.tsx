@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { MessageSquare, Moon, PanelLeftClose, Plus, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ServerDialog } from '@/components/server/ServerDialog';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { SidebarResizeHandle } from '@/components/layout/SidebarResizeHandle';
 import { SessionMonitor, type MonitorFilter } from '@/components/monitor/SessionMonitor';
 import { FileBrowser } from '@/components/files/FileBrowser';
 import { SessionView } from '@/components/chat/SessionView';
@@ -12,17 +13,14 @@ import { api } from '@/lib/api';
 import { useMonitorStore } from '@/stores/monitor-store';
 import { needsAttention, otherSessions, type SessionTarget } from '@/lib/attention';
 import { groupServers } from '@/lib/server-groups';
+import { fitSidebarWidths, sidebarLimits, type SidebarWidths } from '@/lib/sidebar-widths';
 
 const mobileQuery = matchMedia('(max-width: 767px)');
-const compactQuery = matchMedia('(max-width: 1199px)');
-const subscribeCompact = (callback: () => void) => {
-  compactQuery.addEventListener('change', callback);
-  return () => compactQuery.removeEventListener('change', callback);
+const subscribeViewport = (callback: () => void) => {
+  window.addEventListener('resize', callback);
+  return () => window.removeEventListener('resize', callback);
 };
-const subscribeMobile = (callback: () => void) => {
-  mobileQuery.addEventListener('change', callback);
-  return () => mobileQuery.removeEventListener('change', callback);
-};
+const viewportSnapshot = () => window.innerWidth;
 
 function route() {
   const parts = location.hash.slice(1).split('/');
@@ -30,8 +28,9 @@ function route() {
 }
 export default function App() {
   const [selected, setSelected] = useState(route);
-  const mobile = useSyncExternalStore(subscribeMobile, () => mobileQuery.matches);
-  const compact = useSyncExternalStore(subscribeCompact, () => compactQuery.matches);
+  const viewport = useSyncExternalStore(subscribeViewport, viewportSnapshot);
+  const mobile = viewport < 768;
+  const compact = viewport < 1200;
   const [filesOpen, setFilesOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(() => !route());
   const sidebarRef = useRef<HTMLElement>(null);
@@ -39,6 +38,17 @@ export default function App() {
   const setDesktopOpen = useUIStore((s) => s.setSidebarOpen);
   const toggleDark = useUIStore((s) => s.toggleDarkMode);
   const sidebarOpen = mobile ? mobileOpen : desktopOpen && !(selected && filesOpen && compact);
+  const preferredWidths = useUIStore((s) => s.sidebarWidths);
+  const setSidebarWidths = useUIStore((s) => s.setSidebarWidths);
+  const saveSidebarWidths = useUIStore((s) => s.saveSidebarWidths);
+  const fileSidebarOpen = !!selected && filesOpen && (!mobile || !sidebarOpen);
+  const widths = fitSidebarWidths(preferredWidths, viewport, !!sidebarOpen, fileSidebarOpen);
+  const resizeHandle = (side: keyof SidebarWidths) => {
+    const otherWidth = side === 'sessions' ? (fileSidebarOpen ? widths.files : 0) : (sidebarOpen ? widths.sessions : 0);
+    return <SidebarResizeHandle side={side} width={widths[side]} min={sidebarLimits[side].min}
+      max={Math.min(sidebarLimits[side].max, viewport - 440 - otherWidth)} defaultWidth={sidebarLimits[side].default}
+      onChange={(width) => setSidebarWidths({ ...widths, [side]: width })} onCommit={saveSidebarWidths} />;
+  };
   const setSidebarOpen = (open: boolean) => {
     if (mobile) setMobileOpen(open); else setDesktopOpen(open);
   };
@@ -99,7 +109,8 @@ export default function App() {
     setFilesOpen(false);
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('button[aria-label="Open files"]')?.focus());
   };
-  return <div className="gate-shell" data-sidebar-open={sidebarOpen} data-files-open={!!selected && filesOpen}>
+  return <div className="gate-shell" data-sidebar-open={sidebarOpen} data-files-open={!!selected && filesOpen}
+    style={{ '--sessions-width': `${widths.sessions}px`, '--files-width': `${widths.files}px` } as CSSProperties}>
     {/* Keep the monitor and chat mounted when hiding a pane: drafts, scroll and tree state belong to the session. */}
     <aside id="session-sidebar" ref={sidebarRef} aria-label="Sessions" className="gate-sidebar" hidden={!sidebarOpen}
       onKeyDown={(event) => {
@@ -119,6 +130,7 @@ export default function App() {
         <Button variant="ghost" size="icon-sm" aria-label="Toggle theme" title="Toggle theme" onClick={toggleDark}>{dark ? <Sun /> : <Moon />}</Button>
       </div>
     </aside>
+    {!mobile && sidebarOpen && resizeHandle('sessions')}
     <div className="gate-workspace">
       <AppHeader current={selected} onOpen={attentionOpen} onShowSidebar={showSidebar} sidebarOpen={!!sidebarOpen}
         filesOpen={filesOpen} onFiles={() => { if (filesOpen) closeFiles(); else { setMobileOpen(false); setFilesOpen(true); } }}
@@ -136,7 +148,8 @@ export default function App() {
           </main>}
       </div>
     </div>
-    {selected && <FileBrowser key={`${selected.serverId}:${selected.threadId}`} {...selected} open={filesOpen && (!mobile || !sidebarOpen)} onClose={closeFiles} />}
+    {!mobile && fileSidebarOpen && resizeHandle('files')}
+    {selected && <FileBrowser key={`${selected.serverId}:${selected.threadId}`} {...selected} open={fileSidebarOpen} onClose={closeFiles} />}
     <ServerDialog open={dialog} onOpenChange={setDialog} editServer={editing} connections={editingGroup?.connections}
       onSelectConnection={(id) => setEditing(servers.find((server) => server.id === id) ?? editing)} onSaved={() => void refresh()} />
   </div>;

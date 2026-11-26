@@ -201,10 +201,20 @@
 .gate-shell { display: flex; height: 100%; min-height: 0; }
 .gate-workspace { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
 .gate-sidebar {
-  display: flex; flex-direction: column; flex-shrink: 0; width: 20rem; min-height: 0;
+  display: flex; flex-direction: column; flex-shrink: 0; width: var(--sessions-width, 20rem); min-height: 0;
   border-right: 1px solid var(--border); background: color-mix(in srgb, var(--muted) 50%, var(--background));
 }
 .gate-sidebar[hidden] { display: none; }
+.sidebar-resize-handle {
+  position: relative; z-index: 20; flex: 0 0 8px; margin: 0 -4px; cursor: col-resize;
+  touch-action: none; outline: none;
+}
+.sidebar-resize-handle::before { content: ''; position: absolute; inset: 0 3px; }
+.sidebar-resize-handle:hover::before, .sidebar-resize-handle:focus-visible::before,
+.sidebar-resize-handle[data-dragging="true"]::before { background: var(--ring); }
+/* Keep dragging across an HTML preview's isolated iframe and prevent text selection. */
+.sidebar-resize-handle[data-dragging="true"]::after { content: ''; position: fixed; inset: 0; cursor: col-resize; }
+.gate-shell:has(.sidebar-resize-handle[data-dragging="true"]) { user-select: none; }
 .sidebar-header { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 0.75rem 0.5rem 1rem; }
 .sidebar-footer { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem; border-top: 1px solid var(--border); }
 .session-monitor { display: flex; flex: 1; flex-direction: column; min-height: 0; }
@@ -268,7 +278,7 @@ button.monitor-summary:focus-visible { outline: 2px solid var(--ring); outline-o
 }
 
 .file-sidebar {
-  display: flex; flex-direction: column; flex-shrink: 0; width: 22rem; min-height: 0;
+  display: flex; flex-direction: column; flex-shrink: 0; width: var(--files-width, 22rem); min-height: 0;
   border-left: 1px solid var(--border); background: var(--background);
 }
 .file-sidebar[hidden] { display: none; }
