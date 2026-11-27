@@ -79,7 +79,8 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - Codex model and reasoning pickers read native `model/list`, including supported/default efforts, and pass optional `model`/`effort`
   to `turn/start`. `turn/steer` cannot change either setting. Current values come from native thread metadata.
 - Backend disconnect/restart must never restart a turn, resend an uncertain input, or stop Codex.
-- Gate is for trusted internal networks and has no authentication.
+- Gate requires an instance token for HTTP APIs and WebSocket upgrades. Browser access uses a persistent HttpOnly
+  cookie. Only the login page and its static assets are public. Use HTTPS outside trusted networks.
 
 ## Key files
 
@@ -94,6 +95,7 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - `server/src/types.ts`: shared browser/server response types.
 - `server/src/db.ts`: server settings, persistent visibility rules/archives, and one-time preservation of old Gate data.
 - `server/src/routes.ts` / `index.ts`: HTTP API and browser event delivery.
+- `server/src/auth.ts`: token provisioning, browser sign-in and shared API/event authentication.
 - `client/src/components/monitor/SessionMonitor.tsx`: the single server/session panel and creation form.
 - `client/src/lib/server-groups.ts`: server display groups, owning connection metadata and tool labels.
 - `client/src/components/chat/SessionView.tsx`: conversation history, live events, input, and approvals.

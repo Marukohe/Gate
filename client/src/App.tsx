@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
-import { MessageSquare, Moon, PanelLeftClose, Plus, Sun } from 'lucide-react';
+import { LogOut, MessageSquare, Moon, PanelLeftClose, Plus, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ServerDialog } from '@/components/server/ServerDialog';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -26,7 +26,7 @@ function route() {
   const parts = location.hash.slice(1).split('/');
   return parts[0] === 'session' && parts.length === 3 ? { serverId: decodeURIComponent(parts[1]), threadId: decodeURIComponent(parts[2]) } : null;
 }
-export default function App() {
+export default function App({ onSignOut }: { onSignOut: () => void }) {
   const [selected, setSelected] = useState(route);
   const viewport = useSyncExternalStore(subscribeViewport, viewportSnapshot);
   const mobile = viewport < 768;
@@ -128,6 +128,7 @@ export default function App() {
       <div className="sidebar-footer">
         <Button size="sm" variant="ghost" className="flex-1 justify-start" onClick={add}><Plus />Add server</Button>
         <Button variant="ghost" size="icon-sm" aria-label="Toggle theme" title="Toggle theme" onClick={toggleDark}>{dark ? <Sun /> : <Moon />}</Button>
+        <Button variant="ghost" size="icon-sm" aria-label="Sign out" title="Sign out" onClick={onSignOut}><LogOut /></Button>
       </div>
     </aside>
     {!mobile && sidebarOpen && resizeHandle('sessions')}

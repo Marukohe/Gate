@@ -45,6 +45,8 @@
   a sandboxed iframe; verify scripts, resource loading, navigation and forms cannot escape the static preview.
   Keep API paths out of PWA navigation fallback. Test file tabs with the service worker controlling the page;
   direct HTTP reads and tests with registration disabled miss app-shell substitution.
+  Authenticate file navigation with cookies as well as fetches. Opaque HTML frames cannot use the same-site sign-in
+  cookie; fetch bounded image previews in the parent and pass inert data URLs into the sandbox.
 - Image attachments must survive the entire native input/history path, not just preview in the composer. Check actual
   start/steer input, image-only sends, native history after reload, and draft retention on failed sends or navigation.
   Budget JSON for base64 expansion, validate image limits on the server, and reserve thumbnail space to keep scrolling stable.

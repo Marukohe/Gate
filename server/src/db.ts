@@ -11,6 +11,9 @@ export function createDb(file: string) {
   const db = new BetterSqlite3(file);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
+  db.exec('CREATE TABLE IF NOT EXISTS gate_identity (singleton INTEGER PRIMARY KEY, id TEXT NOT NULL)');
+  db.prepare('INSERT OR IGNORE INTO gate_identity (singleton, id) VALUES (1, ?)').run(randomUUID());
+  const instanceId = (db.prepare('SELECT id FROM gate_identity WHERE singleton = 1').get() as { id: string }).id;
   const schema = `CREATE TABLE IF NOT EXISTS servers (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, host TEXT NOT NULL, port INTEGER DEFAULT 22,
     username TEXT NOT NULL, authType TEXT NOT NULL, password TEXT, privateKeyPath TEXT,
@@ -58,6 +61,7 @@ export function createDb(file: string) {
     PRIMARY KEY (serverId, sessionId)
   )`);
   const store = {
+    instanceId,
     getVisibility(serverId: string): VisibilitySettings {
       const row = db.prepare('SELECT excludedDirectories FROM monitor_preferences WHERE serverId = ?').get(serverId) as
         { excludedDirectories: string } | undefined;

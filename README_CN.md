@@ -46,7 +46,8 @@ Gate 通过统一后端接口路由操作。工具适配器负责原生协议，
    gate
    ```
 
-4. 打开 `http://localhost:3030`，点击 **Add server**。优先从 **SSH host** 选择运行 Gate 的机器上
+4. 打开 `http://localhost:3030`，用 Gate 机器上 `~/.gate/token` 中的 token 登录。设置了 `GATE_TOKEN` 时，
+   使用该值。点击 **Add server**，优先从 **SSH host** 选择运行 Gate 的机器上
    `~/.ssh/config` 已有的主机，也可选择 **Enter manually…** 手动填写，然后保存。
    导入会填入名称、地址、端口、用户名和首个可用密钥路径。展开连接摘要可修改这些字段或切换密码认证，密码需单独输入。
    Gate 会从远端 SSH 账号的 PATH 发现 Codex 和 Antigravity，包括交互 shell 初始化时添加的路径。
@@ -131,7 +132,8 @@ SSH 服务器需要允许 Unix socket 转发，无需公开 Codex 网络端口�
 连接异常时明确报错；未确认送达的消息不会自动重发。
 状态与连接细节见 [Session 说明](docs/session-monitor.md)。
 
-Gate 用于可信内网，不提供身份认证。
+Gate 的 API 和实时事件都需要实例 token。浏览器登录有效期为 30 天，刷新或重启后继续生效。
+可点击 **Sign out** 退出。自动生成的 token 放在 Gate 的数据目录中。可信内网之外请使用 HTTPS。
 SSH 配置、目录过滤和 Gate 归档保存在 `~/.gate/gate.db`，密码不会返回浏览器。
 显示配置在 Gate 重启后仍生效，所有访问此 Gate 的浏览器共用。
 旧数据库中的 Gate 数据保留为不再使用的归档；当前会话历史由各工具保存。

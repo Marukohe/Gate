@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { chromium } from 'playwright';
+import { gateAuth } from '../server/dist/auth.js';
 import { createDb, publicServer } from '../server/dist/db.js';
 import { routes } from '../server/dist/routes.js';
 import { INPUT_BODY_LIMIT } from '../server/dist/images.js';
@@ -57,7 +58,10 @@ const historyRequests = [];
 const probeMessages = (prefix, count) => Array.from({ length: count }, (_, i) => ({ id: `${prefix}-${i}`, kind: 'assistant',
   text: `${prefix} message ${i}\n\nA paragraph to make this conversation scroll.` + (prefix === 'current' && i === 39
     ? '\n\n```ts\nconst answer = 42;\n```\n\n| Name | Value |\n| --- | --- |\n| answer | 42 |' + probeStream : '') }));
-const app = express(); app.use(express.json({ limit: INPUT_BODY_LIMIT }));
+const app = express();
+const accessToken = 'fixture-browser-access-token';
+app.use('/api', gateAuth(accessToken, 'browser-smoke').router);
+app.use(express.json({ limit: INPUT_BODY_LIMIT }));
 const http = createServer(app);
 const wss = new WebSocketServer({ server: http, path: '/ws' });
 const emit = (event = {}) => {
@@ -149,7 +153,7 @@ app.use('/api', routes(db, { tools: () => [{ id: 'codex', name: 'Codex', executa
   },
 }, async ({ host }) => host === 'other.local' ? ['codex', 'agy'] : []));
 app.use((error, _req, res, _next) => res.status(400).json({ error: error.message }));
-app.use(express.static(fileURLToPath(new URL('../client/dist/', import.meta.url))));
+app.use(express.static(process.env.GATE_CLIENT_DIST || fileURLToPath(new URL('../client/dist/', import.meta.url))));
 await new Promise(resolve => http.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
 const context = await browser.newContext({ viewport: { width: 1365, height: 1200 } });
@@ -189,6 +193,12 @@ try {
   await page.goto(`http://127.0.0.1:${http.address().port}`);
   // Exercise production navigation routing; disabling the worker hides file tabs opening the app shell.
   await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+  assert.equal((await page.request.get(`http://127.0.0.1:${http.address().port}/api/monitor`)).status(), 401);
+  await page.getByLabel('Access token', { exact: true }).fill('wrong-token');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.getByText('Invalid access token.', { exact: true }).waitFor();
+  await page.getByLabel('Access token', { exact: true }).fill(accessToken);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.getByRole('button', { name: /^api Needs you/ }).waitFor();
   assert.equal(await page.getByRole('navigation', { name: 'Server sessions' }).count(), 1);
   const sidebar = page.getByRole('complementary', { name: 'Sessions', exact: true });

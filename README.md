@@ -48,7 +48,8 @@ SSH access, repository grouping and the browser panel remain independent of it.
    gate
    ```
 
-4. Open `http://localhost:3030` and choose **Add server**. Select an existing **SSH host** from `~/.ssh/config`
+4. Open `http://localhost:3030` and sign in with the access token in `~/.gate/token` on the Gate machine,
+   or the value of `GATE_TOKEN` if you set it. Then choose **Add server**. Select an existing **SSH host** from `~/.ssh/config`
    on the machine running Gate, or choose **Enter manually…**, then save.
    Importing fills the name, host, port, username and first available identity-file path; expand the connection summary
    to edit these fields or switch to password authentication. Passwords must be entered separately.
@@ -150,7 +151,9 @@ For Codex, Gate controls sessions through the connected shared backend. It canno
 `codex --no-daemon` process. Missing connections show an error; uncertain writes are never resent automatically.
 See [session behavior](docs/session-monitor.md) for status and connection details.
 
-Gate is intended for trusted internal networks and has no authentication.
+Gate protects its API and event streams with an instance access token. Browser sign-in lasts 30 days and survives a
+refresh or restart. **Sign out** clears the browser session. The generated token file lives in the selected data directory.
+Use HTTPS for access outside a trusted local network.
 SSH settings, directory filters, and Gate archives are stored in `~/.gate/gate.db`; passwords are not returned to the browser.
 Display preferences survive Gate restarts and apply to every browser using this Gate.
 Existing databases retain their older Gate data as inactive archives. Active history lives in the native tools.
