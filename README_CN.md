@@ -49,8 +49,8 @@ Gate 通过统一后端接口路由操作。工具适配器负责原生协议，
 4. 打开 `http://localhost:3030`，点击 **Add server**。优先从 **SSH host** 选择运行 Gate 的机器上
    `~/.ssh/config` 已有的主机，也可选择 **Enter manually…** 手动填写，然后保存。
    导入会填入名称、地址、端口、用户名和首个可用密钥路径。展开连接摘要可修改这些字段或切换密码认证，密码需单独输入。
-   Gate 会从远端 SSH 登录 PATH 发现 Codex 和 Antigravity，并列出各自的会话。
-   如果找不到某个工具，在服务器设置的 **Tool paths** 中填写它的绝对路径。
+   Gate 会从远端 SSH 账号的 PATH 发现 Codex 和 Antigravity，包括交互 shell 初始化时添加的路径。
+   如果工具只定义了别名，或 shell 必须有终端才能初始化，在服务器设置中填写实际可执行文件的绝对路径。
 
 运行 `gate update` 可将当前全局 npm 安装升级到 GitHub Release 的最新稳定版。
 用 `gate --version` 查看已安装版本。如果 Gate 正在运行，重启后加载新版。

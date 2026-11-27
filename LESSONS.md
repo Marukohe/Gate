@@ -65,10 +65,11 @@
 - Model choices come from paginated `model/list`; send the model slug, not the catalog entry ID, on `turn/start` only.
   Include supported/default reasoning efforts, reset the effort draft when changing models, and pass effort on new turns only.
   `turn/steer` cannot override a model or effort. A catalog failure must not disable ordinary chat.
-- Non-interactive SSH can have a different PATH. Support explicit tool executables and their adjacent runtime binaries.
+- Non-interactive SSH can have a different PATH. Share lookup between discovery and launch, and check interactive
+  startup for missing tools. Carry its PATH into the native process so it can find runtimes such as Node.
+  Resolve actual executables without running aliases or mixing interactive startup output into the protocol stream.
   SSH config import reads Gate's machine, not the browser's. Use OpenSSH for effective values, preserve manual entry,
   abort stale selections, and reject proxy/certificate settings instead of silently discarding their connection requirements.
-  Discover tool commands on the same login PATH used by the adapters. Check command resolution without invoking the CLI.
   Keep transport signatures limited to SSH credentials, endpoint and executable so renames preserve active work.
 - Native addons follow the active Node.js ABI. For `ERR_DLOPEN_FAILED`, rebuild `better-sqlite3` with that Node installation.
 - Inspect port ownership before stopping development services. Never stop an unrelated project or a shared Codex daemon.

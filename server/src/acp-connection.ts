@@ -1,8 +1,8 @@
 import { EventEmitter } from 'node:events';
 import type { Duplex } from 'node:stream';
-import { posix } from 'node:path';
 import { connectSsh, execRemote, projectPathsCommand, quote, runShell, type ConnectionSettings } from './ssh.js';
 import { listRemoteDirectory, readRemoteFile } from './session-files.js';
+import { resolveTool, toolCommand } from './tool-executable.js';
 import type { DirectoryListing, ShellResult } from './types.js';
 
 export interface AcpMessage { jsonrpc?: string; id?: string | number; method?: string; params?: any; result?: any; error?: { code: number; message: string } }
@@ -71,10 +71,9 @@ export class AcpRpc extends EventEmitter {
 export async function connectAgy(settings: ConnectionSettings, signal: AbortSignal): Promise<AcpRpc> {
   const ssh = await connectSsh(settings, signal);
   try {
-    const executable = settings.executablePath || 'agy';
-    const prefix = executable.startsWith('/') ? `PATH=${quote(posix.dirname(executable))}:"$PATH" ` : '';
+    const executable = await resolveTool(ssh, settings.executablePath || 'agy');
     const stream = await new Promise<import('ssh2').ClientChannel>((resolve, reject) => {
-      ssh.exec(`$SHELL -lc ${quote(`${prefix}exec ${quote(executable)} acp`)}`, (error, stream) => error ? reject(error) : resolve(stream));
+      ssh.exec(toolCommand(executable, ['acp']), (error, stream) => error ? reject(error) : resolve(stream));
     });
     // Drain diagnostic output without returning logs or authentication data to browsers.
     stream.stderr.resume();

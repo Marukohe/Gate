@@ -15,8 +15,10 @@ per connection; combining the display never combines or overwrites stored rules.
 Add server first offers concrete Host aliases from Gate's local `~/.ssh/config`, including Include files, with manual
 entry always available. Selecting an alias runs local `ssh -G` to fill editable host, port, user and identity-file fields.
 The imported connection summary is collapsed unless a password is needed. Saving verifies SSH and resolves registered
-executables using the remote login PATH. An account can be saved before tools are installed. Server settings allow
-absolute executable paths, and saving checks for newly installed tools. Selecting an alias only reads local SSH config.
+executables using the remote login PATH, then tries interactive shell initialization for missing tools. Native
+protocols launch without a terminal and receive the PATH from the lookup. An account can be saved before tools are
+installed. Server settings allow absolute executable paths, and saving checks for newly installed tools.
+Selecting a host alias only reads local SSH config.
 
 For Codex, Gate uses one connection to the shared app-server daemon. SSH forwards the native Unix socket;
 Gate installs no remote files and opens no public Codex port. It starts an absent daemon without restarting an existing one.

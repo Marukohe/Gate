@@ -76,7 +76,7 @@ export function projectPathsCommand(directories: string[]) {
   done`;
 }
 
-export function execRemote(ssh: Client, command: string): Promise<string> {
+export function execRemote(ssh: Client, command: string, timeout = 20_000): Promise<string> {
   return new Promise((resolve, reject) => {
     let channel: ClientChannel | undefined;
     let stdout = '', stderr = '', settled = false;
@@ -86,7 +86,7 @@ export function execRemote(ssh: Client, command: string): Promise<string> {
       if (error) { channel?.close(); reject(error); } else resolve(stdout.trim());
     };
     const lost = () => done(new Error('SSH connection closed'));
-    const timer = setTimeout(() => done(new Error('Remote command timed out')), 20_000);
+    const timer = setTimeout(() => done(new Error('Remote command timed out')), timeout);
     ssh.once('close', lost);
     ssh.exec(command, (error, stream) => {
       if (error) { done(error); return; }

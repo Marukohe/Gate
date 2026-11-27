@@ -52,8 +52,9 @@ SSH access, repository grouping and the browser panel remain independent of it.
    on the machine running Gate, or choose **Enter manually…**, then save.
    Importing fills the name, host, port, username and first available identity-file path; expand the connection summary
    to edit these fields or switch to password authentication. Passwords must be entered separately.
-   Gate discovers Codex and Antigravity on the SSH login PATH and lists their sessions. If a tool is missing,
-   open the server settings and enter its absolute executable path under **Tool paths**.
+   Gate discovers Codex and Antigravity using the SSH account's PATH, including paths set by interactive shell startup.
+   If a tool is only an alias or the shell requires a terminal to initialize, set the tool's absolute executable path
+   in the server settings.
 
 Run `gate update` to upgrade your global npm installation from the latest stable GitHub Release.
 Use `gate --version` to check the installed version, and restart Gate if it is running to load the update.

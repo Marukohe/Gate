@@ -1,9 +1,9 @@
 import { EventEmitter } from 'node:events';
-import { posix } from 'node:path';
 import type { ClientChannel } from 'ssh2';
 import { connectSsh, execRemote, quote, projectPathsCommand, runShell, type ConnectionSettings } from './ssh.js';
 import WebSocket from 'ws';
 import { listRemoteDirectory, readRemoteFile } from './session-files.js';
+import { resolveTool, toolCommand } from './tool-executable.js';
 import type { DirectoryListing, ShellResult } from './types.js';
 
 export interface RpcMessage {
@@ -65,9 +65,8 @@ export class CodexRpc extends EventEmitter {
 export async function connectCodex(settings: ConnectionSettings, signal: AbortSignal): Promise<CodexRpc> {
   const ssh = await connectSsh(settings, signal);
   try {
-    const executable = settings.executablePath || settings.codexPath || 'codex';
-    const prefix = executable.startsWith('/') ? `PATH=${quote(posix.dirname(executable))}:"$PATH" ` : '';
-    const command = (args: string) => `$SHELL -lc ${quote(`${prefix}${quote(executable)} app-server daemon ${args}`)}`;
+    const executable = await resolveTool(ssh, settings.executablePath || settings.codexPath || 'codex');
+    const command = (action: string) => toolCommand(executable, ['app-server', 'daemon', action]);
     let info;
     try { info = JSON.parse(await execRemote(ssh, command('version'))); }
     catch (error) {

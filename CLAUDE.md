@@ -9,8 +9,9 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 
 - React browser → HTTP actions and WebSocket events → Gate backend adapter → SSH → native tool.
 - HTTP routes use `AgentService`; protocol implementations satisfy `AgentBackend`. New SSH accounts are shared by their
-  tool connections. Add server only asks for SSH details. On save, resolve registered tool executables on the login PATH
-  without invoking the tools. Keep accounts with no matches visible and allow absolute path overrides in server settings.
+  tool connections. Add server only asks for SSH details. Discovery and launch share executable lookup, preferring
+  the login PATH with interactive startup as a fallback. Launch native protocols without a terminal using the resolved
+  executable and its PATH. Keep accounts with no matches visible and allow absolute path overrides in server settings.
   SSH, SFTP, repository lookup and direct shell execution live outside tool-specific transports.
 - The sidebar groups tool connections by SSH host and port into one server entry, using the oldest connection's name.
   Merge repository groups across tools, label session rows and attention lists with tool tags, and count server groups.
