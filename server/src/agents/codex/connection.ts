@@ -1,10 +1,10 @@
 import { EventEmitter } from 'node:events';
 import type { ClientChannel } from 'ssh2';
-import { connectSsh, execRemote, quote, projectPathsCommand, runShell, type ConnectionSettings } from './ssh.js';
+import { connectSsh, execRemote, quote, projectPathsCommand, runShell, type ConnectionSettings } from '../../ssh.js';
 import WebSocket from 'ws';
-import { listRemoteDirectory, readRemoteFile } from './session-files.js';
-import { resolveTool, toolCommand } from './tool-executable.js';
-import type { DirectoryListing, ShellResult } from './types.js';
+import { listRemoteDirectory, readRemoteFile } from '../../session-files.js';
+import { resolveTool, toolCommand } from '../executable.js';
+import type { DirectoryListing, ShellResult } from '../../types.js';
 
 export interface RpcMessage {
   id?: number | string; method?: string; params?: Record<string, any>;

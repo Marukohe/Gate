@@ -25,6 +25,7 @@ from different clients. Gate hides unsupported controls; a new agy message waits
 
 Gate routes connection actions through a small backend interface. Native protocol handling belongs to the tool adapter;
 SSH access, repository grouping and the browser panel remain independent of it.
+Each tool has its own directory under `server/src/agents/`. See [adding an adapter](docs/session-monitor.md#adding-an-adapter).
 
 ## Get started
 

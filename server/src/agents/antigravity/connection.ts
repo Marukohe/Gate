@@ -1,9 +1,9 @@
 import { EventEmitter } from 'node:events';
 import type { Duplex } from 'node:stream';
-import { connectSsh, execRemote, projectPathsCommand, quote, runShell, type ConnectionSettings } from './ssh.js';
-import { listRemoteDirectory, readRemoteFile } from './session-files.js';
-import { resolveTool, toolCommand } from './tool-executable.js';
-import type { DirectoryListing, ShellResult } from './types.js';
+import { connectSsh, execRemote, projectPathsCommand, quote, runShell, type ConnectionSettings } from '../../ssh.js';
+import { listRemoteDirectory, readRemoteFile } from '../../session-files.js';
+import { resolveTool, toolCommand } from '../executable.js';
+import type { DirectoryListing, ShellResult } from '../../types.js';
 
 export interface AcpMessage { jsonrpc?: string; id?: string | number; method?: string; params?: any; result?: any; error?: { code: number; message: string } }
 

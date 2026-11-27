@@ -1,7 +1,8 @@
-import type { DirectoryListing, ModelOption, MonitorServer, Server, ServerEvent, Session, SessionDetail, ShellResult, ToolDefinition } from './types.js';
+import type { DirectoryListing, ModelOption, MonitorServer, Server, ServerEvent, Session, SessionDetail, ShellResult, ToolDefinition } from '../types.js';
 
-// Backends translate native protocols into Gate data. HTTP and UI never issue native RPCs.
+// Each backend owns its tool's connections and translates its sessions, actions, and events into Gate types.
 export interface AgentBackend {
+  // Sync receives the complete set of connections owned by this adapter, including an empty set on removal.
   sync(servers: Server[]): void;
   monitor(): { servers: MonitorServer[] };
   detail(serverId: string, sessionId: string, cursor?: string): Promise<SessionDetail>;
@@ -18,4 +19,8 @@ export interface AgentBackend {
   close(): void;
 }
 
-export interface BackendRegistration { tool: ToolDefinition; backend: AgentBackend }
+// Registration supplies discovery metadata and a fresh backend for each Gate instance.
+export interface AgentAdapter {
+  readonly tool: ToolDefinition;
+  createBackend(): AgentBackend;
+}

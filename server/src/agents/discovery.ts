@@ -1,6 +1,6 @@
-import { connectSsh, type ConnectionSettings } from './ssh.js';
-import { resolveTools } from './tool-executable.js';
-import type { ToolDefinition } from './types.js';
+import { connectSsh, type ConnectionSettings } from '../ssh.js';
+import { resolveTools } from './executable.js';
+import type { ToolDefinition } from '../types.js';
 
 export async function discoverTools(settings: ConnectionSettings, tools: ToolDefinition[]) {
   const ssh = await connectSsh(settings, AbortSignal.timeout(25_000));

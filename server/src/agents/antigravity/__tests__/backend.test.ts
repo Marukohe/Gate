@@ -1,8 +1,8 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { AgyService } from '../agy.js';
-import type { AcpRpc } from '../acp-connection.js';
-import type { Server } from '../types.js';
+import { AgyService } from '../backend.js';
+import type { AcpRpc } from '../connection.js';
+import type { Server } from '../../../types.js';
 
 const server: Server = { id: 'agy', name: 'AGY', tool: 'agy', host: 'localhost', port: 22, username: 'user', authType: 'password', createdAt: 1 };
 const config = [

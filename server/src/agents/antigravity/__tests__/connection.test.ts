@@ -1,6 +1,6 @@
 import { Duplex } from 'node:stream';
 import { expect, it, vi } from 'vitest';
-import { AcpRpc } from '../acp-connection.js';
+import { AcpRpc } from '../connection.js';
 
 it('correlates split NDJSON responses, handles permission requests, and never replays failed prompts', async () => {
   const writes: any[] = [];

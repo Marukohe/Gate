@@ -3,13 +3,13 @@ import express from 'express';
 import type { Server as HttpServer } from 'node:http';
 import { createDb } from '../db.js';
 import { routes } from '../routes.js';
-import type { AgentService } from '../agents.js';
+import type { AgentService } from '../agents/service.js';
 import { INPUT_BODY_LIMIT } from '../images.js';
 
 let db: ReturnType<typeof createDb>;
 let http: HttpServer;
 let origin: string;
-const codex = { tools: () => [
+const codex = { defaultToolId: 'codex', tools: () => [
   { id: 'codex', name: 'Codex', executable: 'codex', description: '' },
   { id: 'agy', name: 'Antigravity', executable: 'agy', description: '' },
 ], sync: vi.fn(), monitor: vi.fn(), create: vi.fn(), input: vi.fn(), rename: vi.fn(), models: vi.fn(), file: vi.fn(), directory: vi.fn(), shell: vi.fn() };

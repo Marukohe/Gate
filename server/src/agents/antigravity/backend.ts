@@ -1,11 +1,11 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import { connectAgy, type AcpMessage, type AcpRpc } from './acp-connection.js';
-import type { AgentBackend } from './agent-backend.js';
-import { imageInputs } from './images.js';
-import { sessionFilePath } from './session-files.js';
-import { connectionKey } from './ssh.js';
-import type { Item, ModelOption, MonitorServer, Request, Server, ServerEvent, Session, SessionDetail } from './types.js';
+import { connectAgy, type AcpMessage, type AcpRpc } from './connection.js';
+import type { AgentBackend } from '../backend.js';
+import { imageInputs } from '../../images.js';
+import { sessionFilePath } from '../../session-files.js';
+import { connectionKey } from '../../ssh.js';
+import type { Item, ModelOption, MonitorServer, Request, Server, ServerEvent, Session, SessionDetail } from '../../types.js';
 
 const statusNote = 'Live status covers work started through this Gate connection. ACP does not report activity in other terminal clients.';
 const choices = (option: any): any[] => (option?.options ?? []).flatMap((entry: any) => entry.options ?? [entry]);

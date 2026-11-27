@@ -1,5 +1,5 @@
-import type { Request } from './types.js';
-import type { RpcMessage } from './codex-connection.js';
+import type { Request } from '../../types.js';
+import type { RpcMessage } from './connection.js';
 
 export function describeRequest(message: RpcMessage): Request {
   const p = message.params ?? {};

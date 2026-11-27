@@ -1,11 +1,11 @@
 import { EventEmitter } from 'node:events';
-import { sessionFilePath } from './session-files.js';
-import { connectCodex, type CodexRpc, type RpcMessage } from './codex-connection.js';
-import { describeRequest, decision } from './codex-requests.js';
-import { imageInputs } from './images.js';
-import { connectionKey } from './ssh.js';
-import type { AgentBackend } from './agent-backend.js';
-import type { Server, Session, MonitorServer, Item, Request, SessionDetail, ServerEvent, ModelOption } from './types.js';
+import { sessionFilePath } from '../../session-files.js';
+import { connectCodex, type CodexRpc, type RpcMessage } from './connection.js';
+import { describeRequest, decision } from './requests.js';
+import { imageInputs } from '../../images.js';
+import { connectionKey } from '../../ssh.js';
+import type { AgentBackend } from '../backend.js';
+import type { Server, Session, MonitorServer, Item, Request, SessionDetail, ServerEvent, ModelOption } from '../../types.js';
 
 const compact = (text: unknown, length = 200) => String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, length);
 export function sessionFromThread(thread: any): Session {

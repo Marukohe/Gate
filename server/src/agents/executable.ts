@@ -1,6 +1,6 @@
 import { posix } from 'node:path';
 import type { Client } from 'ssh2';
-import { execRemote, quote } from './ssh.js';
+import { execRemote, quote } from '../ssh.js';
 
 interface Executable {
   file: string;

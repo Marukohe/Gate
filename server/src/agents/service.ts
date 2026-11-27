@@ -1,34 +1,48 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import { imageInputs } from './images.js';
-import type { AgentBackend, BackendRegistration } from './agent-backend.js';
-import type { Item, Server, ServerEvent } from './types.js';
+import { imageInputs } from '../images.js';
+import type { AgentAdapter, AgentBackend } from './backend.js';
+import type { Item, Server, ServerEvent, ToolDefinition } from '../types.js';
 
 export class AgentService extends EventEmitter implements AgentBackend {
   private owners = new Map<string, AgentBackend>();
-  constructor(private registrations: BackendRegistration[]) {
+  private readonly registrations = new Map<string, { tool: ToolDefinition; backend: AgentBackend }>();
+
+  constructor(adapters: readonly AgentAdapter[], readonly defaultToolId: string) {
     super();
-    for (const { backend } of registrations) backend.on('event', (event: ServerEvent) => {
-      if (this.owners.get(event.serverId) === backend) this.emit('event', event);
-    });
+    const ids = new Set(adapters.map(({ tool }) => tool.id));
+    if (ids.size !== adapters.length) throw new Error('Agent tool IDs must be unique');
+    if (!ids.has(defaultToolId)) throw new Error(`Default agent tool is not registered: ${defaultToolId}`);
+    for (const adapter of adapters) {
+      const { tool } = adapter;
+      const backend = adapter.createBackend();
+      this.registrations.set(tool.id, { tool, backend });
+      backend.on('event', (event: ServerEvent) => {
+        if (this.owners.get(event.serverId) === backend) this.emit('event', event);
+      });
+    }
   }
-  tools() { return this.registrations.map(({ tool }) => tool); }
+  tools() { return Array.from(this.registrations.values(), ({ tool }) => tool); }
   sync(servers: Server[]) {
     const owners = new Map<string, AgentBackend>();
+    const byTool = new Map<string, Server[]>();
     for (const server of servers) {
-      const entry = this.registrations.find(({ tool }) => tool.id === (server.tool || 'codex'));
-      if (!entry) throw new Error(`Unsupported tool: ${server.tool}`);
-      owners.set(server.id, entry.backend);
+      const toolId = server.tool || this.defaultToolId;
+      const registration = this.registrations.get(toolId);
+      if (!registration) throw new Error(`Unsupported tool: ${toolId}`);
+      owners.set(server.id, registration.backend);
+      const group = byTool.get(toolId);
+      if (group) group.push(server); else byTool.set(toolId, [server]);
     }
     this.owners = owners;
-    for (const { backend } of this.registrations) backend.sync(servers.filter((server) => owners.get(server.id) === backend));
+    for (const [toolId, { backend }] of this.registrations) backend.sync(byTool.get(toolId) ?? []);
   }
   private backend(id: string) {
     const backend = this.owners.get(id);
     if (!backend) throw new Error('Server not found');
     return backend;
   }
-  monitor() { return { servers: this.registrations.flatMap(({ backend }) => backend.monitor().servers) }; }
+  monitor() { return { servers: [...this.registrations.values()].flatMap(({ backend }) => backend.monitor().servers) }; }
   detail(id: string, session: string, cursor?: string) { return this.backend(id).detail(id, session, cursor); }
   create(id: string, cwd: string) { return this.backend(id).create(id, cwd); }
   models(id: string, session?: string) { return this.backend(id).models(id, session); }
@@ -64,5 +78,5 @@ export class AgentService extends EventEmitter implements AgentBackend {
   directory(id: string, session: string, path: string) { return this.backend(id).directory(id, session, path); }
   file(id: string, session: string, path: string) { return this.backend(id).file(id, session, path); }
   shell(id: string, session: string, command: string) { return this.backend(id).shell(id, session, command); }
-  close() { this.owners.clear(); for (const { backend } of this.registrations) backend.close(); }
+  close() { this.owners.clear(); for (const { backend } of this.registrations.values()) backend.close(); }
 }

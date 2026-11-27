@@ -13,6 +13,9 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
   the login PATH with interactive startup as a fallback. Launch native protocols without a terminal using the resolved
   executable and its PATH. Keep accounts with no matches visible and allow absolute path overrides in server settings.
   SSH, SFTP, repository lookup and direct shell execution live outside tool-specific transports.
+- Keep each tool's metadata, native adapter, transport and protocol tests under its own directory in
+  `server/src/agents/`. Export a typed factory from its `index.ts` and register it explicitly in the common registry.
+  Agents use the shared contract and helpers. The service and HTTP entry point deal in Gate types.
 - The sidebar groups tool connections by SSH host and port into one server entry, using the oldest connection's name.
   Merge repository groups across tools, label session rows and attention lists with tool tags, and count server groups.
   Keep connection ID plus native session ID on every action, draft, cache and row key; native IDs can collide across tools.
@@ -88,13 +91,11 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 
 ## Key files
 
-- `server/src/codex-connection.ts`: SSH, native daemon discovery/start, Unix socket forwarding, JSON-RPC correlation.
-- `server/src/agent-backend.ts` / `agents.ts`: backend contract, registration, connection routing and event isolation.
+- `server/src/agents/backend.ts`, `service.ts`, `registry.ts`: adapter contract, connection routing and built-in registrations.
+- `server/src/agents/codex/`: Codex sessions, approval translation and native WebSocket transport over SSH.
+- `server/src/agents/antigravity/`: Antigravity sessions and persistent ACP transport.
 - `server/src/ssh.ts`: shared SSH connection, quoting, shell commands and Git metadata lookup.
 - `server/src/ssh-config.ts`: local SSH alias discovery and OpenSSH-resolved connection-field import.
-- `server/src/agy.ts` / `acp-connection.ts`: Antigravity native session adapter and persistent ACP transport.
-- `server/src/codex.ts`: native session listing, history, subscriptions, messages, decisions, and interruption.
-- `server/src/codex-requests.ts`: offered approval choices and structured question answers.
 - `server/src/session-files.ts`: bounded SFTP directory/file reads, inert text previews with line anchors, images, and downloads.
 - `server/src/types.ts`: shared browser/server response types.
 - `server/src/db.ts`: server settings, persistent visibility rules/archives, and one-time preservation of old Gate data.

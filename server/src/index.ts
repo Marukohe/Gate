@@ -6,9 +6,7 @@ import os from 'node:os';
 import fs from 'node:fs';
 import { WebSocket, WebSocketServer } from 'ws';
 import { createDb } from './db.js';
-import { CodexService } from './codex.js';
-import { AgentService } from './agents.js';
-import { AgyService } from './agy.js';
+import { createAgentService } from './agents/registry.js';
 import { routes } from './routes.js';
 import { INPUT_BODY_LIMIT } from './images.js';
 import { gateAuth, loadAccessToken } from './auth.js';
@@ -26,10 +24,7 @@ for (const file of [databaseFile, databaseFile + '-wal', databaseFile + '-shm'])
 const access = gateAuth(token, db.instanceId);
 app.use('/api', access.router);
 app.use(express.json({ limit: INPUT_BODY_LIMIT }));
-const agents = new AgentService([
-  { tool: { id: 'codex', name: 'Codex', executable: 'codex', description: 'Connect to existing terminal sessions through the native shared backend.' }, backend: new CodexService() },
-  { tool: { id: 'agy', name: 'Antigravity (agy)', executable: 'agy', description: 'Sign in on this SSH server with agy acp --login. Live status covers work started through Gate.' }, backend: new AgyService() },
-]);
+const agents = createAgentService();
 const http = createServer(app);
 const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 });
 const localOnly = new WeakSet<WebSocket>();

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { describeRequest, decision } from '../codex-requests.js';
+import { describeRequest, decision } from '../requests.js';
 
 it('requires complete question answers and preserves the native response shape', () => {
   const request = describeRequest({ id: 9, method: 'item/tool/requestUserInput', params: { threadId: 'thread',

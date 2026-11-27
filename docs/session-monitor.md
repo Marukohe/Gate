@@ -142,3 +142,14 @@ so they can be unblocked. Checking a parent covers its descendants. The dialog s
 
 Native tools remain the source of conversation history; there is no second Gate message store.
 When upgrading an older Gate database, legacy tables and their server references are preserved as inactive archives.
+
+## Adding an adapter
+
+Create `server/src/agents/<tool>/` for the tool's backend, native transport and protocol tests. Its `index.ts` exports
+an `AgentAdapter` with a stable tool ID, display metadata, default executable and a factory for the backend.
+Implement `AgentBackend` by mapping the tool's native sessions, history, actions and events to Gate types. Report
+per-session capabilities so the browser can show the actions the tool supports.
+
+Register the new adapter in `server/src/agents/registry.ts`. Gate uses its metadata for the tool catalog and SSH
+executable discovery. `AgentService` routes each connection to its owning backend. Codex and Antigravity are
+examples. Both use the same SSH, SFTP, and repository helpers.

@@ -59,6 +59,8 @@
   a fresh `exec resume` process cannot take over an in-flight turn.
   ACP session list/load provides history, not other clients' live status or takeover. Keep protocols inside adapters,
   derive controls from capabilities, preserve native approval options, and replace replayed history when IDs are unstable.
+  Keep tool metadata, factories and protocol tests beside each implementation. Centralize registration and keep the
+  legacy default explicit so adding or reordering adapters does not change how old connection records resolve.
 - Correlate JSON-RPC responses by ID. Server requests with IDs are approvals/questions, not ordinary responses.
   Approval IDs belong to their connection. Do not replay inputs or decisions after timeout/disconnection.
 - `!` commands use the owning session's native cwd and existing SSH connection, never model input. Group the command

@@ -2,11 +2,11 @@ import { Router } from 'express';
 import { availableDirectories, excludedDirectories, visibleSessions } from './visibility.js';
 import type { Database } from './db.js';
 import { publicServer } from './db.js';
-import type { AgentService } from './agents.js';
+import type { AgentService } from './agents/service.js';
 import type { Server } from './types.js';
 import { previewSessionFile, sendSessionFile } from './session-files.js';
 import { sshHosts } from './ssh-config.js';
-import { discoverTools } from './tool-discovery.js';
+import { discoverTools } from './agents/discovery.js';
 import type { Gateways } from './gateways.js';
 
 function text(value: unknown, name: string, max = 200_000): string {
@@ -41,14 +41,15 @@ export function routes(db: Database, agents: AgentService, hosts = sshHosts, dis
       privateKeyPath: body.privateKeyPath ? text(body.privateKeyPath, 'key path', 4096) : '' };
   };
   const settings = (body: any, existing?: Server) => {
-    const toolId = body.tool ?? existing?.tool ?? 'codex';
+    const toolId = body.tool ?? existing?.tool ?? agents.defaultToolId;
     const tool = agents.tools().find((tool) => tool.id === toolId);
     if (!tool) throw new Error('Unsupported tool');
-    if (existing && toolId !== (existing.tool || 'codex')) throw new Error('Add a separate connection for another tool.');
+    if (existing && toolId !== (existing.tool || agents.defaultToolId)) throw new Error('Add a separate connection for another tool.');
     const executable = body.executablePath ?? body.codexPath ?? existing?.executablePath ?? tool.executable;
     return { ...sshSettings(body, existing),
       defaultWorkingDir: body.defaultWorkingDir === undefined ? existing?.defaultWorkingDir : body.defaultWorkingDir ? text(body.defaultWorkingDir, 'directory', 4096) : '',
       tool: tool.id, executablePath: text(executable, 'tool executable', 4096),
+      // Older databases and clients still carry this Codex-specific field.
       codexPath: tool.id === 'codex' ? text(executable, 'tool executable', 4096) : '' };
   };
   async function saveAccount(body: any, existing?: Server) {

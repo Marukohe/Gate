@@ -122,7 +122,7 @@ app.post('/api/servers/:id/sessions/:thread/interrupt', (req, res) => {
 app.post('/api/servers/:id/sessions/:thread/requests/:request', (req, res) => {
   writes.push({ type: 'answer', ...req.body }); detail.requests = []; res.json({}); emit();
 });
-app.use('/api', routes(db, { tools: () => [{ id: 'codex', name: 'Codex', executable: 'codex', description: '' }, { id: 'agy', name: 'Antigravity (agy)', executable: 'agy', description: '' }], sync() {}, monitor: () => structuredClone(monitor), async shell(serverId, threadId, command) {
+app.use('/api', routes(db, { defaultToolId: 'codex', tools: () => [{ id: 'codex', name: 'Codex', executable: 'codex', description: '' }, { id: 'agy', name: 'Antigravity (agy)', executable: 'agy', description: '' }], sync() {}, monitor: () => structuredClone(monitor), async shell(serverId, threadId, command) {
   writes.push({ type: 'shell', serverId, threadId, command });
   if (holdShell) await new Promise(resolve => { releaseShell = resolve; });
   return { stdout: command === 'pwd' ? '/home/alex/projects/gate\n' : 'shell-ok\n', stderr: command === 'pwd' ? '' : 'shell-error\n',

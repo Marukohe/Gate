@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { Client } from 'ssh2';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { execRemote } from '../ssh.js';
-import { resolveTool, resolveTools, toolCommand } from '../tool-executable.js';
+import { resolveTool, resolveTools, toolCommand } from '../agents/executable.js';
 
 vi.mock('../ssh.js', async (original) => ({ ...await original<typeof import('../ssh.js')>(), execRemote: vi.fn() }));
 

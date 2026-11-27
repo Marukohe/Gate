@@ -1,9 +1,9 @@
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { AgentService } from '../agents.js';
-import { CodexService, itemFromCodex, sessionFromThread } from '../codex.js';
-import type { CodexRpc } from '../codex-connection.js';
-import type { Server } from '../types.js';
+import { AgentService } from '../../service.js';
+import { CodexService, itemFromCodex, sessionFromThread } from '../backend.js';
+import type { CodexRpc } from '../connection.js';
+import type { Server } from '../../../types.js';
 
 const server: Server = { id: 'server', name: 'Local', host: 'localhost', port: 22, username: 'test', authType: 'password', password: 'secret', createdAt: 1 };
 const native = { id: 'native', cwd: '/repo', name: 'Work', preview: 'First message', updatedAt: 1700000000,
@@ -208,7 +208,8 @@ it('executes shell commands using native cwd without starting or steering an LLM
 });
 
 it('intercepts bang input from older pages before any model turn and publishes shell output', async () => {
-  const gateway = new AgentService([{ tool: { id: 'codex', name: 'Codex', executable: 'codex', description: '' }, backend: service }]); gateway.sync([server]);
+  const gateway = new AgentService([{ tool: { id: 'codex', name: 'Codex', executable: 'codex', description: '' }, createBackend: () => service }], 'codex');
+  gateway.sync([server]);
   const events: any[] = []; gateway.on('event', (event) => events.push(structuredClone(event)));
   const result = await gateway.input(server.id, 'native', '  !pwd', 'turn');
   expect(result).toMatchObject({ shell: { stdout: 'done', exitCode: 0 } });
@@ -229,7 +230,8 @@ it('intercepts bang input from older pages before any model turn and publishes s
 });
 
 it('never falls back to model input if a bang command fails', async () => {
-  const gateway = new AgentService([{ tool: { id: 'codex', name: 'Codex', executable: 'codex', description: '' }, backend: service }]); gateway.sync([server]);
+  const gateway = new AgentService([{ tool: { id: 'codex', name: 'Codex', executable: 'codex', description: '' }, createBackend: () => service }], 'codex');
+  gateway.sync([server]);
   peer.shell.mockRejectedValueOnce(new Error('SSH unavailable'));
   const events: any[] = []; gateway.on('event', (event) => events.push(event));
   await expect(gateway.input(server.id, 'native', '!pwd')).rejects.toThrow('SSH unavailable');
