@@ -136,8 +136,13 @@ Use the same remote OS user and Codex configuration as your terminal.
   HTML shows a sandboxed static page with inline CSS and images; scripts, forms, embedded pages and external stylesheets
   are disabled. Switching views reuses the loaded file; opening a new tab and downloading still use the original source.
   The pane follows the selected session; its last directory/file stays in tab memory. Narrow windows temporarily hide
-  the session list; phones show files full-screen. Closing it returns to the conversation with drafts and reading position intact.
+  the session list; phones show the right sidebar full-screen. Closing it returns to the conversation with drafts and reading position intact.
   Browsing uses SFTP for both tools and does not send a model request.
+- **Terminal** opens an interactive SSH shell in the session's working
+  directory. Files and Terminal toggle independently. When both are open, files are above the terminal and share
+  the same resizable sidebar. On phones, use the arrow in the sidebar header to return to the conversation.
+  Folding the terminal keeps the shell running in this tab. Use **End terminal** or `exit` to stop it. Reloading
+  or closing the tab also ends it. For a session from another Gate, the SSH shell runs through that Gate.
 - **Shell:** send `!pwd`, `!git status`, or another `!command` to execute directly through SSH in the session's working
   directory, without model inference. Results show stdout, stderr, and exit status; they survive switching sessions but
   clear on page reload and are never added to model context. Each command uses a fresh, non-interactive shell, with a

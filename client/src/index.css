@@ -191,6 +191,10 @@
   padding: max(0.5rem, env(safe-area-inset-top)) 0.65rem 0.5rem;
   border-bottom: 1px solid var(--border); background: var(--card);
 }
+@media (max-width: 359px) {
+  .gate-workspace .gate-header { gap: 0.125rem; padding-inline: 0.375rem; }
+  .gate-workspace .gate-header > [data-size="icon-sm"] { width: 1.75rem; }
+}
 .gate-brand { display: flex; align-items: center; gap: 0.65rem; font-size: 1.05rem; font-weight: 650; letter-spacing: -0.04em; }
 .gate-mark {
   display: grid; place-items: center; width: 1.65rem; height: 1.65rem; border-radius: 0.5rem;
@@ -281,11 +285,16 @@ button.monitor-summary:focus-visible { outline: 2px solid var(--ring); outline-o
   .sidebar-footer { padding-bottom: max(0.6rem, env(safe-area-inset-bottom)); }
 }
 
-.file-sidebar {
+.right-sidebar {
   display: flex; flex-direction: column; flex-shrink: 0; width: var(--files-width, 22rem); min-height: 0;
-  border-left: 1px solid var(--border); background: var(--background);
 }
-.file-sidebar[hidden] { display: none; }
+.file-sidebar, .terminal-stack, .terminal-sidebar {
+  display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; min-height: 0;
+}
+.file-sidebar, .terminal-sidebar { border-left: 1px solid var(--border); background: var(--background); overflow: hidden; }
+.file-sidebar:not([hidden]) + .terminal-stack { border-top: 1px solid var(--border); }
+.right-sidebar[hidden], .file-sidebar[hidden], .terminal-stack[hidden], .terminal-sidebar[hidden] { display: none; }
+.terminal-screen { position: relative; flex: 1; min-height: 0; overflow: hidden; padding: 0.375rem 0.5rem; background: #16181d; }
 .file-sidebar-header { display: flex; align-items: center; gap: 0.5rem; min-height: 3rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
 .file-entry { display: flex; align-items: center; width: 100%; gap: 0.5rem; padding: 0.55rem 0.5rem; border-radius: 0.4rem; text-align: left; font-size: 0.75rem; }
 .file-entry:hover, .file-action:hover { background: var(--accent); }
@@ -302,6 +311,7 @@ button.monitor-summary:focus-visible { outline: 2px solid var(--ring); outline-o
 .file-text[data-wrap="true"] { width: 100%; }
 .file-text[data-wrap="true"] .file-line-content { white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 767px) {
-  .file-sidebar { width: 100%; border-left: 0; padding-block: env(safe-area-inset-top) env(safe-area-inset-bottom); }
-  .gate-shell[data-files-open="true"] .gate-workspace { display: none; }
+  .right-sidebar { width: 100%; padding-bottom: env(safe-area-inset-bottom); }
+  .file-sidebar, .terminal-sidebar { border-left: 0; }
+  .gate-shell[data-tools-open="true"] .gate-workspace { display: none; }
 }

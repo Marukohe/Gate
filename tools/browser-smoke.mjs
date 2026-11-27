@@ -65,7 +65,25 @@ const access = gateAuth(accessToken, 'browser-smoke');
 app.use('/api', access.router);
 app.use(express.json({ limit: INPUT_BODY_LIMIT }));
 const http = createServer(app);
-const wss = new WebSocketServer({ server: http, path: '/ws', verifyClient: ({ req }) => access.auth(req) });
+const wss = new WebSocketServer({ noServer: true });
+const terminalWss = new WebSocketServer({ noServer: true });
+const terminalConnections = [];
+http.on('upgrade', (req, socket, head) => {
+  const url = new URL(req.url, 'http://localhost');
+  const hub = url.pathname === '/ws/terminal' ? terminalWss : url.pathname === '/ws' ? wss : null;
+  if (!hub || !access.auth(req)) { socket.destroy(); return; }
+  hub.handleUpgrade(req, socket, head, (client) => hub.emit('connection', client, url.searchParams));
+});
+terminalWss.on('connection', (socket, params) => {
+  const connection = { socket, params, input: '', sizes: [] };
+  terminalConnections.push(connection);
+  socket.send(JSON.stringify({ type: 'ready', cwd: detail.session.cwd }));
+  socket.send(Buffer.from('gate fixture> '));
+  socket.on('message', (data, binary) => {
+    if (binary) connection.input += data.toString();
+    else connection.sizes.push(JSON.parse(data.toString()));
+  });
+});
 const emit = (event = {}) => {
   if (historyProbe && event.type === 'delta' && event.itemId === 'current-39') probeStream += event.delta;
   for (const socket of wss.clients) socket.send(JSON.stringify({ serverId: server.id, threadId: detail.session.id, type: 'changed', ...event }));
@@ -667,6 +685,44 @@ try {
   assert.equal(await filePanel.getByLabel('File content', { exact: true }).count(), 0, 'A late file response cannot replace the new selection');
   await filePanel.getByRole('button', { name: 'Close files', exact: true }).click();
   assert.equal(writes.length, writesBeforeFiles, 'File browsing must never send model input or shell commands');
+  await page.setViewportSize({ width: 1365, height: 900 });
+  const chat = page.getByRole('region', { name: 'Conversation', exact: true });
+  const chatHeight = (await chat.boundingBox()).height;
+  const terminalPanel = page.getByRole('complementary', { name: 'Session terminal', exact: true });
+  await page.getByRole('button', { name: 'Open terminal', exact: true }).click();
+  await terminalPanel.locator('canvas').waitFor();
+  const terminalHeight = (await terminalPanel.boundingBox()).height;
+  await page.getByRole('button', { name: 'Open files', exact: true }).click();
+  await filePanel.waitFor();
+  const [filesBox, terminalBox] = await Promise.all([filePanel.boundingBox(), terminalPanel.boundingBox()]);
+  assert.equal(filesBox.x, terminalBox.x);
+  assert.equal(filesBox.width, terminalBox.width);
+  assert.ok(filesBox.y + filesBox.height <= terminalBox.y);
+  assert.equal((await chat.boundingBox()).height, chatHeight);
+  await terminalPanel.locator('canvas').click();
+  await page.keyboard.type('pwd');
+  await page.keyboard.press('Enter');
+  assert.equal(terminalConnections.at(-1).params.get('server'), server.id);
+  assert.equal(terminalConnections.at(-1).params.get('session'), detail.session.id);
+  for (let i = 0; i < 20 && terminalConnections.at(-1).input !== 'pwd\r'; i++) await page.waitForTimeout(50);
+  assert.equal(terminalConnections.at(-1).input, 'pwd\r');
+  await filePanel.getByRole('button', { name: 'Close files', exact: true }).click();
+  assert.equal((await terminalPanel.boundingBox()).height, terminalHeight);
+  await terminalPanel.getByRole('button', { name: 'Close terminal', exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.getByRole('button', { name: 'Open files', exact: true }).click();
+  await page.getByRole('button', { name: 'Open terminal', exact: true }).click();
+  await terminalPanel.waitFor();
+  assert.equal((await terminalPanel.boundingBox()).width, 390);
+  assert.ok((await terminalPanel.boundingBox()).y >= (await filePanel.boundingBox()).height);
+  assert.equal(await chat.isVisible(), false);
+  assert.equal(terminalConnections.length, 1, 'Opening a hidden terminal reuses its socket');
+  assert.ok(terminalConnections[0].sizes.length > 0, 'Fit changes are sent to the PTY');
+  await page.getByRole('button', { name: 'Back to conversation', exact: true }).click();
+  assert.equal(await page.getByLabel('Message', { exact: true }).inputValue(), 'Draft stays while browsing files');
+  await page.getByRole('button', { name: 'Open terminal', exact: true }).click();
+  await terminalPanel.getByRole('button', { name: 'End terminal', exact: true }).click();
+  assert.equal(await chat.isVisible(), true);
   // Format previews reuse source content, resolve assets beside the file, and isolate untrusted HTML.
   await page.getByRole('button', { name: 'Open files', exact: true }).click();
   await filePanel.getByRole('button', { name: 'Back to files', exact: true }).click();
@@ -1375,13 +1431,17 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Add server', exact: true }).count(), 1, 'Empty sidebar has one add-server entry');
   await checkGateways();
   assert.deepEqual(errors, []);
-  console.log('Browser smoke passed: sign-in, gateway aggregation and relay, sidebar, mobile, SSH import, filters, history, chat, approvals, files, reconnect.');
+  console.log('Browser smoke passed: sign-in, gateway aggregation and relay, sidebar, mobile, SSH import, filters, history, chat, approvals, files, terminal, reconnect.');
 } catch (error) {
   await shot('failure');
   console.error(await page.locator('body').innerText());
   console.error(errors);
   throw error;
 } finally {
-  gateways.close(); await browser.close(); for (const socket of wss.clients) socket.terminate();
-  await new Promise(resolve => wss.close(resolve)); await new Promise(resolve => http.close(resolve)); db.close();
+  gateways.close(); await browser.close();
+  for (const hub of [wss, terminalWss]) {
+    for (const socket of hub.clients) socket.terminate();
+    await new Promise(resolve => hub.close(resolve));
+  }
+  await new Promise(resolve => http.close(resolve)); db.close();
 }

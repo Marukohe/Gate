@@ -73,7 +73,13 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
   resolve beside the viewed file. HTML is parsed in an inert document and rendered only in an opaque sandboxed iframe
   with restrictive CSP; no scripts, forms, nested frames or external stylesheets. Never inject it into Gate's document.
   Browser-memory directory/file selection is keyed by connection and native session; abort stale reads on navigation.
-  Compact windows temporarily hide the left sidebar; mobile shows one pane. Preserve chat drafts/scroll and exclude file-pane paste.
+  Compact windows temporarily hide the left sidebar; mobile shows the right sidebar in place of chat, with an explicit return.
+  Preserve chat drafts/scroll and keep sidebar paste outside the composer.
+- Files and Terminal toggle independently in the same resizable right sidebar. When both are open, files are above
+  the terminal. Render the terminal with Ghostty Web only when requested. Its authenticated WebSocket carries byte
+  input/output and PTY sizes. Start the shell on the owning SSH account in the native session cwd, via the owning Gate
+  for peer sessions. The shell has its own SSH connection and remains mounted while folded. Closing the connection
+  ends the shell without interrupting the tool backend.
 - Scrolling upward near the chat top loads one native history page at a time. Prepending anchors the visible message
   before paint; manual loading/retry remains available. Initial bottom positioning must not drain history pages.
   Auto-load once per entry into the top zone; failed requests wait for explicit retry.
@@ -97,6 +103,7 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - `server/src/ssh.ts`: shared SSH connection, quoting, shell commands and Git metadata lookup.
 - `server/src/ssh-config.ts`: local SSH alias discovery and OpenSSH-resolved connection-field import.
 - `server/src/session-files.ts`: bounded SFTP directory/file reads, inert text previews with line anchors, images, and downloads.
+- `server/src/terminal/session.ts` and `client/src/components/terminal/TerminalPane.tsx`: SSH PTY bridge and browser renderer.
 - `server/src/types.ts`: shared browser/server response types.
 - `server/src/db.ts`: server settings, persistent visibility rules/archives, and one-time preservation of old Gate data.
 - `server/src/routes.ts` / `index.ts`: HTTP API and browser event delivery.

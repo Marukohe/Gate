@@ -58,7 +58,7 @@ SFTP over that connection's existing SSH transport for both tools, without promp
 to 1,000 entries; valid symlinks are followed, while broken links and special files cannot be opened. Text previews are
 read-only and escaped; images, new-tab opening and downloads reuse the session-scoped file endpoint. Reads are capped at
 10 MB, with text previews up to 1 MB. Each conversation remembers its last directory/file in browser memory; stale reads
-are discarded after navigation. Compact windows temporarily hide the session list and phones show the file pane alone;
+are discarded after navigation. Compact windows temporarily hide the session list and phones show the right sidebar full-screen;
 closing it restores chat with its draft and reading position preserved.
 Markdown and HTML files offer Source / Preview using the already-loaded text. Markdown shares the chat renderer, resolving
 local links/images relative to the file and keeping heading anchors inside the preview. HTML renders inline styles and images
@@ -66,6 +66,11 @@ in an opaque sandboxed iframe with a restrictive CSP. Parsing is inert; scripts,
 are disabled. Original source remains available through the file endpoint and downloads.
 The PWA caches the app shell but excludes `/api` and `/ws` from navigation fallback. Opening file URLs in new tabs
 preserves server text/image/download responses and errors instead of substituting the Gate home page.
+
+The right sidebar also has an independent interactive terminal. With both tools visible, files appear above the terminal.
+The terminal uses Ghostty Web and an authenticated WebSocket to an SSH PTY on the session's owner. It starts in the
+native working directory and keeps running while folded in the same tab. `exit`, **End terminal**, or leaving the page
+ends the shell. Shell input goes directly to the PTY and does not enter the AI conversation.
 
 The panel groups sessions by repository under each server. Read-only Git metadata merges repository subdirectories
 and linked worktrees; separate clones remain separate, even with the same name. Non-Git or unavailable directories

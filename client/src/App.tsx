@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
-import { LogOut, MessageSquare, Moon, Network, PanelLeftClose, Plus, Sun } from 'lucide-react';
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import { ArrowLeft, LogOut, MessageSquare, Moon, Network, PanelLeftClose, Plus, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ServerDialog } from '@/components/server/ServerDialog';
 import { GatewayDialog } from '@/components/server/GatewayDialog';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { SidebarResizeHandle } from '@/components/layout/SidebarResizeHandle';
+import { SessionTools } from '@/components/layout/SessionTools';
 import { SessionMonitor, type MonitorFilter } from '@/components/monitor/SessionMonitor';
 import { FileBrowser } from '@/components/files/FileBrowser';
 import { SessionView } from '@/components/chat/SessionView';
@@ -15,6 +16,10 @@ import { useMonitorStore } from '@/stores/monitor-store';
 import { needsAttention, otherSessions, type SessionTarget } from '@/lib/attention';
 import { groupServers, serverLabel } from '@/lib/server-groups';
 import { fitSidebarWidths, sidebarLimits, type SidebarWidths } from '@/lib/sidebar-widths';
+import { sessionKey, useSessionViewStore } from '@/stores/session-view-store';
+import type { TerminalTarget } from '@/components/terminal/TerminalPane';
+
+const TerminalPane = lazy(() => import('@/components/terminal/TerminalPane'));
 
 const mobileQuery = matchMedia('(max-width: 767px)');
 const subscribeViewport = (callback: () => void) => {
@@ -33,20 +38,24 @@ export default function App({ onSignOut }: { onSignOut: () => void }) {
   const mobile = viewport < 768;
   const compact = viewport < 1200;
   const [filesOpen, setFilesOpen] = useState(false);
+  const [terminalKey, setTerminalKey] = useState<string | null>(null);
+  const [terminals, setTerminals] = useState<TerminalTarget[]>([]);
+  const toolsOpen = !!selected && (filesOpen || terminalKey !== null);
   const [mobileOpen, setMobileOpen] = useState(() => !route());
   const sidebarRef = useRef<HTMLElement>(null);
   const desktopOpen = useUIStore((s) => s.sidebarOpen);
   const setDesktopOpen = useUIStore((s) => s.setSidebarOpen);
   const toggleDark = useUIStore((s) => s.toggleDarkMode);
-  const sidebarOpen = mobile ? mobileOpen : desktopOpen && !(selected && filesOpen && compact);
+  const sidebarOpen = mobile ? mobileOpen : desktopOpen && !(toolsOpen && compact);
   const preferredWidths = useUIStore((s) => s.sidebarWidths);
   const setSidebarWidths = useUIStore((s) => s.setSidebarWidths);
   const saveSidebarWidths = useUIStore((s) => s.saveSidebarWidths);
-  const fileSidebarOpen = !!selected && filesOpen && (!mobile || !sidebarOpen);
-  const widths = fitSidebarWidths(preferredWidths, viewport, !!sidebarOpen, fileSidebarOpen);
+  const rightSidebarOpen = toolsOpen && (!mobile || !sidebarOpen);
+  const widths = fitSidebarWidths(preferredWidths, viewport, !!sidebarOpen, rightSidebarOpen);
   const resizeHandle = (side: keyof SidebarWidths) => {
-    const otherWidth = side === 'sessions' ? (fileSidebarOpen ? widths.files : 0) : (sidebarOpen ? widths.sessions : 0);
+    const otherWidth = side === 'sessions' ? (rightSidebarOpen ? widths.files : 0) : (sidebarOpen ? widths.sessions : 0);
     return <SidebarResizeHandle side={side} width={widths[side]} min={sidebarLimits[side].min}
+      label={side === 'files' && terminalKey !== null ? 'Resize right sidebar' : undefined}
       max={Math.min(sidebarLimits[side].max, viewport - 440 - otherWidth)} defaultWidth={sidebarLimits[side].default}
       onChange={(width) => setSidebarWidths({ ...widths, [side]: width })} onCommit={saveSidebarWidths} />;
   };
@@ -64,6 +73,9 @@ export default function App({ onSignOut }: { onSignOut: () => void }) {
   const servers = useServerStore((s) => s.servers);
   const setServers = useServerStore((s) => s.setServers);
   const snapshot = useMonitorStore((state) => state.servers);
+  const nativeCwd = useSessionViewStore((state) => selected ? state.views[sessionKey(selected.serverId, selected.threadId)]?.detail?.session.cwd : undefined);
+  const cwd = nativeCwd || snapshot?.find((server) => server.id === selected?.serverId)
+    ?.sessions.find((session) => session.id === selected?.threadId)?.cwd;
   const gateways = useMonitorStore((state) => state.gateways);
   const monitorError = useMonitorStore((state) => state.error);
   const groups = groupServers(snapshot ?? []);
@@ -79,7 +91,12 @@ export default function App({ onSignOut }: { onSignOut: () => void }) {
   const refresh = () => api<Server[]>('/servers').then(setServers).catch((e) => setError(e.message));
   useEffect(() => { void api<Server[]>('/servers').then(setServers).catch((e) => setError(e.message)); }, [setServers]);
   useEffect(() => {
-    const change = () => { const next = route(); setSelected(next); setMobileOpen(!next); if (mobileQuery.matches || !next) setFilesOpen(false); if (!next) setReturnTo(null); setError(''); };
+    const change = () => {
+      const next = route();
+      setSelected(next); setMobileOpen(!next); setTerminalKey(null); setError('');
+      if (mobileQuery.matches || !next) setFilesOpen(false);
+      if (!next) setReturnTo(null);
+    };
     window.addEventListener('hashchange', change);
     return () => window.removeEventListener('hashchange', change);
   }, []);
@@ -90,6 +107,7 @@ export default function App({ onSignOut }: { onSignOut: () => void }) {
   const open = (serverId: string, threadId: string, message = '') => {
     history.pushState(null, '', `#session/${encodeURIComponent(serverId)}/${encodeURIComponent(threadId)}`);
     if (mobileQuery.matches) setFilesOpen(false);
+    if (selected?.serverId !== serverId || selected.threadId !== threadId) setTerminalKey(null);
     setSelected({ serverId, threadId }); setMobileOpen(false); setError(message);
     if (mobileQuery.matches) requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('button[aria-label="Open sidebar"]')?.focus());
   };
@@ -102,9 +120,10 @@ export default function App({ onSignOut }: { onSignOut: () => void }) {
     } catch (error) { window.alert((error as Error).message); }
   };
   const gatewaysChanged = (removed?: string) => {
+    if (removed) setTerminals((items) => items.filter((terminal) => !terminal.serverId.startsWith(`${removed}~`)));
     if (removed && selected?.serverId.startsWith(`${removed}~`)) {
       history.replaceState(null, '', location.pathname + location.search);
-      setSelected(null); setMobileOpen(true); setFilesOpen(false); setReturnTo(null);
+      setSelected(null); setMobileOpen(true); setFilesOpen(false); setTerminalKey(null); setReturnTo(null);
     }
     void refresh(); void useMonitorStore.getState().refresh();
   };
@@ -114,7 +133,7 @@ export default function App({ onSignOut }: { onSignOut: () => void }) {
   };
   const canReturn = selected && returnTo && (selected.serverId !== returnTo.serverId || selected.threadId !== returnTo.threadId);
   const showSidebar = () => {
-    if (compact) setFilesOpen(false);
+    if (compact) { setFilesOpen(false); setTerminalKey(null); }
     setSidebarOpen(true);
     requestAnimationFrame(() => sidebarRef.current?.querySelector<HTMLButtonElement>('button')?.focus());
   };
@@ -122,11 +141,28 @@ export default function App({ onSignOut }: { onSignOut: () => void }) {
     setSidebarOpen(false);
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('button[aria-label="Open sidebar"]')?.focus());
   };
-  const closeFiles = () => {
-    setFilesOpen(false);
-    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('button[aria-label="Open files"]')?.focus());
+  const focusTool = (label: string) => {
+    requestAnimationFrame(() => [...document.querySelectorAll<HTMLButtonElement>(`button[aria-label="${label}"]`)]
+      .find((button) => button.getClientRects().length)?.focus());
   };
-  return <div className="gate-shell" data-sidebar-open={sidebarOpen} data-files-open={!!selected && filesOpen}
+  const closeFiles = () => { setFilesOpen(false); focusTool('Open files'); };
+  const closeTerminal = () => { setTerminalKey(null); focusTool('Open terminal'); };
+  const toggleTerminal = () => {
+    if (terminalKey !== null) { closeTerminal(); return; }
+    if (!selected || !cwd) return;
+    const account = servers.find((server) => server.id === selected.serverId)?.sshAccountId ?? selected.serverId;
+    const key = JSON.stringify([account, cwd]);
+    setTerminals((items) => items.some((terminal) => terminal.key === key) ? items : [...items, { ...selected, cwd, key }]);
+    setMobileOpen(false);
+    setTerminalKey(key);
+    if (mobile) focusTool('Hide terminal');
+  };
+  const tools = {
+    filesOpen,
+    onFiles: () => { if (filesOpen) closeFiles(); else { setMobileOpen(false); setFilesOpen(true); } },
+    terminalOpen: terminalKey !== null, onTerminal: toggleTerminal, terminalAvailable: !!cwd,
+  };
+  return <div className="gate-shell" data-sidebar-open={sidebarOpen} data-tools-open={rightSidebarOpen}
     style={{ '--sessions-width': `${widths.sessions}px`, '--files-width': `${widths.files}px` } as CSSProperties}>
     {/* Keep the monitor and chat mounted when hiding a pane: drafts, scroll and tree state belong to the session. */}
     <aside id="session-sidebar" ref={sidebarRef} aria-label="Sessions" className="gate-sidebar" hidden={!sidebarOpen}
@@ -152,12 +188,12 @@ export default function App({ onSignOut }: { onSignOut: () => void }) {
     {!mobile && sidebarOpen && resizeHandle('sessions')}
     <div className="gate-workspace">
       <AppHeader current={selected} onOpen={attentionOpen} onShowSidebar={showSidebar} sidebarOpen={!!sidebarOpen}
-        filesOpen={filesOpen} onFiles={() => { if (filesOpen) closeFiles(); else { setMobileOpen(false); setFilesOpen(true); } }}
+        tools={tools}
         sessionTitleRef={setSessionTitleTarget}
         back={canReturn && returnTo ? { label: `Return to ${returnName}`, run: () => { open(returnTo.serverId, returnTo.threadId); setReturnTo(null); } } : undefined}
         next={canReturn && pending[0] ? { count: pending.length, run: () => open(pending[0].serverId, pending[0].threadId) } : undefined} />
       <div className="min-h-0 flex-1">
-        {selected ? <SessionView key={`${selected.serverId}:${selected.threadId}`} {...selected} initialError={error} visible={!mobile || (!sidebarOpen && !filesOpen)}
+        {selected ? <SessionView key={`${selected.serverId}:${selected.threadId}`} {...selected} initialError={error} visible={!mobile || (!sidebarOpen && !rightSidebarOpen)}
           serverName={selectedGroup ? serverLabel(selectedGroup) : servers.find((s) => s.id === selected.serverId)?.name ?? 'Server'} headerTarget={sessionTitleTarget} onHome={showSidebar} />
           : <main className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
             <MessageSquare className="mb-1 size-7 text-muted-foreground/50" />
@@ -167,8 +203,22 @@ export default function App({ onSignOut }: { onSignOut: () => void }) {
           </main>}
       </div>
     </div>
-    {!mobile && fileSidebarOpen && resizeHandle('files')}
-    {selected && <FileBrowser key={`${selected.serverId}:${selected.threadId}`} {...selected} open={fileSidebarOpen} onClose={closeFiles} />}
+    {!mobile && rightSidebarOpen && resizeHandle('files')}
+    <div id="session-tools" className="right-sidebar" hidden={!rightSidebarOpen}>
+      {mobile && <div className="gate-header shrink-0">
+        <Button size="icon-sm" variant="ghost" aria-label="Back to conversation" title="Back to conversation"
+          onClick={() => { setFilesOpen(false); setTerminalKey(null); focusTool(terminalKey ? 'Open terminal' : 'Open files'); }}><ArrowLeft /></Button>
+        <div className="flex-1" />
+        <SessionTools {...tools} />
+      </div>}
+      {selected && <FileBrowser key={`${selected.serverId}:${selected.threadId}`} {...selected} open={rightSidebarOpen && filesOpen} onClose={closeFiles} />}
+      <div id="session-terminals" className="terminal-stack" hidden={terminalKey === null}>
+        {terminals.map((target) => <Suspense key={target.key} fallback={target.key === terminalKey && <p role="status" className="p-3 text-sm text-muted-foreground">Loading terminal…</p>}>
+          <TerminalPane target={target} open={rightSidebarOpen && target.key === terminalKey} onHide={closeTerminal}
+            onEnd={() => { setTerminals((items) => items.filter((item) => item.key !== target.key)); closeTerminal(); }} />
+        </Suspense>)}
+      </div>
+    </div>
     {showGateways && <GatewayDialog gateways={gateways} onClose={() => setShowGateways(false)} onSaved={gatewaysChanged} />}
     <ServerDialog open={dialog} onOpenChange={setDialog} editServer={editing} accounts={editingGroup?.accounts}
       connections={editingGroup?.connections.filter((connection) => !servers.find((server) => server.id === connection.id)?.sshAccountId)}

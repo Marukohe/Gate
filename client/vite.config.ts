@@ -26,6 +26,8 @@ export default defineConfig({
         navigateFallback: '/index.html',
         // File previews/downloads are server responses, including when opened as a new page.
         navigateFallbackDenylist: [/^\/api(?:\/|\?|$)/, /^\/ws(?:\/|\?|$)/],
+        // The optional terminal bundle contains its own WASM and loads on first use.
+        globIgnores: ['**/TerminalPane-*.js'],
       },
     }),
   ],

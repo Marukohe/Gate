@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export function SidebarResizeHandle({ side, width, min, max, defaultWidth, onChange, onCommit }: {
+export function SidebarResizeHandle({ side, width, min, max, defaultWidth, label, onChange, onCommit }: {
   side: 'sessions' | 'files'; width: number; min: number; max: number; defaultWidth: number;
+  label?: string;
   onChange: (width: number) => void; onCommit: () => void;
 }) {
   const drag = useRef<{ pointerId: number; x: number; width: number } | null>(null);
@@ -19,8 +20,8 @@ export function SidebarResizeHandle({ side, width, min, max, defaultWidth, onCha
     return () => window.removeEventListener('blur', finish);
   }, [finish]);
   useEffect(() => () => { if (drag.current) onCommit(); }, [onCommit]);
-  return <div role="separator" tabIndex={0} aria-label={`Resize ${side} sidebar`} aria-orientation="vertical"
-    aria-controls={side === 'sessions' ? 'session-sidebar' : 'session-files'}
+  return <div role="separator" tabIndex={0} aria-label={label ?? `Resize ${side} sidebar`} aria-orientation="vertical"
+    aria-controls={side === 'sessions' ? 'session-sidebar' : 'session-tools'}
     aria-valuemin={min} aria-valuemax={max} aria-valuenow={width} aria-valuetext={`${width} pixels`}
     title="Drag to resize · Double-click to reset" className="sidebar-resize-handle" data-dragging={dragging}
     onPointerDown={(event) => {

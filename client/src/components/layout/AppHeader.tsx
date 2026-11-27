@@ -1,12 +1,13 @@
-import { ArrowLeft, ArrowRight, PanelLeft, PanelRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SessionAttention } from './SessionAttention';
+import { SessionTools, type SessionToolActions } from './SessionTools';
 import type { SessionTarget } from '@/lib/attention';
 
-export function AppHeader({ current, onOpen, onShowSidebar, sidebarOpen, filesOpen, onFiles, sessionTitleRef, back, next }: {
+export function AppHeader({ current, onOpen, onShowSidebar, sidebarOpen, tools, sessionTitleRef, back, next }: {
   current: SessionTarget | null; onOpen: (serverId: string, threadId: string) => void;
   onShowSidebar: () => void; sidebarOpen: boolean;
-  filesOpen: boolean; onFiles: () => void;
+  tools: SessionToolActions;
   sessionTitleRef: (node: HTMLDivElement | null) => void;
   back?: { label: string; run: () => void }; next?: { count: number; run: () => void };
 }) {
@@ -17,7 +18,6 @@ export function AppHeader({ current, onOpen, onShowSidebar, sidebarOpen, filesOp
     <div ref={sessionTitleRef} className="min-w-0 flex-1">{!current && <span className="px-2 text-sm font-medium text-muted-foreground">Gate</span>}</div>
     {next && <Button size="icon-sm" variant="ghost" aria-label={`Next needs you · ${next.count}`} title={`Next needs you · ${next.count}`} onClick={next.run}><ArrowRight /></Button>}
     <SessionAttention current={current} onOpen={onOpen} />
-    {current && <Button size="icon-sm" variant="ghost" aria-label={filesOpen ? 'Hide files' : 'Open files'} title={filesOpen ? 'Hide files' : 'Open files'}
-      aria-controls="session-files" aria-expanded={filesOpen} onClick={onFiles}><PanelRight /></Button>}
+    {current && <SessionTools {...tools} />}
   </header>;
 }
