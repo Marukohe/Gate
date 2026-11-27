@@ -38,6 +38,7 @@ async function peerJson<T>(peer: Pick<GatewayConnection, 'url' | 'token'>, path:
 interface Link {
   peer: GatewayConnection;
   socket?: WebSocket;
+  terminals: Set<WebSocket>;
   retry?: NodeJS.Timeout;
   monitor?: Promise<void>;
   snapshot: MonitorServer[];
@@ -52,7 +53,7 @@ export class Gateways {
   }
 
   private connect(peer: GatewayConnection) {
-    const link: Link = { peer, snapshot: [], settings: [] };
+    const link: Link = { peer, snapshot: [], settings: [], terminals: new Set() };
     this.links.set(peer.id, link);
     this.openSocket(link);
   }
@@ -93,9 +94,34 @@ export class Gateways {
     this.links.delete(id);
     clearTimeout(link.retry);
     link.socket?.terminate();
+    for (const terminal of link.terminals) terminal.terminate();
   }
 
   close() { for (const id of this.links.keys()) this.disconnect(id); }
+
+  private owner(id: string) {
+    const delimiter = id.indexOf('~');
+    if (delimiter < 0) return;
+    const link = this.links.get(id.slice(0, delimiter));
+    const localId = id.slice(delimiter + 1);
+    if (!link || !identifier.test(localId)) throw new Error('Gate connection not found.');
+    return { link, localId };
+  }
+
+  terminal(id: string, query: URLSearchParams) {
+    const owner = this.owner(id);
+    if (!owner) return;
+    const { link, localId } = owner;
+    const address = new URL('/ws/terminal', link.peer.url);
+    address.protocol = address.protocol === 'https:' ? 'wss:' : 'ws:';
+    address.search = new URLSearchParams({ ...Object.fromEntries(query), server: localId }).toString();
+    const socket = new WebSocket(address, {
+      headers: { Authorization: `Bearer ${link.peer.token}` }, handshakeTimeout: 5_000, maxPayload: 256 * 1024,
+    });
+    link.terminals.add(socket);
+    socket.once('close', () => link.terminals.delete(socket));
+    return socket;
+  }
 
   async monitor() {
     const links = [...this.links.values()];
@@ -158,12 +184,11 @@ export class Gateways {
 
   private forward(family: 'servers' | 'ssh/accounts'): RequestHandler {
     return async (req, res, next) => {
-      const id = String(req.params.id);
-      const delimiter = id.indexOf('~');
-      if (delimiter < 0) { next(); return; }
-      const link = this.links.get(id.slice(0, delimiter));
-      const localId = id.slice(delimiter + 1);
-      if (!link || !identifier.test(localId)) { res.status(404).json({ error: 'Gate connection not found.' }); return; }
+      let owner;
+      try { owner = this.owner(String(req.params.id)); }
+      catch (error) { res.status(404).json({ error: (error as Error).message }); return; }
+      if (!owner) { next(); return; }
+      const { link, localId } = owner;
       const prefix = `/api/${family}/${localId}`;
       const target = new URL(link.peer.url + prefix + req.url);
       if (target.pathname !== prefix && !target.pathname.startsWith(prefix + '/')) {

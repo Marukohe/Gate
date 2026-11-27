@@ -183,11 +183,15 @@ export class CodexService extends EventEmitter implements AgentBackend {
   }
   async shell(serverId: string, threadId: string, command: string) {
     const rpc = await this.connection(this.entry(serverId));
-    const { thread } = await rpc.request('thread/read', { threadId });
-    const cwd = sessionFromThread(thread).cwd;
+    const cwd = await this.workingDirectory(serverId, threadId);
     if (!cwd.startsWith('/') || cwd.includes('\0')) throw new Error('Session working directory is unavailable');
     // Direct SSH execution: no turn, prompt, or command output is sent to the model.
     return rpc.shell(cwd, command);
+  }
+  async workingDirectory(serverId: string, threadId: string) {
+    const rpc = await this.connection(this.entry(serverId));
+    const { thread } = await rpc.request('thread/read', { threadId });
+    return sessionFromThread(thread).cwd;
   }
   async create(serverId: string, cwd: string) {
     const entry = this.entry(serverId);

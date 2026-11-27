@@ -294,10 +294,14 @@ export class AgyService extends EventEmitter implements AgentBackend {
   }
   async shell(serverId: string, id: string, command: string) {
     const entry = this.entry(serverId); const rpc = await this.connection(entry);
-    if (!entry.sessions.some((session) => session.id === id)) await this.refresh(serverId);
-    const cwd = this.session(entry, id).cwd;
+    const cwd = await this.workingDirectory(serverId, id);
     if (!cwd.startsWith('/') || cwd.includes('\0')) throw new Error('Session working directory is unavailable');
     return rpc.shell(cwd, command);
+  }
+  async workingDirectory(serverId: string, id: string) {
+    const entry = this.entry(serverId);
+    if (!entry.sessions.some((session) => session.id === id)) await this.refresh(serverId);
+    return this.session(entry, id).cwd;
   }
   close() { for (const entry of this.entries.values()) { entry.controller.abort(); entry.rpc?.close(); } this.entries.clear(); }
 }

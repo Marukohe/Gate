@@ -44,6 +44,7 @@ export class AgentService extends EventEmitter implements AgentBackend {
   }
   monitor() { return { servers: [...this.registrations.values()].flatMap(({ backend }) => backend.monitor().servers) }; }
   detail(id: string, session: string, cursor?: string) { return this.backend(id).detail(id, session, cursor); }
+  workingDirectory(id: string, session: string) { return this.backend(id).workingDirectory(id, session); }
   create(id: string, cwd: string) { return this.backend(id).create(id, cwd); }
   models(id: string, session?: string) { return this.backend(id).models(id, session); }
   async input(id: string, session: string, text: string, turn?: string, model?: string, effort?: string, images?: unknown) {

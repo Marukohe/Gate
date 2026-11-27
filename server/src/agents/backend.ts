@@ -6,6 +6,7 @@ export interface AgentBackend {
   sync(servers: Server[]): void;
   monitor(): { servers: MonitorServer[] };
   detail(serverId: string, sessionId: string, cursor?: string): Promise<SessionDetail>;
+  workingDirectory(serverId: string, sessionId: string): Promise<string>;
   create(serverId: string, cwd: string): Promise<Session>;
   models(serverId: string, sessionId?: string): Promise<ModelOption[]>;
   input(serverId: string, sessionId: string, text: string, turnId?: string, model?: string, effort?: string, images?: unknown): Promise<unknown>;

@@ -11,6 +11,7 @@ import { routes } from './routes.js';
 import { INPUT_BODY_LIMIT } from './images.js';
 import { gateAuth, loadAccessToken } from './auth.js';
 import { Gateways } from './gateways.js';
+import { openTerminal } from './terminal/session.js';
 
 const app = express();
 const dataDir = process.env.GATE_DATA_DIR || path.join(os.homedir(), '.gate');
@@ -27,16 +28,9 @@ app.use(express.json({ limit: INPUT_BODY_LIMIT }));
 const agents = createAgentService();
 const http = createServer(app);
 const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 });
+const terminalWss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
 const localOnly = new WeakSet<WebSocket>();
-http.on('upgrade', (req, socket, head) => {
-  if (req.url?.split('?')[0] !== '/ws') { socket.destroy(); return; }
-  if (!access.auth(req)) { socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); return; }
-  wss.handleUpgrade(req, socket, head, (client) => {
-    if (new URLSearchParams(req.url?.split('?')[1]).get('local') === '1') localOnly.add(client);
-    wss.emit('connection', client, req);
-  });
-});
-// Browser sockets only receive events. Mutations are explicit HTTP requests and are never queued or replayed.
+// Session event sockets are read-only. Interactive terminals have their own byte stream.
 const broadcast = (event: object, relayed = false) => {
   const data = JSON.stringify(event);
   for (const client of wss.clients) if (client.readyState === WebSocket.OPEN && !(relayed && localOnly.has(client))) {
@@ -45,23 +39,39 @@ const broadcast = (event: object, relayed = false) => {
 };
 agents.on('event', broadcast);
 const gateways = new Gateways(db, (event) => broadcast(event, true));
+http.on('upgrade', (req, socket, head) => {
+  const [pathname, search] = (req.url ?? '').split('?', 2);
+  const hub = pathname === '/ws' ? wss : pathname === '/ws/terminal' ? terminalWss : undefined;
+  if (!hub) { socket.destroy(); return; }
+  if (!access.auth(req)) { socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); return; }
+  const query = new URLSearchParams(search);
+  hub.handleUpgrade(req, socket, head, (client) => {
+    if (hub === wss && query.get('local') === '1') localOnly.add(client);
+    hub.emit('connection', client, req);
+    if (hub === terminalWss) void openTerminal(client, query, db, agents, gateways);
+  });
+});
 app.use('/api', gateways.router());
 app.use('/api', routes(db, agents, undefined, undefined, gateways));
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   res.status(400).json({ error: error.message });
 });
+const alive = new WeakSet<WebSocket>();
+const hubs = [wss, terminalWss];
 const heartbeat = setInterval(() => {
-  for (const client of wss.clients) {
-    if (!(client as any).alive) { client.terminate(); continue; }
-    (client as any).alive = false; client.ping();
+  for (const hub of hubs) for (const client of hub.clients) {
+    if (!alive.delete(client)) { client.terminate(); continue; }
+    if (client.readyState === WebSocket.OPEN) client.ping();
   }
 }, 30_000);
-wss.on('connection', (client, req) => {
-  (client as any).alive = true;
-  client.on('pong', () => { (client as any).alive = true; });
+for (const hub of hubs) hub.on('connection', (client, req) => {
+  alive.add(client);
   client.on('error', () => client.terminate());
-  client.on('pong', () => { if (!access.auth(req)) client.close(1008, 'Access expired'); });
+  client.on('pong', () => {
+    if (access.auth(req)) alive.add(client);
+    else client.close(1008, 'Access expired');
+  });
 });
 const clientDist = fileURLToPath(new URL('../../client/dist/', import.meta.url));
 if (fs.existsSync(path.join(clientDist, 'index.html'))) {
@@ -73,7 +83,10 @@ const host = process.env.HOST || '0.0.0.0';
 http.listen(port, host, () => console.log(`Gate running on http://${host}:${port}\nAccess token: ${source}`));
 function shutdown() {
   clearInterval(heartbeat); gateways.close(); agents.close(); db.close();
-  for (const client of wss.clients) client.terminate();
-  wss.close(); http.close(() => process.exit(0));
+  for (const hub of hubs) {
+    for (const client of hub.clients) client.terminate();
+    hub.close();
+  }
+  http.close(() => process.exit(0));
 }
 process.on('SIGTERM', shutdown); process.on('SIGINT', shutdown);
