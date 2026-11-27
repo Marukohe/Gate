@@ -47,8 +47,9 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     proxy: {
-      '/api': 'http://localhost:3030',
-      '/ws': { target: 'ws://localhost:3030', ws: true }
+      // The backend checks the browser's Origin against the requested Host.
+      '/api': { target: 'http://localhost:3030', changeOrigin: false },
+      '/ws': { target: 'ws://localhost:3030', ws: true, changeOrigin: false }
     }
   }
 })

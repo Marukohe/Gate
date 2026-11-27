@@ -138,6 +138,7 @@ SSH 服务器需要允许 Unix socket 转发，无需公开 Codex 网络端口�
 
 Gate 的 API 和实时事件都需要实例 token。浏览器登录有效期为 30 天，刷新或重启后继续生效。
 可点击 **Sign out** 退出。自动生成的 token 放在 Gate 的数据目录中。可信内网之外，浏览器访问和 Gate 之间的连接都请使用 HTTPS。
+使用反向代理时，保留浏览器访问的 `Host` 请求头，并转发 WebSocket 升级请求。
 token 可以访问整个实例。远端 Gate 的地址和 token、SSH 配置、目录过滤及归档保存在 `~/.gate/gate.db`。
 远端 token 由服务端用于转发。远端更换 token 后，在 **Gateways** 中更新对应连接。
 显示配置在 Gate 重启后仍生效，所有访问此 Gate 的浏览器共用。

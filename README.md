@@ -159,6 +159,7 @@ See [session behavior](docs/session-monitor.md) for status and connection detail
 Gate protects its API and event streams with an instance access token. Browser sign-in lasts 30 days and survives a
 refresh or restart. **Sign out** clears the browser session. The generated token file lives in the selected data directory.
 Use HTTPS for browser and inter-Gate access outside a trusted local network. A token grants access to the whole instance.
+Reverse proxies should preserve the browser-facing `Host` header and forward WebSocket upgrades.
 Gate keeps peer addresses and tokens alongside SSH settings, directory filters, and Gate archives in `~/.gate/gate.db`.
 The server retains the remote tokens and uses them to proxy requests. A token change requires updating saved connections to that Gate.
 Display preferences survive Gate restarts and apply to every browser using this Gate.
