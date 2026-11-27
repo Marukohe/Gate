@@ -52,6 +52,10 @@ Gate 通过统一后端接口路由操作。工具适配器负责原生协议，
    如果登录 PATH 中找不到工具，在 **Tool executable** 填写绝对路径。
    同一台机器同时使用 Codex 和 agy 时添加各自的工具连接，侧边栏会合并为一个服务器分组；已有 Codex 配置会自动迁移。
 
+运行 `gate update` 可将当前全局 npm 安装升级到 GitHub Release 的最新稳定版。
+用 `gate --version` 查看已安装版本。如果 Gate 正在运行，重启后加载新版。
+旧版如果还没有 `gate update`，可用上面的安装命令升级。
+
 导入需要 Gate 所在机器安装 OpenSSH。主机列表包含 `Include` 文件里的明确 `Host` 别名，通过 `ssh -G` 解析配置。
 保存的是可编辑的连接配置副本，不会修改 `~/.ssh/config`，也不自动跟随该文件之后的变化。
 依赖 ProxyJump、ProxyCommand 或证书的配置不能直接导入，需手动填写可直连的服务器。

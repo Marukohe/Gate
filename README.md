@@ -56,6 +56,10 @@ SSH access, repository grouping and the browser panel remain independent of it.
    Add each tool's connection to use Codex and agy on the same machine; the sidebar combines them under one server.
    Existing Codex settings migrate automatically.
 
+Run `gate update` to upgrade your global npm installation from the latest stable GitHub Release.
+Use `gate --version` to check the installed version, and restart Gate if it is running to load the update.
+For versions without `gate update`, use the installation command above to upgrade.
+
 SSH import requires local OpenSSH. It lists concrete `Host` aliases, including `Include` files, and uses `ssh -G`
 to resolve their settings. Gate saves an editable copy, does not change `~/.ssh/config`, and does not track later config edits.
 ProxyJump, ProxyCommand and certificate-based configurations cannot be imported as direct connections; use manual settings
