@@ -1,6 +1,7 @@
 import type { MonitorServer, Session } from '../../../server/src/types';
 
-export const serverKey = (server: { host: string; port?: number }) => JSON.stringify([server.host.trim().toLowerCase(), server.port ?? 22]);
+export const serverKey = (server: { host: string; port?: number; gatewayId?: string }) =>
+  JSON.stringify([server.gatewayId ?? '', server.host.trim().toLowerCase(), server.port ?? 22]);
 export const toolName = (connection: Pick<MonitorServer, 'tool' | 'toolName'>) => connection.toolName || connection.tool || 'Codex';
 export function connectionLabel(connection: MonitorServer, connections: MonitorServer[]) {
   const peers = connections.filter((other) => toolName(other) === toolName(connection));
@@ -9,15 +10,17 @@ export function connectionLabel(connection: MonitorServer, connections: MonitorS
 export interface ServerSession extends Session { connectionId: string; toolName: string; toolNote?: string; username: string }
 export interface ServerGroup {
   key: string; name: string; host: string; port: number;
+  gatewayName?: string;
   accounts: MonitorServer[]; connections: MonitorServer[]; sessions: ServerSession[];
 }
+export const serverLabel = (group: ServerGroup) => group.gatewayName ? `${group.name} · ${group.gatewayName}` : group.name;
 // Group presentation by SSH endpoint. Every action still retains its owning connection and native session ID.
 export function groupServers(connections: MonitorServer[]): ServerGroup[] {
   const groups = new Map<string, ServerGroup>();
   for (const connection of [...connections].sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))) {
     const key = serverKey(connection);
     if (!groups.has(key)) groups.set(key, { key, name: connection.name, host: connection.host, port: connection.port ?? 22,
-      accounts: [], connections: [], sessions: [] });
+      gatewayName: connection.gatewayName, accounts: [], connections: [], sessions: [] });
     const group = groups.get(key)!;
     if (connection.tool === 'ssh') { group.accounts.push(connection); continue; }
     group.connections.push(connection);

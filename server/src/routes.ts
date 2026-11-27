@@ -7,6 +7,7 @@ import type { Server } from './types.js';
 import { previewSessionFile, sendSessionFile } from './session-files.js';
 import { sshHosts } from './ssh-config.js';
 import { discoverTools } from './tool-discovery.js';
+import type { Gateways } from './gateways.js';
 
 function text(value: unknown, name: string, max = 200_000): string {
   if (typeof value !== 'string' || !value.trim() || value.length > max || value.includes('\0')) throw new Error(`Invalid ${name}`);
@@ -17,7 +18,7 @@ function filePath(value: unknown): string {
   if (typeof value !== 'string' || !value || value.length > 4096 || /[\0\r\n]/.test(value)) throw new Error('Invalid file path');
   return value;
 }
-export function routes(db: Database, agents: AgentService, hosts = sshHosts, discover = discoverTools) {
+export function routes(db: Database, agents: AgentService, hosts = sshHosts, discover = discoverTools, gateways?: Gateways) {
   const router = Router();
   const sync = () => agents.sync(db.listServers().filter((server) => server.tool !== 'ssh'));
   sync();
@@ -25,7 +26,11 @@ export function routes(db: Database, agents: AgentService, hosts = sshHosts, dis
   router.get('/ssh/hosts', async (_req, res) => res.json({ hosts: await hosts.list() }));
   router.get('/ssh/hosts/:alias', async (req, res) => res.json(await hosts.resolve(req.params.alias)));
   router.get('/health', (_req, res) => res.json({ status: 'ok' }));
-  router.get('/servers', (_req, res) => res.json(db.listServers().map(publicServer)));
+  router.get('/servers', async (req, res) => {
+    const local = db.listServers().map(publicServer);
+    const remote = req.query.local === '1' ? [] : await gateways?.servers() ?? [];
+    res.json([...local, ...remote]);
+  });
   router.get('/servers/:id/models', async (req, res) => res.json({ models: await agents.models(req.params.id, typeof req.query.session === 'string' ? req.query.session : undefined) }));
   const sshSettings = (body: any, existing?: Server) => {
     const port = Number(body.port ?? 22);
@@ -80,15 +85,17 @@ export function routes(db: Database, agents: AgentService, hosts = sshHosts, dis
     db.updateServer(server.id, settings(req.body, server)); sync(); res.json(publicServer(db.getServer(server.id)!));
   });
   router.delete('/servers/:id', (req, res) => { db.deleteServer(req.params.id); sync(); res.sendStatus(204); });
-  router.get('/monitor', (_req, res) => {
+  router.get('/monitor', async (req, res) => {
     const snapshot = agents.monitor();
     const accounts = db.listServers().filter((server) => server.tool === 'ssh').map(({ id, name, host, port, username, createdAt }) =>
       ({ id, name, host, port, username, createdAt, tool: 'ssh', state: 'connected', sessions: [], hasMore: false }));
-    res.json({ servers: [...accounts, ...snapshot.servers.map((server) => {
+    const local = [...accounts, ...snapshot.servers.map((server) => {
       const visibility = db.getVisibility(server.id);
       return { ...server, sessions: visibleSessions(server.sessions, visibility),
         hasFilters: visibility.excludedDirectories.length > 0 || visibility.archivedSessions.length > 0 };
-    })] });
+    })];
+    const remote = req.query.local === '1' ? undefined : await gateways?.monitor();
+    res.json({ servers: [...local, ...remote?.servers ?? []], gateways: remote?.gateways ?? [] });
   });
   router.use('/servers/:id/visibility', (req, res, next) => {
     if (!db.getServer(req.params.id)) return res.status(404).json({ error: 'Server not found' });

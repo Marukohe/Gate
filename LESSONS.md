@@ -4,6 +4,8 @@
   hiding task menus while retaining multiple execution systems does not reduce complexity.
   Tool connections are not separate displayed servers. Group by SSH host/port and tag sessions with their tool;
   preserve connection-plus-native-ID identity for navigation, drafts and archives even when native IDs collide.
+  Namespace peer connection IDs before merging snapshots and relaying events. Qualify server grouping by gateway,
+  since different Gate instances can use the same private SSH address. Use direct peer endpoints to avoid relay loops.
 - Keep each project heading to one row and toggle the whole folder. An expanded folder must include saved sessions
   from every tool, including after reload or a late monitor update; partial active-only lists falsely look complete.
   Paths and history controls should not add extra rows. Polling must preserve the user's collapsed state.

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
-import { LogOut, MessageSquare, Moon, PanelLeftClose, Plus, Sun } from 'lucide-react';
+import { LogOut, MessageSquare, Moon, Network, PanelLeftClose, Plus, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ServerDialog } from '@/components/server/ServerDialog';
+import { GatewayDialog } from '@/components/server/GatewayDialog';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { SidebarResizeHandle } from '@/components/layout/SidebarResizeHandle';
 import { SessionMonitor, type MonitorFilter } from '@/components/monitor/SessionMonitor';
@@ -12,7 +13,7 @@ import { useServerStore, type Server } from '@/stores/server-store';
 import { api } from '@/lib/api';
 import { useMonitorStore } from '@/stores/monitor-store';
 import { needsAttention, otherSessions, type SessionTarget } from '@/lib/attention';
-import { groupServers } from '@/lib/server-groups';
+import { groupServers, serverLabel } from '@/lib/server-groups';
 import { fitSidebarWidths, sidebarLimits, type SidebarWidths } from '@/lib/sidebar-widths';
 
 const mobileQuery = matchMedia('(max-width: 767px)');
@@ -56,12 +57,14 @@ export default function App({ onSignOut }: { onSignOut: () => void }) {
   const [returnTo, setReturnTo] = useState<SessionTarget | null>(null);
   const [sessionTitleTarget, setSessionTitleTarget] = useState<HTMLDivElement | null>(null);
   const [dialog, setDialog] = useState(false);
+  const [showGateways, setShowGateways] = useState(false);
   const [editing, setEditing] = useState<Server | null>(null);
   const [error, setError] = useState('');
   const dark = useUIStore((s) => s.darkMode);
   const servers = useServerStore((s) => s.servers);
   const setServers = useServerStore((s) => s.setServers);
   const snapshot = useMonitorStore((state) => state.servers);
+  const gateways = useMonitorStore((state) => state.gateways);
   const monitorError = useMonitorStore((state) => state.error);
   const groups = groupServers(snapshot ?? []);
   const selectedGroup = groups.find((group) => group.connections.some((connection) => connection.id === selected?.serverId));
@@ -91,6 +94,20 @@ export default function App({ onSignOut }: { onSignOut: () => void }) {
     if (mobileQuery.matches) requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('button[aria-label="Open sidebar"]')?.focus());
   };
   const add = () => { setEditing(null); setDialog(true); };
+  const editServer = async (id: string) => {
+    try {
+      const server = servers.find((entry) => entry.id === id) ?? (await api<Server[]>('/servers')).find((entry) => entry.id === id);
+      if (!server) throw new Error('Server settings are unavailable.');
+      setEditing(server); setDialog(true);
+    } catch (error) { window.alert((error as Error).message); }
+  };
+  const gatewaysChanged = (removed?: string) => {
+    if (removed && selected?.serverId.startsWith(`${removed}~`)) {
+      history.replaceState(null, '', location.pathname + location.search);
+      setSelected(null); setMobileOpen(true); setFilesOpen(false); setReturnTo(null);
+    }
+    void refresh(); void useMonitorStore.getState().refresh();
+  };
   const attentionOpen = (serverId: string, threadId: string) => {
     if (selected && !returnTo) setReturnTo(selected);
     open(serverId, threadId);
@@ -124,9 +141,10 @@ export default function App({ onSignOut }: { onSignOut: () => void }) {
           aria-expanded={true} onClick={closeSidebar}><PanelLeftClose /></Button>
       </div>
       <SessionMonitor current={selected} statusFilter={monitorFilter} onStatusFilter={setMonitorFilter} onOpen={(...args) => { setReturnTo(null); open(...args); }}
-        onEditServer={(id) => { setEditing(servers.find((s) => s.id === id) ?? null); setDialog(true); }} />
+        onEditServer={(id) => void editServer(id)} />
       <div className="sidebar-footer">
         <Button size="sm" variant="ghost" className="flex-1 justify-start" onClick={add}><Plus />Add server</Button>
+        <Button variant="ghost" size="icon-sm" aria-label="Gateways" title="Gateways" onClick={() => setShowGateways(true)}><Network /></Button>
         <Button variant="ghost" size="icon-sm" aria-label="Toggle theme" title="Toggle theme" onClick={toggleDark}>{dark ? <Sun /> : <Moon />}</Button>
         <Button variant="ghost" size="icon-sm" aria-label="Sign out" title="Sign out" onClick={onSignOut}><LogOut /></Button>
       </div>
@@ -140,7 +158,7 @@ export default function App({ onSignOut }: { onSignOut: () => void }) {
         next={canReturn && pending[0] ? { count: pending.length, run: () => open(pending[0].serverId, pending[0].threadId) } : undefined} />
       <div className="min-h-0 flex-1">
         {selected ? <SessionView key={`${selected.serverId}:${selected.threadId}`} {...selected} initialError={error} visible={!mobile || (!sidebarOpen && !filesOpen)}
-          serverName={selectedGroup?.name ?? servers.find((s) => s.id === selected.serverId)?.name ?? 'Server'} headerTarget={sessionTitleTarget} onHome={showSidebar} />
+          serverName={selectedGroup ? serverLabel(selectedGroup) : servers.find((s) => s.id === selected.serverId)?.name ?? 'Server'} headerTarget={sessionTitleTarget} onHome={showSidebar} />
           : <main className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
             <MessageSquare className="mb-1 size-7 text-muted-foreground/50" />
             <h1 className="text-lg font-medium tracking-tight">Choose a session</h1>
@@ -151,6 +169,7 @@ export default function App({ onSignOut }: { onSignOut: () => void }) {
     </div>
     {!mobile && fileSidebarOpen && resizeHandle('files')}
     {selected && <FileBrowser key={`${selected.serverId}:${selected.threadId}`} {...selected} open={fileSidebarOpen} onClose={closeFiles} />}
+    {showGateways && <GatewayDialog gateways={gateways} onClose={() => setShowGateways(false)} onSaved={gatewaysChanged} />}
     <ServerDialog open={dialog} onOpenChange={setDialog} editServer={editing} accounts={editingGroup?.accounts}
       connections={editingGroup?.connections.filter((connection) => !servers.find((server) => server.id === connection.id)?.sshAccountId)}
       accountTools={servers.filter((server) => server.sshAccountId && server.sshAccountId === editing?.id)}

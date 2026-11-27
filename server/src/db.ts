@@ -1,17 +1,22 @@
 import BetterSqlite3 from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import type { Server, PublicServer, VisibilitySettings, ArchivedSession } from './types.js';
+import type { Server, PublicServer, VisibilitySettings, ArchivedSession, Gateway } from './types.js';
 export type { Server } from './types.js';
 export const publicServer = ({ password, ...server }: Server): PublicServer => ({ ...server, hasPassword: !!password });
 const sshSettings = ({ name, host, port, username, authType, password, privateKeyPath }: Server) =>
   ({ name, host, port, username, authType, password, privateKeyPath });
 export type Database = ReturnType<typeof createDb>;
+export type GatewayConnection = Gateway & { instanceId: string; token: string };
 
 export function createDb(file: string) {
   const db = new BetterSqlite3(file);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec('CREATE TABLE IF NOT EXISTS gate_identity (singleton INTEGER PRIMARY KEY, id TEXT NOT NULL)');
+  db.exec(`CREATE TABLE IF NOT EXISTS gateways (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, url TEXT NOT NULL UNIQUE,
+    instanceId TEXT NOT NULL UNIQUE, token TEXT NOT NULL
+  )`);
   db.prepare('INSERT OR IGNORE INTO gate_identity (singleton, id) VALUES (1, ?)').run(randomUUID());
   const instanceId = (db.prepare('SELECT id FROM gate_identity WHERE singleton = 1').get() as { id: string }).id;
   const schema = `CREATE TABLE IF NOT EXISTS servers (
@@ -62,6 +67,12 @@ export function createDb(file: string) {
   )`);
   const store = {
     instanceId,
+    listGateways: () => db.prepare('SELECT * FROM gateways ORDER BY name, id').all() as GatewayConnection[],
+    saveGateway(gateway: GatewayConnection) {
+      db.prepare(`INSERT INTO gateways (id, name, url, instanceId, token) VALUES (@id, @name, @url, @instanceId, @token)
+        ON CONFLICT(id) DO UPDATE SET name = excluded.name, url = excluded.url, token = excluded.token`).run(gateway);
+    },
+    deleteGateway(id: string) { db.prepare('DELETE FROM gateways WHERE id = ?').run(id); },
     getVisibility(serverId: string): VisibilitySettings {
       const row = db.prepare('SELECT excludedDirectories FROM monitor_preferences WHERE serverId = ?').get(serverId) as
         { excludedDirectories: string } | undefined;

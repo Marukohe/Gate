@@ -12,6 +12,17 @@ Do not deduplicate sessions by native ID alone. A disconnected tool shows an err
 The new-session and filter dialogs select a tool when needed. Filter/archival preferences remain
 per connection; combining the display never combines or overwrites stored rules.
 
+## Gateways
+
+The browser signs in to its Gate with an instance token and receives an HttpOnly session cookie. A connected Gate
+uses its own token as a Bearer credential. The receiving instance groups servers by gateway plus SSH endpoint
+and qualifies connection IDs before returning the monitor or forwarding events. Conversation history, actions,
+settings, and files go to the Gate that owns the connection.
+
+Each peer supplies its own local servers and events. Connecting two Gates in both directions still produces one copy
+of each local server. A failed peer keeps its last observed sessions visible as unknown while the other sources update.
+Writes have a bounded wait and are never automatically retried.
+
 Add server first offers concrete Host aliases from Gate's local `~/.ssh/config`, including Include files, with manual
 entry always available. Selecting an alias runs local `ssh -G` to fill editable host, port, user and identity-file fields.
 The imported connection summary is collapsed unless a password is needed. Saving verifies SSH and resolves registered

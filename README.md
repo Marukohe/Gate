@@ -4,6 +4,7 @@
 
 Gate is a simple panel for coding-agent sessions across SSH servers, supporting **Codex** and **Google Antigravity CLI (agy)**.
 See what needs attention, open conversations, and continue work from your browser.
+Connect other Gate instances to monitor and work with their sessions from the same panel.
 
 ![Sidebar and conversation](assets/session-monitor.png)
 
@@ -78,6 +79,10 @@ Use the same remote OS user and Codex configuration as your terminal.
   the whole pane and closes when you choose a session. Search, filters and expanded groups stay while switching sessions.
   Drag either sidebar's inner edge to adjust its width; each width survives reload. Double-click the edge to reset it,
   or focus it and use the arrow keys. Narrower windows temporarily limit widths to leave room for the conversation.
+- **Gateways:** open **Gateways** at the bottom of the sidebar and choose **Add Gate**. Enter a name, the other Gate's
+  HTTP(S) address, and its access token. Its servers appear with a source label. Chat, approvals, file views, and live
+  events go through the owning Gate. Reopen **Gateways** to replace a token or disconnect a peer.
+  **Add server** adds an SSH account to the Gate you signed in to. Connect each remote Gate directly to include its servers.
 - **Monitor:** the sidebar groups sessions by server and repository. Worktrees share their repository group.
   Connections with the same SSH host and port share one group, including sessions from different tools in the same repository.
   Each session name has a tool tag: green for Codex, purple for Antigravity, in both themes.
@@ -153,8 +158,9 @@ See [session behavior](docs/session-monitor.md) for status and connection detail
 
 Gate protects its API and event streams with an instance access token. Browser sign-in lasts 30 days and survives a
 refresh or restart. **Sign out** clears the browser session. The generated token file lives in the selected data directory.
-Use HTTPS for access outside a trusted local network.
-SSH settings, directory filters, and Gate archives are stored in `~/.gate/gate.db`; passwords are not returned to the browser.
+Use HTTPS for browser and inter-Gate access outside a trusted local network. A token grants access to the whole instance.
+Gate keeps peer addresses and tokens alongside SSH settings, directory filters, and Gate archives in `~/.gate/gate.db`.
+The server retains the remote tokens and uses them to proxy requests. A token change requires updating saved connections to that Gate.
 Display preferences survive Gate restarts and apply to every browser using this Gate.
 Existing databases retain their older Gate data as inactive archives. Active history lives in the native tools.
 

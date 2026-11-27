@@ -9,7 +9,7 @@ import { post } from '@/lib/api';
 import type { MonitorServer, Session } from '../../../../server/src/types';
 import { useMonitorStore } from '@/stores/monitor-store';
 import { sessionKey } from '@/stores/session-view-store';
-import { groupServers, toolName, type ServerSession } from '@/lib/server-groups';
+import { groupServers, serverLabel, toolName, type ServerSession } from '@/lib/server-groups';
 import { ToolConnectionSelect } from '@/components/server/ToolConnectionSelect';
 import { ToolTag } from './ToolTag';
 
@@ -22,7 +22,7 @@ export function SessionMonitor({ current, onOpen, onEditServer, statusFilter, on
   onOpen: (serverId: string, sessionId: string, error?: string) => void; onEditServer: (id: string) => void;
   current: SessionTarget | null; statusFilter: MonitorFilter; onStatusFilter: (filter: MonitorFilter) => void;
 }) {
-  const { servers, error, refresh } = useMonitorStore();
+  const { servers, gateways, error, refresh } = useMonitorStore();
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState<string | null>(null);
   const [filterServer, setFilterServer] = useState<string | null>(null);
@@ -34,8 +34,8 @@ export function SessionMonitor({ current, onOpen, onEditServer, statusFilter, on
   const search = query.trim().toLowerCase();
   const filtered = groups.map((server) => ({ ...server, sessions: server.sessions.filter((session) =>
     (!statusFilter || (!error && session.state === statusFilter)) &&
-    `${server.name} ${server.host} ${session.toolName} ${session.username} ${session.name} ${session.cwd} ${session.projectPath ?? ''} ${session.preview}`.toLowerCase().includes(search)) }))
-    .filter((s) => statusFilter ? s.sessions.length || s.connections.some((c) => c.error) : !search || s.sessions.length || `${s.name} ${s.host}`.toLowerCase().includes(search));
+    `${serverLabel(server)} ${server.host} ${session.toolName} ${session.username} ${session.name} ${session.cwd} ${session.projectPath ?? ''} ${session.preview}`.toLowerCase().includes(search)) }))
+    .filter((s) => statusFilter ? s.sessions.length || s.connections.some((c) => c.error) : !search || s.sessions.length || `${serverLabel(s)} ${s.host}`.toLowerCase().includes(search));
   return <div className="session-monitor">
     <div className="sidebar-controls">
       <div className="relative"><Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
@@ -55,16 +55,21 @@ export function SessionMonitor({ current, onOpen, onEditServer, statusFilter, on
     </div>
     <nav aria-label="Server sessions" className="sidebar-list">
     {error && <p role="alert" className="break-words text-sm text-destructive">Updates paused. {error} Retrying automatically.</p>}
+    {gateways.filter((gateway) => gateway.error).map((gateway) => <p key={gateway.id} role="status"
+      className="break-words px-2 py-2 text-xs text-destructive">{gateway.name} · {gateway.error}</p>)}
     {!servers && !error && <p className="py-12 text-center text-sm text-muted-foreground">Connecting to your servers…</p>}
     {servers?.length === 0 && <div className="monitor-empty"><ServerIcon className="mx-auto mb-4 size-7 text-muted-foreground" />
       <h2 className="font-medium">Your servers. Your sessions.</h2><p className="mt-2 text-sm text-muted-foreground">Add a server below to see its sessions.</p></div>}
-    {filtered.map((server) => <section key={server.key} aria-label={`${server.name} sessions`} className="server-group">
+    {filtered.map((server) => <section key={server.key} aria-label={`${serverLabel(server)} sessions`} className="server-group">
       <div className="server-group-header"><ServerIcon className="size-3.5 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 flex-1" title={`${[...new Set([...server.accounts, ...server.connections].map((c) => c.username))].join(', ')}@${server.host}:${server.port}`}><h2 className="truncate text-sm font-semibold">{server.name}<span className="ml-2 font-normal text-muted-foreground">{server.sessions.length}</span></h2></div>
-        {server.connections.length > 0 && <Button variant="ghost" size="icon-sm" aria-label={`Filter sessions on ${server.name}`} title="Session filters"
+        <div className="min-w-0 flex-1" title={`${[...new Set([...server.accounts, ...server.connections].map((c) => c.username))].join(', ')}@${server.host}:${server.port}`}>
+          <h2 className="truncate text-sm font-semibold">{server.name}<span className="ml-2 font-normal text-muted-foreground">{server.sessions.length}</span></h2>
+          {server.gatewayName && <span className="block truncate text-[10px] text-muted-foreground">{server.gatewayName}</span>}
+        </div>
+        {server.connections.length > 0 && <Button variant="ghost" size="icon-sm" aria-label={`Filter sessions on ${serverLabel(server)}`} title="Session filters"
           className={server.connections.some((c) => c.hasFilters) ? 'text-primary bg-accent' : ''} onClick={() => setFilterServer(server.key)}><Filter /></Button>}
-        <Button variant="ghost" size="icon-sm" aria-label={`Edit ${server.name}`} onClick={() => onEditServer((server.accounts[0] ?? server.connections[0]).id)}><Settings2 /></Button>
-        {server.connections.some((c) => c.state === 'connected') && <Button variant="ghost" size="icon-sm" title="New session" aria-label={`New session on ${server.name}`} onClick={() => setCreating(server.key)}><Plus /></Button>}
+        <Button variant="ghost" size="icon-sm" aria-label={`Edit ${serverLabel(server)}`} onClick={() => onEditServer((server.accounts[0] ?? server.connections[0]).id)}><Settings2 /></Button>
+        {server.connections.some((c) => c.state === 'connected') && <Button variant="ghost" size="icon-sm" title="New session" aria-label={`New session on ${serverLabel(server)}`} onClick={() => setCreating(server.key)}><Plus /></Button>}
       </div>
       {server.connections.map((connection) => connection.error
         ? <p key={connection.id} role="alert" className="break-words border-b px-5 py-3 text-xs text-destructive">{toolName(connection)} · {connection.error}</p>
@@ -83,11 +88,11 @@ export function SessionMonitor({ current, onOpen, onEditServer, statusFilter, on
     </p>}
     </nav>
   <Dialog open={creating !== null} onOpenChange={(open) => { if (!open) setCreating(null); }}><DialogContent className="rounded-2xl">
-    <DialogHeader><DialogTitle>New session</DialogTitle><DialogDescription>{creatingServer?.name}</DialogDescription></DialogHeader>
+    <DialogHeader><DialogTitle>New session</DialogTitle><DialogDescription>{creatingServer && serverLabel(creatingServer)}</DialogDescription></DialogHeader>
     {!!availableTools.length && <NewSession key={creating} connections={availableTools} onCreated={(id, session, error) => { setCreating(null); onOpen(id, session.id, error); }} />}
     {creatingServer && !availableTools.length && <p className="text-sm text-muted-foreground">No tools are connected.</p>}
   </DialogContent></Dialog>
-  {filteringServer && <SessionFilters connections={filteringServer.connections} serverName={filteringServer.name}
+  {filteringServer && <SessionFilters connections={filteringServer.connections} serverName={serverLabel(filteringServer)}
     onClose={() => setFilterServer(null)} onChanged={refresh} />}
   </div>;
 }

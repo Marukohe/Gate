@@ -7,7 +7,7 @@ import express, { Router } from 'express';
 const lifetime = 30 * 24 * 60 * 60;
 export const validToken = (value: unknown): value is string => typeof value === 'string' && /^[!-~]{1,512}$/.test(value);
 
-export function loadAccessToken(dataDir: string, configured = process.env.GATE_TOKEN) {
+export function loadAccessToken(dataDir: string, configured?: string) {
   const file = path.join(dataDir, 'token');
   if (configured !== undefined) {
     if (!validToken(configured)) throw new Error('GATE_TOKEN must be 1–512 printable characters without spaces.');

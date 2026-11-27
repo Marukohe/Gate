@@ -4,7 +4,9 @@ export interface Server {
   defaultWorkingDir?: string; tool?: string; executablePath?: string; codexPath?: string; createdAt: number;
   sshAccountId?: string;
 }
-export type PublicServer = Omit<Server, 'password'> & { hasPassword: boolean };
+export type PublicServer = Omit<Server, 'password'> & { hasPassword: boolean; gatewayId?: string };
+export interface Gateway { id: string; name: string; url: string }
+export interface GatewayStatus extends Gateway { error?: string }
 export interface SshHost { alias: string; host: string; port: number; username: string; identityFiles: string[] }
 export interface ToolDefinition { id: string; name: string; executable: string; description: string }
 export type SessionState = 'running' | 'waiting' | 'idle' | 'saved' | 'error' | 'unknown';
@@ -22,6 +24,7 @@ export interface MonitorServer {
   port?: number; createdAt?: number;
   state: 'connecting' | 'connected' | 'error'; error?: string; hasFilters?: boolean; sessions: Session[]; hasMore: boolean;
   tool?: string; toolName?: string; statusNote?: string;
+  gatewayId?: string; gatewayName?: string;
 }
 export interface Item {
   id: string; kind: 'user' | 'assistant' | 'tool' | 'notice'; text: string; title?: string; status?: string;

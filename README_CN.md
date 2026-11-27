@@ -4,6 +4,7 @@
 
 Gate 是监控多台 SSH 服务器上编程工具会话的简单面板，支持 **Codex** 和 **Google Antigravity CLI（agy）**。
 查看需要关注的会话、打开对话，在浏览器中继续工作。
+同一个面板也可以接入其他 Gate，汇总它们的会话。
 
 ![侧边栏与对话](assets/session-monitor.png)
 
@@ -73,6 +74,9 @@ SSH 服务器需要允许 Unix socket 转发，无需公开 Codex 网络端口�
   手机端列表占满页面，选择会话后自动收起。切换会话保留搜索、筛选和仓库展开状态。
   拖动左右侧栏靠近正文的边缘调整宽度，各自记住设置，刷新后保留。双击边缘恢复默认，也可聚焦后用方向键调整。
   窗口变窄时临时限制侧栏宽度，为对话留出空间；手机端保持单栏显示。
+- **Gateways**：点击侧栏底部的 **Gateways**，选择 **Add Gate**，填写名称、远端 Gate 的 HTTP(S) 地址和访问 token。
+  远端服务器会标明来源，可直接查看会话、发消息、审批和浏览文件。回到 **Gateways** 可更新 token 或断开接入。
+  **Add server** 将 SSH 账号添加到当前登录的 Gate。需要汇总多台 Gate 时，分别直接接入各台。
 - **监控**：侧边栏按服务器、仓库归类会话，同仓库的 worktree 合并。
   同一 SSH 地址和端口上的工具共用一个服务器分组，同仓库会话混排，标题旁用工具标签区分：Codex 为绿色，Antigravity 为紫色，适配浅色和深色主题。
   **Servers** 统计服务器数量，不再按工具重复计数。
@@ -133,8 +137,9 @@ SSH 服务器需要允许 Unix socket 转发，无需公开 Codex 网络端口�
 状态与连接细节见 [Session 说明](docs/session-monitor.md)。
 
 Gate 的 API 和实时事件都需要实例 token。浏览器登录有效期为 30 天，刷新或重启后继续生效。
-可点击 **Sign out** 退出。自动生成的 token 放在 Gate 的数据目录中。可信内网之外请使用 HTTPS。
-SSH 配置、目录过滤和 Gate 归档保存在 `~/.gate/gate.db`，密码不会返回浏览器。
+可点击 **Sign out** 退出。自动生成的 token 放在 Gate 的数据目录中。可信内网之外，浏览器访问和 Gate 之间的连接都请使用 HTTPS。
+token 可以访问整个实例。远端 Gate 的地址和 token、SSH 配置、目录过滤及归档保存在 `~/.gate/gate.db`。
+远端 token 由服务端用于转发。远端更换 token 后，在 **Gateways** 中更新对应连接。
 显示配置在 Gate 重启后仍生效，所有访问此 Gate 的浏览器共用。
 旧数据库中的 Gate 数据保留为不再使用的归档；当前会话历史由各工具保存。
 

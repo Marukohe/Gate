@@ -4,9 +4,10 @@ import { mkdir } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
-import { WebSocketServer } from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
 import { chromium } from 'playwright';
 import { gateAuth } from '../server/dist/auth.js';
+import { Gateways } from '../server/dist/gateways.js';
 import { createDb, publicServer } from '../server/dist/db.js';
 import { routes } from '../server/dist/routes.js';
 import { INPUT_BODY_LIMIT } from '../server/dist/images.js';
@@ -60,15 +61,20 @@ const probeMessages = (prefix, count) => Array.from({ length: count }, (_, i) =>
     ? '\n\n```ts\nconst answer = 42;\n```\n\n| Name | Value |\n| --- | --- |\n| answer | 42 |' + probeStream : '') }));
 const app = express();
 const accessToken = 'fixture-browser-access-token';
-app.use('/api', gateAuth(accessToken, 'browser-smoke').router);
+const access = gateAuth(accessToken, 'browser-smoke');
+app.use('/api', access.router);
 app.use(express.json({ limit: INPUT_BODY_LIMIT }));
 const http = createServer(app);
-const wss = new WebSocketServer({ server: http, path: '/ws' });
+const wss = new WebSocketServer({ server: http, path: '/ws', verifyClient: ({ req }) => access.auth(req) });
 const emit = (event = {}) => {
   if (historyProbe && event.type === 'delta' && event.itemId === 'current-39') probeStream += event.delta;
   for (const socket of wss.clients) socket.send(JSON.stringify({ serverId: server.id, threadId: detail.session.id, type: 'changed', ...event }));
 };
-app.get('/api/servers', (_req, res) => res.json(db.listServers().map(publicServer)));
+const gateways = new Gateways(db, (event) => {
+  for (const socket of wss.clients) socket.send(JSON.stringify(event));
+});
+app.use('/api', gateways.router());
+app.get('/api/servers', async (_req, res) => res.json([...db.listServers().map(publicServer), ...await gateways.servers()]));
 app.get('/api/servers/:id/models', (_req, res) => modelsUnavailable
   ? res.status(503).json({ error: 'Catalog unavailable' })
   : res.json({ models: [
@@ -151,7 +157,7 @@ app.use('/api', routes(db, { tools: () => [{ id: 'codex', name: 'Codex', executa
     if (alias === 'delayed') await new Promise(resolve => { releaseSshHost = resolve; });
     return { alias, host: 'configured.local', port: 2200, username: 'configured-user', identityFiles: ['/keys/configured'] };
   },
-}, async ({ host }) => host === 'other.local' ? ['codex', 'agy'] : []));
+}, async ({ host }) => host === 'other.local' ? ['codex', 'agy'] : [], gateways));
 app.use((error, _req, res, _next) => res.status(400).json({ error: error.message }));
 app.use(express.static(process.env.GATE_CLIENT_DIST || fileURLToPath(new URL('../client/dist/', import.meta.url))));
 await new Promise(resolve => http.listen(0, '127.0.0.1', resolve));
@@ -188,6 +194,111 @@ async function sidebarWidth(side, expected) {
     const pane = document.getElementById(side === 'sessions' ? 'session-sidebar' : 'session-files');
     return Math.abs(pane.getBoundingClientRect().width - expected) < 1;
   }, { side, expected });
+}
+async function checkGateways() {
+  const remoteToken = 'fixture-remote-access-token';
+  const remote = express();
+  const remoteAccess = gateAuth(remoteToken, 'remote-fixture');
+  remote.use('/api', remoteAccess.router);
+  remote.use(express.json());
+  const remoteSession = session('gate', 'Peer compilation', 'idle', '');
+  const localSession = session('gate', 'Local compilation', 'idle', '');
+  monitor.servers = [{ ...server, state: 'connected', sessions: [localSession], hasMore: false }];
+  const remoteItems = [{ id: 'remote-hello', kind: 'assistant', text: 'Conversation from the remote Gate.' }];
+  const remoteWrites = [];
+  remote.get('/api/gate', (_req, res) => res.json({ protocol: 1, instanceId: 'remote-fixture' }));
+  remote.get('/api/monitor', (req, res) => {
+    assert.equal(req.query.local, '1');
+    res.json({ servers: [{ ...server, state: 'connected', sessions: [remoteSession], hasMore: false }] });
+  });
+  remote.get('/api/servers', (req, res) => {
+    assert.equal(req.query.local, '1');
+    res.json([publicServer(server)]);
+  });
+  remote.get('/api/servers/:id/models', (_req, res) => res.json({ models: [] }));
+  remote.get('/api/servers/:id/sessions/:thread', (req, res) => {
+    assert.equal(req.params.id, server.id); assert.equal(req.params.thread, 'gate');
+    res.json({ session: remoteSession, items: remoteItems, nextCursor: null, turnId: null, requests: [] });
+  });
+  remote.post('/api/servers/:id/sessions/:thread/input', (req, res) => {
+    assert.equal(req.params.id, server.id); assert.equal(req.params.thread, 'gate');
+    remoteWrites.push(req.body.text);
+    remoteItems.push({ id: 'remote-input', kind: 'user', text: req.body.text });
+    res.json({});
+  });
+  remote.get('/api/servers/:id/sessions/:thread/file', (req, res) => {
+    assert.equal(req.query.path, '/repo/notes.txt');
+    res.set('Set-Cookie', 'upstream=1').type('text/plain').send('Remote file contents');
+  });
+  const listener = createServer(remote);
+  const peerSocket = new WebSocketServer({ server: listener, path: '/ws',
+    verifyClient: ({ req }) => req.url === '/ws?local=1' && remoteAccess.auth(req) });
+  await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve));
+  const address = `http://127.0.0.1:${listener.address().port}`;
+  let disconnected = false;
+  const stop = async () => {
+    if (disconnected) return;
+    disconnected = true;
+    for (const client of peerSocket.clients) client.terminate();
+    await new Promise(resolve => peerSocket.close(resolve));
+    listener.closeAllConnections();
+    await new Promise(resolve => listener.close(resolve));
+  };
+  try {
+    await page.reload();
+    await showSidebar();
+    await page.getByRole('button', { name: 'Gateways', exact: true }).click();
+    await page.getByLabel('Name', { exact: true }).fill('Office Gate');
+    await page.getByLabel('Gate address', { exact: true }).fill(address);
+    await page.getByLabel('Access token', { exact: true }).fill('wrong');
+    await page.getByRole('button', { name: 'Connect Gate', exact: true }).click();
+    await page.getByText('Gate rejected its access token.', { exact: true }).waitFor();
+    await page.getByLabel('Access token', { exact: true }).fill(remoteToken);
+    await page.getByRole('button', { name: 'Connect Gate', exact: true }).click();
+    await page.getByRole('dialog').waitFor({ state: 'hidden' });
+    const [peer] = db.listGateways();
+    const hubAddress = `http://127.0.0.1:${http.address().port}`;
+    const stored = await (await page.request.get(hubAddress + '/api/gateways')).json();
+    assert.deepEqual(stored, [{ id: peer.id, name: 'Office Gate', url: address }]);
+    const remoteGroup = page.getByRole('region', { name: 'Development · Office Gate sessions', exact: true });
+    const localGroup = page.getByRole('region', { name: 'Development sessions', exact: true });
+    await remoteGroup.waitFor(); await localGroup.waitFor();
+    await page.getByLabel('Search sessions', { exact: true }).fill('compilation');
+    await remoteGroup.getByRole('button', { name: /^Peer compilation/ }).click();
+    await page.getByText('Conversation from the remote Gate.', { exact: true }).waitFor();
+    assert.equal(new URL(page.url()).hash, `#session/${peer.id}~${server.id}/gate`);
+    const event = { type: 'item', serverId: server.id, threadId: 'gate',
+      item: { id: 'remote-event', kind: 'assistant', text: 'Streamed through the remote Gate.' } };
+    assert.ok(peerSocket.clients.size);
+    for (const client of peerSocket.clients) client.send(JSON.stringify(event));
+    await page.getByText(event.item.text, { exact: true }).waitFor();
+    const localWrites = writes.length;
+    await page.getByLabel('Message', { exact: true }).fill('Send only to the peer');
+    await page.getByRole('button', { name: 'Send message', exact: true }).click();
+    await page.getByText('Send only to the peer', { exact: true }).waitFor();
+    assert.deepEqual(remoteWrites, ['Send only to the peer']);
+    assert.equal(writes.length, localWrites);
+    const file = await page.request.get(`${hubAddress}/api/servers/${peer.id}~${server.id}/sessions/gate/file?path=%2Frepo%2Fnotes.txt`);
+    assert.equal(await file.text(), 'Remote file contents');
+    assert.match(file.headers()['content-security-policy'], /^sandbox/);
+    assert.equal(file.headers()['set-cookie'], undefined);
+    const direct = await (await page.request.get(hubAddress + '/api/monitor?local=1')).json();
+    assert.deepEqual(direct.servers.map(({ id }) => id), [server.id]);
+    await page.reload();
+    await page.getByText('Conversation from the remote Gate.', { exact: true }).waitFor();
+    await stop();
+    await showSidebar();
+    await page.getByText('Office Gate · Could not reach the Gate API.', { exact: true }).waitFor();
+    await localGroup.waitFor();
+    assert.equal((await page.request.get(hubAddress + '/api/servers')).status(), 200);
+    await page.getByRole('button', { name: 'Gateways', exact: true }).click();
+    await page.getByRole('button', { name: /^Office Gate/ }).click();
+    page.once('dialog', dialog => dialog.accept());
+    await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
+    await page.getByRole('dialog').waitFor({ state: 'hidden' });
+    await remoteGroup.waitFor({ state: 'hidden' });
+    assert.equal(db.listGateways().length, 0);
+  } finally { await stop(); }
 }
 try {
   await page.goto(`http://127.0.0.1:${http.address().port}`);
@@ -1262,14 +1373,15 @@ try {
   monitor.servers = [];
   await page.getByText('Your servers. Your sessions.', { exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Add server', exact: true }).count(), 1, 'Empty sidebar has one add-server entry');
+  await checkGateways();
   assert.deepEqual(errors, []);
-  console.log('Browser smoke passed: collapsible sidebar, mobile focus/scroll/paste, grouped servers, tool tags and routing, SSH import, filters, archive/restore, projects, history, chat, attention, approvals, reconnect, 320/390/1365px.');
+  console.log('Browser smoke passed: sign-in, gateway aggregation and relay, sidebar, mobile, SSH import, filters, history, chat, approvals, files, reconnect.');
 } catch (error) {
   await shot('failure');
   console.error(await page.locator('body').innerText());
   console.error(errors);
   throw error;
 } finally {
-  await browser.close(); for (const socket of wss.clients) socket.terminate();
+  gateways.close(); await browser.close(); for (const socket of wss.clients) socket.terminate();
   await new Promise(resolve => wss.close(resolve)); await new Promise(resolve => http.close(resolve)); db.close();
 }

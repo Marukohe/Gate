@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
+import type { IncomingMessage } from 'node:http';
 import express from 'express';
 import { expect, it } from 'vitest';
 import { gateAuth, loadAccessToken } from '../auth.js';
@@ -40,6 +41,9 @@ it('protects HTTP and verifies a persistent cookie without exposing the token', 
     expect(setCookie).toContain('SameSite=Strict');
     expect(setCookie).not.toContain(token);
     const Cookie = setCookie.split(';')[0];
+    const replay = { headers: { cookie: Cookie } } as IncomingMessage;
+    expect(gateAuth(token, 'gate-two').auth(replay)).toBe(false);
+    expect(gateAuth('rotated-token', 'gate-one').auth(replay)).toBe(false);
     expect(await (await fetch(base + '/auth', { headers: { Cookie } })).json()).toEqual({ authenticated: true });
     expect((await fetch(base + '/servers', { headers: { Cookie } })).status).toBe(200);
     expect((await fetch(base + '/servers', { headers: { Cookie, Origin: 'https://elsewhere.test' } })).status).toBe(403);

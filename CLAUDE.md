@@ -81,6 +81,10 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - Backend disconnect/restart must never restart a turn, resend an uncertain input, or stop Codex.
 - Gate requires an instance token for HTTP APIs and WebSocket upgrades. Browser access uses a persistent HttpOnly
   cookie. Only the login page and its static assets are public. Use HTTPS outside trusted networks.
+- Gateways join direct peer snapshots and events through authenticated server-to-server connections. Namespace remote
+  connection IDs before they reach client state and include the gateway in the server group key. Forward session
+  actions and file requests to their owner. Peer subscriptions and lists include only local data to prevent loops.
+  Keep peer failures isolated. Do not expose stored tokens, pass browser cookies to peers, or replay failed writes.
 
 ## Key files
 
@@ -96,6 +100,7 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 - `server/src/db.ts`: server settings, persistent visibility rules/archives, and one-time preservation of old Gate data.
 - `server/src/routes.ts` / `index.ts`: HTTP API and browser event delivery.
 - `server/src/auth.ts`: token provisioning, browser sign-in and shared API/event authentication.
+- `server/src/gateways.ts`: peer setup, monitor fan-out, event relay and routing to the owning Gate.
 - `client/src/components/monitor/SessionMonitor.tsx`: the single server/session panel and creation form.
 - `client/src/lib/server-groups.ts`: server display groups, owning connection metadata and tool labels.
 - `client/src/components/chat/SessionView.tsx`: conversation history, live events, input, and approvals.
