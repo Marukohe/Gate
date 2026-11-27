@@ -32,10 +32,19 @@ SSH access, repository grouping and the browser panel remain independent of it.
    - Codex with `codex app-server daemon` support (tested with 0.171.0).
    - [Antigravity CLI with ACP](https://antigravity.google/docs/ide/extensions/acp/) (tested with agy 1.5.16).
      Run `agy acp --login` on that server if you have not signed in.
-3. Run:
+3. Install the npm package from the latest [GitHub Release](https://github.com/Marukohe/Gate/releases/latest) and start Gate:
 
    ```bash
-   npm i -g @marukohe/gate
+   npm install -g https://github.com/Marukohe/Gate/releases/latest/download/gate.tgz
+   gate
+   ```
+
+   If you have access to the repository's [GitHub Packages](https://github.com/Marukohe/Gate/packages), you can install
+   by package name. Log in once with your GitHub username and a classic personal access token with `read:packages`:
+
+   ```bash
+   npm login --scope=@marukohe --registry=https://npm.pkg.github.com --auth-type=legacy
+   npm install -g @marukohe/gate
    gate
    ```
 

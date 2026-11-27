@@ -76,6 +76,8 @@
   Native select arrows can ignore padding; position an explicit chevron and reserve space between it and the text.
 - Enter-to-send must respect composition events and IME keyCode 229; isComposing can be false on the confirming Enter.
 - Keep generated output out of Git, and clean the server build directory so removed modules are not shipped in npm packages.
+  Verify the packed CLI, compiled server and client assets. Attach the published tarball to public GitHub Releases so
+  users can install it without GitHub Packages credentials. Scope registry settings to `@marukohe` so dependencies use npm.
 - Group repositories by their full Git root, sharing the common directory for linked worktrees; names and remote URLs
   alone can merge unrelated clones. Directory lookup failure must not hide sessions or change their native status.
 - Persist display filters on the Gate server, match directories at path boundaries, and scope archives by server and native

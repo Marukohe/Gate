@@ -114,7 +114,10 @@ npm run test:ui       # build first
 npm run lint --workspace=client
 ```
 
-Gate is published as `@marukohe/gate`; `bin/gate.js` serves the built app on port 3030.
+Gate is published as `@marukohe/gate` in GitHub Packages. An annotated `v<version>` tag matching `package.json` triggers
+the GitHub release workflow. Put release notes in the tag message. The workflow builds once, publishes the npm tarball,
+and attaches the same file as `gate.tgz` to the release.
+`bin/gate.js` serves the built app on port 3030.
 Data defaults to `~/.gate/gate.db`. Preserve existing user data when removing old mechanisms.
 
 ## Working rules

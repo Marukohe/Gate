@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://npm.pkg.github.com
+          scope: '@marukohe'
+
+      - name: Verify tag matches package version
+        run: test "$GITHUB_REF_NAME" = "v$(node -p 'require("./package.json").version')"
+
+      - name: Build and test
+        run: |
+          npm ci
+          npm test --workspace=server -- --run
+          npm run lint --workspace=client
+
+      - name: Pack and verify installation
+        run: |
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP"
+          mv "$RUNNER_TEMP/marukohe-gate-${GITHUB_REF_NAME#v}.tgz" "$RUNNER_TEMP/gate.tgz"
+          tar -tzf "$RUNNER_TEMP/gate.tgz" \
+            package/bin/gate.js package/client/dist/index.html package/server/dist/index.js
+          npm install --global --prefix "$RUNNER_TEMP/install" "$RUNNER_TEMP/gate.tgz"
+          "$RUNNER_TEMP/install/bin/gate" --help
+
+      - name: Publish to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm publish "$RUNNER_TEMP/gate.tgz" --ignore-scripts
+          npm view "@marukohe/gate@${GITHUB_REF_NAME#v}" version --prefer-online
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/gate.tgz" \
+            --verify-tag --title "Gate $GITHUB_REF_NAME" --notes-from-tag

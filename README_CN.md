@@ -30,10 +30,19 @@ Gate 通过统一后端接口路由操作。工具适配器负责原生协议，
    - 支持 `codex app-server daemon` 的 Codex CLI（已验证 0.171.0）。
    - [支持 ACP 的 Antigravity CLI](https://antigravity.google/docs/ide/extensions/acp/)（已验证 agy 1.5.16）。
      尚未登录时，在该服务器执行 `agy acp --login`。
-3. 运行：
+3. 从最新的 [GitHub Release](https://github.com/Marukohe/Gate/releases/latest) 安装 npm 包并启动 Gate。
 
    ```bash
-   npm i -g @marukohe/gate
+   npm install -g https://github.com/Marukohe/Gate/releases/latest/download/gate.tgz
+   gate
+   ```
+
+   如果有该仓库的 [GitHub Packages](https://github.com/Marukohe/Gate/packages) 读取权限，也可以按包名安装。
+   首次登录时使用 GitHub 用户名，并在密码提示处输入带 `read:packages` 权限的 classic token。
+
+   ```bash
+   npm login --scope=@marukohe --registry=https://npm.pkg.github.com --auth-type=legacy
+   npm install -g @marukohe/gate
    gate
    ```
 
