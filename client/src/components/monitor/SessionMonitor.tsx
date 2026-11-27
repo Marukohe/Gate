@@ -29,6 +29,7 @@ export function SessionMonitor({ current, onOpen, onEditServer, statusFilter, on
   const groups = groupServers(servers ?? []);
   const sessions = groups.flatMap((s) => s.sessions);
   const creatingServer = groups.find((s) => s.key === creating);
+  const availableTools = creatingServer?.connections.filter((connection) => connection.state === 'connected') ?? [];
   const filteringServer = groups.find((s) => s.key === filterServer);
   const search = query.trim().toLowerCase();
   const filtered = groups.map((server) => ({ ...server, sessions: server.sessions.filter((session) =>
@@ -59,11 +60,11 @@ export function SessionMonitor({ current, onOpen, onEditServer, statusFilter, on
       <h2 className="font-medium">Your servers. Your sessions.</h2><p className="mt-2 text-sm text-muted-foreground">Add a server below to see its sessions.</p></div>}
     {filtered.map((server) => <section key={server.key} aria-label={`${server.name} sessions`} className="server-group">
       <div className="server-group-header"><ServerIcon className="size-3.5 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 flex-1" title={`${[...new Set(server.connections.map((c) => c.username))].join(', ')}@${server.host}:${server.port}`}><h2 className="truncate text-sm font-semibold">{server.name}<span className="ml-2 font-normal text-muted-foreground">{server.sessions.length}</span></h2></div>
-        <Button variant="ghost" size="icon-sm" aria-label={`Filter sessions on ${server.name}`} title="Session filters"
-          className={server.connections.some((c) => c.hasFilters) ? 'text-primary bg-accent' : ''} onClick={() => setFilterServer(server.key)}><Filter /></Button>
-        <Button variant="ghost" size="icon-sm" aria-label={`Edit ${server.name}`} onClick={() => onEditServer(server.connections[0].id)}><Settings2 /></Button>
-        <Button variant="ghost" size="icon-sm" title="New session" aria-label={`New session on ${server.name}`} onClick={() => setCreating(server.key)}><Plus /></Button>
+        <div className="min-w-0 flex-1" title={`${[...new Set([...server.accounts, ...server.connections].map((c) => c.username))].join(', ')}@${server.host}:${server.port}`}><h2 className="truncate text-sm font-semibold">{server.name}<span className="ml-2 font-normal text-muted-foreground">{server.sessions.length}</span></h2></div>
+        {server.connections.length > 0 && <Button variant="ghost" size="icon-sm" aria-label={`Filter sessions on ${server.name}`} title="Session filters"
+          className={server.connections.some((c) => c.hasFilters) ? 'text-primary bg-accent' : ''} onClick={() => setFilterServer(server.key)}><Filter /></Button>}
+        <Button variant="ghost" size="icon-sm" aria-label={`Edit ${server.name}`} onClick={() => onEditServer((server.accounts[0] ?? server.connections[0]).id)}><Settings2 /></Button>
+        {server.connections.some((c) => c.state === 'connected') && <Button variant="ghost" size="icon-sm" title="New session" aria-label={`New session on ${server.name}`} onClick={() => setCreating(server.key)}><Plus /></Button>}
       </div>
       {server.connections.map((connection) => connection.error
         ? <p key={connection.id} role="alert" className="break-words border-b px-5 py-3 text-xs text-destructive">{toolName(connection)} · {connection.error}</p>
@@ -73,6 +74,7 @@ export function SessionMonitor({ current, onOpen, onEditServer, statusFilter, on
           await post(`/servers/${encodeURIComponent(session.connectionId)}/sessions/${encodeURIComponent(session.id)}/archive`, { name: session.name, cwd: session.cwd });
           await refresh();
         }} />)}
+      {!server.connections.length && <p className="px-5 py-3 text-xs text-muted-foreground">No tools found. Open server settings to set a tool path.</p>}
       {!server.sessions.length && server.connections.some((c) => c.state === 'connected') && <p className="px-5 py-8 text-sm text-muted-foreground">{search || statusFilter ? 'No matching sessions.' : server.connections.some((c) => c.hasFilters) ? 'No visible sessions. Check your session filters.' : 'No sessions yet. Start one here or in your terminal.'}</p>}
       {server.connections.some((c) => c.hasMore) && <p className="px-5 py-3 text-xs text-muted-foreground">Showing the most recent sessions.</p>}
     </section>)}
@@ -82,7 +84,8 @@ export function SessionMonitor({ current, onOpen, onEditServer, statusFilter, on
     </nav>
   <Dialog open={creating !== null} onOpenChange={(open) => { if (!open) setCreating(null); }}><DialogContent className="rounded-2xl">
     <DialogHeader><DialogTitle>New session</DialogTitle><DialogDescription>{creatingServer?.name}</DialogDescription></DialogHeader>
-    {creatingServer && <NewSession key={creatingServer.key} connections={creatingServer.connections} onCreated={(id, session, error) => { setCreating(null); onOpen(id, session.id, error); }} />}
+    {!!availableTools.length && <NewSession key={creating} connections={availableTools} onCreated={(id, session, error) => { setCreating(null); onOpen(id, session.id, error); }} />}
+    {creatingServer && !availableTools.length && <p className="text-sm text-muted-foreground">No tools are connected.</p>}
   </DialogContent></Dialog>
   {filteringServer && <SessionFilters connections={filteringServer.connections} serverName={filteringServer.name}
     onClose={() => setFilterServer(null)} onChanged={refresh} />}
@@ -148,7 +151,8 @@ function SessionRow({ session, selected, stale, onOpen, onArchive }: {
 }
 
 function NewSession({ connections, onCreated }: { connections: MonitorServer[]; onCreated: (id: string, session: Session, error?: string) => void }) {
-  const [serverId, setServerId] = useState(connections.find((c) => c.state === 'connected')?.id ?? connections[0].id);
+  const [selectedId, setServerId] = useState(connections[0].id);
+  const serverId = connections.some((connection) => connection.id === selectedId) ? selectedId : connections[0].id;
   const server = useServerStore((s) => s.servers.find((v) => v.id === serverId));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');

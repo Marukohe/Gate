@@ -8,16 +8,14 @@ import { api } from '@/lib/api';
 import type { MonitorServer, SshHost, ToolDefinition } from '../../../../server/src/types';
 import { ToolConnectionSelect } from './ToolConnectionSelect';
 
-export function ServerDialog({ open, onOpenChange, editServer, onSaved, connections = [], onSelectConnection }: {
+export function ServerDialog({ open, onOpenChange, editServer, onSaved, connections = [], accounts = [], accountTools = [], onSelectConnection }: {
   open: boolean; onOpenChange: (value: boolean) => void; editServer: Server | null; onSaved: () => void;
-  connections?: MonitorServer[]; onSelectConnection?: (id: string) => void;
+  connections?: MonitorServer[]; accounts?: MonitorServer[]; accountTools?: Server[]; onSelectConnection?: (id: string) => void;
 }) {
   const [auth, setAuth] = useState('privateKey');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [tools, setTools] = useState<ToolDefinition[]>([]);
-  const [tool, setTool] = useState('codex');
-  const [executable, setExecutable] = useState('codex');
   const [hosts, setHosts] = useState<string[]>([]);
   const [loadingHosts, setLoadingHosts] = useState(false);
   const [hostError, setHostError] = useState('');
@@ -27,17 +25,22 @@ export function ServerDialog({ open, onOpenChange, editServer, onSaved, connecti
   const [resolving, setResolving] = useState(false);
   const resolveController = useRef<AbortController | null>(null);
   const [fields, setFields] = useState({ name: '', host: '', port: '22', username: '', privateKeyPath: '' });
+  const account = editServer?.tool === 'ssh';
+  const accountChoices = [...accounts, ...connections];
+  const currentOverride = (tool: ToolDefinition) => {
+    const path = accountTools.find((server) => server.tool === tool.id)?.executablePath;
+    return path && path !== tool.executable ? path : '';
+  };
   const field = (name: keyof typeof fields, value: string) => setFields((current) => ({ ...current, [name]: value }));
   useEffect(() => {
     if (!open) return;
-    setAuth(editServer?.authType ?? 'privateKey'); setError(''); setTool(editServer?.tool || 'codex');
-    setExecutable(editServer?.executablePath || editServer?.codexPath || 'codex');
+    setAuth(editServer?.authType ?? 'privateKey'); setError('');
     setFields({ name: editServer?.name || '', host: editServer?.host || '', port: String(editServer?.port ?? 22),
       username: editServer?.username || '', privateKeyPath: editServer?.privateKeyPath || '' });
     setMode(editServer ? 'manual' : 'choose'); setAlias(''); setProfile(null); setResolving(false);
     setHosts([]); setHostError(''); setLoadingHosts(!editServer);
     const controller = new AbortController();
-    void api<{ tools: ToolDefinition[] }>('/tools', { signal: controller.signal }).then((data) => setTools(data.tools))
+    if (editServer?.tool === 'ssh') void api<{ tools: ToolDefinition[] }>('/tools', { signal: controller.signal }).then((data) => setTools(data.tools))
       .catch((error: Error) => { if (!controller.signal.aborted) setError(error.message); });
     if (!editServer) void api<{ hosts: string[] }>('/ssh/hosts', { signal: controller.signal })
       .then((data) => { if (!controller.signal.aborted) { setHosts(data.hosts); if (!data.hosts.length) setMode('manual'); } })
@@ -62,13 +65,20 @@ export function ServerDialog({ open, onOpenChange, editServer, onSaved, connecti
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError('');
     const body = Object.fromEntries(new FormData(event.currentTarget));
+    const executables: Record<string, FormDataEntryValue> = {};
+    for (const tool of tools) {
+      const key = `executable-${tool.id}`;
+      if (body[key] !== undefined && body[key] !== currentOverride(tool)) executables[tool.id] = body[key];
+      delete body[key];
+    }
+    const url = !editServer ? '/ssh/accounts' : account ? `/ssh/accounts/${editServer.id}` : `/servers/${editServer.id}`;
     try {
-      await api(`/servers${editServer ? `/${editServer.id}` : ''}`, { method: editServer ? 'PUT' : 'POST', body: JSON.stringify({ ...body, authType: auth, tool, executablePath: executable }) });
+      await api(url, { method: editServer ? 'PUT' : 'POST', body: JSON.stringify({ ...body, authType: auth, executables }) });
       onSaved(); onOpenChange(false);
     } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
   async function remove() {
-    if (!editServer || !confirm(connections.length > 1 ? `Remove ${tools.find((t) => t.id === tool)?.name || tool} from Gate?` : `Remove ${editServer.name} from Gate?`)) return;
+    if (!editServer || !confirm(`Remove ${editServer.name} from Gate?`)) return;
     setBusy(true);
     try { await api(`/servers/${editServer.id}`, { method: 'DELETE' }); onSaved(); onOpenChange(false); }
     catch (e) { setError((e as Error).message); } finally { setBusy(false); }
@@ -89,7 +99,7 @@ export function ServerDialog({ open, onOpenChange, editServer, onSaved, connecti
   </>;
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
     <DialogHeader><DialogTitle>{editServer ? 'Edit server' : 'Add server'}</DialogTitle>
-      <DialogDescription>Choose a tool and the SSH account where it runs.</DialogDescription></DialogHeader>
+      <DialogDescription>{editServer ? 'SSH connection settings.' : 'Connect over SSH to find your sessions.'}</DialogDescription></DialogHeader>
     <form key={editServer?.id ?? 'new'} onSubmit={save} className="space-y-4">
       {!editServer && <div className="space-y-1 text-sm">
         <label htmlFor="ssh-host">SSH host</label>
@@ -103,24 +113,35 @@ export function ServerDialog({ open, onOpenChange, editServer, onSaved, connecti
         {resolving && <p role="status" className="text-xs text-muted-foreground">Reading connection settings…</p>}
         {hostError && <p role="alert" className="break-words text-xs text-destructive">{hostError}</p>}
       </div>}
-      {editServer && connections.length > 1 && onSelectConnection ? <ToolConnectionSelect connections={connections} value={editServer.id} onChange={onSelectConnection} disabled={busy} />
-        : <label className="block space-y-1 text-sm">Tool<select aria-label="Tool" value={tool} disabled={!!editServer || busy || !tools.length}
-        className="h-9 w-full rounded-md border bg-background px-3 disabled:opacity-60"
-        onChange={(event) => { setTool(event.target.value); setExecutable(tools.find((tool) => tool.id === event.target.value)?.executable || ''); }}>
-        {tools.map((tool) => <option key={tool.id} value={tool.id}>{tool.name}</option>)}</select>
-        <span className="text-xs text-muted-foreground">{tools.find((item) => item.id === tool)?.description}</span></label>}
+      {editServer && onSelectConnection && (accounts.length && accountChoices.length > 1
+        ? <label className="block space-y-1 text-sm">SSH account<select value={editServer.id} disabled={busy}
+          className="h-9 w-full rounded-md border bg-background px-3" onChange={(event) => onSelectConnection(event.target.value)}>
+          {accountChoices.map((choice) => <option key={choice.id} value={choice.id}>{choice.username} · {choice.toolName ?? choice.name}</option>)}
+        </select></label>
+        : !accounts.length && connections.length > 1
+          ? <ToolConnectionSelect connections={connections} value={editServer.id} onChange={onSelectConnection} disabled={busy} />
+          : null)}
       <label className="block space-y-1 text-sm">Name<Input name="name" required value={fields.name} onChange={(e) => field('name', e.target.value)} placeholder="Development" /></label>
       {mode === 'manual' ? connectionFields : mode === 'config' && profile ? <details key={alias} open={!profile.identityFiles.length} className="rounded-lg border px-3 py-2">
         <summary className="cursor-pointer break-all text-sm text-muted-foreground">{fields.username}@{fields.host}:{fields.port}</summary>
         <div className="mt-3 space-y-4">{connectionFields}</div>
       </details> : null}
-      <label className="block space-y-1 text-sm">Default working directory<Input name="defaultWorkingDir" defaultValue={editServer?.defaultWorkingDir} placeholder="/home/me/project" /></label>
-      <label className="block space-y-1 text-sm">Tool executable<Input name="executablePath" aria-label="Tool executable" aria-describedby="executable-help" required value={executable} onChange={(event) => setExecutable(event.target.value)} />
-        <span id="executable-help" className="text-xs text-muted-foreground">Use an absolute path if the tool is not on the SSH login PATH.</span></label>
+      {editServer && (account
+        ? <details className="rounded-lg border px-3 py-2"><summary className="cursor-pointer text-sm">Tool paths</summary>
+          <div className="mt-3 space-y-3">
+            <p className="text-xs text-muted-foreground">Set an absolute path only if a tool is missing from the SSH login PATH.</p>
+            {tools.map((tool) => <label key={tool.id} className="block space-y-1 text-sm">{tool.name} executable
+              <Input name={`executable-${tool.id}`} defaultValue={currentOverride(tool)} placeholder={tool.executable} />
+            </label>)}
+          </div>
+        </details>
+        : <label className="block space-y-1 text-sm">Tool executable
+          <Input name="executablePath" required defaultValue={editServer.executablePath || editServer.codexPath || editServer.tool || 'codex'} />
+        </label>)}
       {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}
       <div className="flex justify-between gap-3">
-        {editServer && <Button type="button" variant="ghost" disabled={busy} onClick={() => void remove()}>{connections.length > 1 ? 'Remove tool' : 'Remove server'}</Button>}
-        <Button className="ml-auto" disabled={busy || !tools.length || resolving || mode === 'choose' || mode === 'config' && !profile}>{busy ? 'Saving…' : 'Save server'}</Button>
+        {editServer && <Button type="button" variant="ghost" disabled={busy} onClick={() => void remove()}>{!account && connections.length > 1 ? 'Remove tool' : 'Remove server'}</Button>}
+        <Button className="ml-auto" disabled={busy || resolving || mode === 'choose' || mode === 'config' && !profile}>{busy ? (editServer && !account ? 'Saving…' : 'Checking SSH…') : 'Save server'}</Button>
       </div>
     </form>
   </DialogContent></Dialog>;

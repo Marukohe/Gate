@@ -8,12 +8,14 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
 ## Architecture
 
 - React browser → HTTP actions and WebSocket events → Gate backend adapter → SSH → native tool.
-- HTTP routes use `AgentService`; protocol implementations satisfy `AgentBackend`. Connection settings select the tool
-  and executable. SSH, SFTP, repository lookup and direct shell execution live outside tool-specific transports.
+- HTTP routes use `AgentService`; protocol implementations satisfy `AgentBackend`. New SSH accounts are shared by their
+  tool connections. Add server only asks for SSH details. On save, resolve registered tool executables on the login PATH
+  without invoking the tools. Keep accounts with no matches visible and allow absolute path overrides in server settings.
+  SSH, SFTP, repository lookup and direct shell execution live outside tool-specific transports.
 - The sidebar groups tool connections by SSH host and port into one server entry, using the oldest connection's name.
   Merge repository groups across tools, label session rows and attention lists with tool tags, and count server groups.
   Keep connection ID plus native session ID on every action, draft, cache and row key; native IDs can collide across tools.
-  New-session, settings and filter dialogs select a tool within the existing server entry. Visibility settings remain scoped
+  New-session chooses among connected tools and asks for the working directory. Visibility settings remain scoped
   to their original connections; regrouping must not migrate or combine saved exclusions/archives.
 - New connections offer local `~/.ssh/config` hosts first, then manual entry. Discover concrete aliases through Includes;
   use local `ssh -G` to resolve fields. Import an editable snapshot without modifying SSH config or exposing key contents.
@@ -129,6 +131,8 @@ Data defaults to `~/.gate/gate.db`. Preserve existing user data when removing ol
 - Validate real tool behavior, including existing native sessions; mocked UI alone does not prove attachment.
 - Keep one tool per internal connection while displaying one entry per SSH endpoint. Changing provider on an existing
   connection would mix session IDs, drafts and persistent visibility preferences; tool selection edits the correct connection.
+  When adopting a matching legacy connection into an SSH account, preserve its ID, custom executable and preferences.
+  Changes to display names or account linkage do not reconnect the native tool.
 - Gate archives are display preferences, not native archives. Filtering/archiving must not mutate native tool sessions.
 - Never kill a shared backend to test reconnection. Close only Gate's own connection or an isolated test fixture.
 - Preserve passwords on an unchanged edit and never return them in browser API responses or logs.

@@ -14,9 +14,10 @@ const codex = { tools: () => [
   { id: 'agy', name: 'Antigravity', executable: 'agy', description: '' },
 ], sync: vi.fn(), monitor: vi.fn(), create: vi.fn(), input: vi.fn(), rename: vi.fn(), models: vi.fn(), file: vi.fn(), directory: vi.fn(), shell: vi.fn() };
 const hosts = { list: vi.fn(), resolve: vi.fn() };
+const discover = vi.fn();
 beforeEach(async () => {
   vi.resetAllMocks(); db = createDb(':memory:');
-  const app = express(); app.use(express.json({ limit: INPUT_BODY_LIMIT })); app.use(routes(db, codex as unknown as AgentService, hosts));
+  const app = express(); app.use(express.json({ limit: INPUT_BODY_LIMIT })); app.use(routes(db, codex as unknown as AgentService, hosts, discover));
   app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => res.status(400).json({ error: error.message }));
   http = app.listen(0, '127.0.0.1'); await new Promise<void>((resolve) => http.once('listening', resolve));
   const address = http.address(); origin = `http://127.0.0.1:${typeof address === 'object' && address?.port}`;
@@ -48,6 +49,44 @@ it('exposes registered tools, persists separate tool connections, and preserves 
   expect(db.getServer(agy.id)).toMatchObject({ password: 'private', executablePath: '/new/agy' });
   expect((await send(`/servers/${legacy.id}`, { ...fields, tool: 'agy' }, 'PUT')).status).toBe(400);
   expect((await send('/servers', { ...fields, tool: 'unknown' })).status).toBe(400);
+});
+
+it('finds both tools from one SSH account and keeps a matching legacy connection and archive', async () => {
+  const fields = { name: 'Dev', host: 'localhost', username: 'user', authType: 'password' as const, password: 'fixture-secret', port: 22 };
+  const legacy = db.createServer({ ...fields, tool: 'codex', executablePath: '/tools/codex', defaultWorkingDir: '/work' });
+  db.archiveSession(legacy.id, { id: 'native', name: 'Past work', cwd: '/work' });
+  discover.mockResolvedValue(['codex', 'agy']);
+  const response = await send('/ssh/accounts', fields);
+  expect(response.status).toBe(201);
+  const account = await response.json();
+  expect(account).toMatchObject({ tool: 'ssh', hasPassword: true });
+  expect(account.password).toBeUndefined();
+  expect(db.getServer(legacy.id)).toMatchObject({ sshAccountId: account.id, executablePath: '/tools/codex', defaultWorkingDir: '/work' });
+  const agy = db.listServers().find((server) => server.tool === 'agy')!;
+  expect(agy).toMatchObject({ sshAccountId: account.id, executablePath: 'agy' });
+  expect(db.getVisibility(legacy.id).archivedSessions[0].id).toBe('native');
+  expect(codex.sync.mock.lastCall?.[0].map((server: { tool: string }) => server.tool).sort()).toEqual(['agy', 'codex']);
+  expect((await send('/ssh/accounts', fields)).status).toBe(400);
+  expect((await send(`/ssh/accounts/${account.id}`, { ...fields, name: 'New name', password: '', executables: { agy: '/custom/agy' } }, 'PUT')).status).toBe(200);
+  expect(db.getServer(agy.id)).toMatchObject({ name: 'New name', executablePath: '/custom/agy', password: 'fixture-secret' });
+  expect(db.getServer(legacy.id)).toMatchObject({ name: 'New name', executablePath: '/tools/codex' });
+  expect(await (await fetch(origin + '/servers')).text()).not.toContain('fixture-secret');
+});
+
+it('saves a reachable account without tools and can add a custom executable later', async () => {
+  const fields = { name: 'No tools', host: 'localhost', username: 'new', authType: 'privateKey', privateKeyPath: '/keys/test' };
+  discover.mockRejectedValueOnce(new Error('SSH connection failed'));
+  expect((await send('/ssh/accounts', fields)).status).toBe(400);
+  expect(db.listServers()).toEqual([]);
+  discover.mockResolvedValue([]);
+  const account = await (await send('/ssh/accounts', fields)).json();
+  codex.monitor.mockReturnValue({ servers: [] });
+  expect((await (await fetch(origin + '/monitor')).json()).servers).toMatchObject([{ id: account.id, tool: 'ssh', sessions: [] }]);
+  expect((await send(`/ssh/accounts/${account.id}`, { ...fields, executables: { agy: 'relative' } }, 'PUT')).status).toBe(400);
+  expect((await send(`/ssh/accounts/${account.id}`, { ...fields, executables: { agy: '/custom/agy' } }, 'PUT')).status).toBe(200);
+  expect(db.listServers().find((server) => server.tool === 'agy')).toMatchObject({ sshAccountId: account.id, executablePath: '/custom/agy' });
+  expect((await fetch(origin + `/servers/${account.id}`, { method: 'DELETE' })).status).toBe(204);
+  expect(db.listServers()).toEqual([]);
 });
 
 it('validates session names before sending a native rename and surfaces failures', async () => {

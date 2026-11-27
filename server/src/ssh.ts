@@ -9,6 +9,11 @@ export interface ConnectionSettings {
 }
 export const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 
+export function connectionKey(settings: ConnectionSettings, executable: string) {
+  const { host, port, username, authType, password, privateKeyPath } = settings;
+  return JSON.stringify([host, port, username, authType, authType === 'password' ? password : privateKeyPath, executable]);
+}
+
 export function shellCommand(cwd: string, command: string) {
   // Group the whole command so a failed cd cannot run a later pipeline/list in the wrong directory.
   return `"$SHELL" -lc ${quote(`cd -- ${quote(cwd)} && (\n${command}\n)`)}`;

@@ -65,7 +65,7 @@ export default function App() {
   const monitorError = useMonitorStore((state) => state.error);
   const groups = groupServers(snapshot ?? []);
   const selectedGroup = groups.find((group) => group.connections.some((connection) => connection.id === selected?.serverId));
-  const editingGroup = groups.find((group) => group.connections.some((connection) => connection.id === editing?.id));
+  const editingGroup = groups.find((group) => [...group.accounts, ...group.connections].some((connection) => connection.id === editing?.id));
   const pending = monitorError ? [] : otherSessions(snapshot, selected).filter(({ session }) => needsAttention(session));
   const returnName = snapshot?.find((server) => server.id === returnTo?.serverId)?.sessions.find((session) => session.id === returnTo?.threadId)?.name ?? 'original session';
   useEffect(() => {
@@ -150,7 +150,10 @@ export default function App() {
     </div>
     {!mobile && fileSidebarOpen && resizeHandle('files')}
     {selected && <FileBrowser key={`${selected.serverId}:${selected.threadId}`} {...selected} open={fileSidebarOpen} onClose={closeFiles} />}
-    <ServerDialog open={dialog} onOpenChange={setDialog} editServer={editing} connections={editingGroup?.connections}
-      onSelectConnection={(id) => setEditing(servers.find((server) => server.id === id) ?? editing)} onSaved={() => void refresh()} />
+    <ServerDialog open={dialog} onOpenChange={setDialog} editServer={editing} accounts={editingGroup?.accounts}
+      connections={editingGroup?.connections.filter((connection) => !servers.find((server) => server.id === connection.id)?.sshAccountId)}
+      accountTools={servers.filter((server) => server.sshAccountId && server.sshAccountId === editing?.id)}
+      onSelectConnection={(id) => setEditing(servers.find((server) => server.id === id) ?? editing)}
+      onSaved={() => { void refresh(); void useMonitorStore.getState().refresh(); }} />
   </div>;
 }

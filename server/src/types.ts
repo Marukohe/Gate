@@ -2,6 +2,7 @@ export interface Server {
   id: string; name: string; host: string; port: number; username: string;
   authType: 'password' | 'privateKey'; password?: string; privateKeyPath?: string;
   defaultWorkingDir?: string; tool?: string; executablePath?: string; codexPath?: string; createdAt: number;
+  sshAccountId?: string;
 }
 export type PublicServer = Omit<Server, 'password'> & { hasPassword: boolean };
 export interface SshHost { alias: string; host: string; port: number; username: string; identityFiles: string[] }

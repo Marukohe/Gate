@@ -4,6 +4,7 @@ import { connectAgy, type AcpMessage, type AcpRpc } from './acp-connection.js';
 import type { AgentBackend } from './agent-backend.js';
 import { imageInputs } from './images.js';
 import { sessionFilePath } from './session-files.js';
+import { connectionKey } from './ssh.js';
 import type { Item, ModelOption, MonitorServer, Request, Server, ServerEvent, Session, SessionDetail } from './types.js';
 
 const statusNote = 'Live status covers work started through this Gate connection. ACP does not report activity in other terminal clients.';
@@ -26,8 +27,8 @@ export class AgyService extends EventEmitter implements AgentBackend {
     const ids = new Set(servers.map((server) => server.id));
     for (const [id, entry] of this.entries) if (!ids.has(id)) { entry.controller.abort(); entry.rpc?.close(); this.entries.delete(id); }
     for (const settings of servers) {
-      const signature = JSON.stringify(settings); const old = this.entries.get(settings.id);
-      if (old?.signature === signature) continue;
+      const signature = connectionKey(settings, settings.executablePath || 'agy'); const old = this.entries.get(settings.id);
+      if (old?.signature === signature) { old.settings = settings; continue; }
       old?.controller.abort(); old?.rpc?.close();
       this.entries.set(settings.id, { settings, signature, controller: new AbortController(), sessions: [], cache: new Map(), loading: new Map(),
         requests: new Map(), projects: new Map(), projectsAt: 0, checkedAt: 0, hasMore: false });

@@ -49,12 +49,11 @@ SSH access, repository grouping and the browser panel remain independent of it.
    ```
 
 4. Open `http://localhost:3030` and choose **Add server**. Select an existing **SSH host** from `~/.ssh/config`
-   on the machine running Gate, or choose **Enter manually…**. Select **Tool** and save.
+   on the machine running Gate, or choose **Enter manually…**, then save.
    Importing fills the name, host, port, username and first available identity-file path; expand the connection summary
    to edit these fields or switch to password authentication. Passwords must be entered separately.
-   Set **Tool executable** to an absolute path if it is not on the SSH login PATH.
-   Add each tool's connection to use Codex and agy on the same machine; the sidebar combines them under one server.
-   Existing Codex settings migrate automatically.
+   Gate discovers Codex and Antigravity on the SSH login PATH and lists their sessions. If a tool is missing,
+   open the server settings and enter its absolute executable path under **Tool paths**.
 
 Run `gate update` to upgrade your global npm installation from the latest stable GitHub Release.
 Use `gate --version` to check the installed version, and restart Gate if it is running to load the update.
@@ -139,9 +138,9 @@ Use the same remote OS user and Codex configuration as your terminal.
   Choices and default efforts come from that tool's native catalog. Changes take effect when the message is sent
   and become the session defaults; running turns keep their current settings.
 - **Rename (Codex):** click the conversation title, then **Rename**. Names are saved in Codex and shared with the terminal.
-- **Start:** click **+** beside a server, choose a tool when more than one is configured, then enter
+- **Start:** click **+** beside a server, choose a tool when more than one is connected, then enter
   a working directory and first instruction.
-  This creates a native session in the chosen tool. The server's settings button likewise lets you select which tool to edit.
+  This creates a native session in the chosen tool.
 - **Respond:** allow/decline the tool's requested operations in the conversation. Codex also supports structured questions;
   unsupported Codex requests remain visible for handling in its terminal.
 - **Interrupt:** stop the current turn without closing the tool connection.

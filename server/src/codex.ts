@@ -3,6 +3,7 @@ import { sessionFilePath } from './session-files.js';
 import { connectCodex, type CodexRpc, type RpcMessage } from './codex-connection.js';
 import { describeRequest, decision } from './codex-requests.js';
 import { imageInputs } from './images.js';
+import { connectionKey } from './ssh.js';
 import type { AgentBackend } from './agent-backend.js';
 import type { Server, Session, MonitorServer, Item, Request, SessionDetail, ServerEvent, ModelOption } from './types.js';
 
@@ -54,9 +55,9 @@ export class CodexService extends EventEmitter implements AgentBackend {
     const ids = new Set(servers.map((s) => s.id));
     for (const [id, entry] of this.entries) if (!ids.has(id)) { entry.controller.abort(); entry.rpc?.close(); this.entries.delete(id); }
     for (const settings of servers) {
-      const signature = JSON.stringify(settings);
+      const signature = connectionKey(settings, settings.executablePath || settings.codexPath || 'codex');
       const old = this.entries.get(settings.id);
-      if (old?.signature === signature) continue;
+      if (old?.signature === signature) { old.settings = settings; continue; }
       old?.controller.abort(); old?.rpc?.close();
       this.entries.set(settings.id, { settings, signature, controller: new AbortController(), sessions: [], hasMore: false,
         checkedAt: 0, projects: new Map(), projectsCheckedAt: 0, subscriptions: new Map(), requests: new Map() });

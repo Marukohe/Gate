@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import type { Server, PublicServer, VisibilitySettings, ArchivedSession } from './types.js';
 export type { Server } from './types.js';
 export const publicServer = ({ password, ...server }: Server): PublicServer => ({ ...server, hasPassword: !!password });
+const sshSettings = ({ name, host, port, username, authType, password, privateKeyPath }: Server) =>
+  ({ name, host, port, username, authType, password, privateKeyPath });
 export type Database = ReturnType<typeof createDb>;
 
 export function createDb(file: string) {
@@ -37,6 +39,15 @@ export function createDb(file: string) {
       db.exec(`INSERT INTO servers (${names}) SELECT ${names} FROM archived_servers`);
     })();
   }
+  if (!columns.some((c) => c.name === 'sshAccountId')) {
+    db.exec('ALTER TABLE servers ADD COLUMN sshAccountId TEXT REFERENCES servers(id) ON DELETE CASCADE');
+  }
+  const serverFields = [...fields, 'sshAccountId'] as const;
+  const rawServer = (id: string) => db.prepare('SELECT * FROM servers WHERE id = ?').get(id) as Server | undefined;
+  const inheritSsh = (server: Server) => {
+    const account = server.sshAccountId ? rawServer(server.sshAccountId) : undefined;
+    return account ? { ...server, ...sshSettings(account) } : server;
+  };
   db.exec(`CREATE TABLE IF NOT EXISTS monitor_preferences (
     serverId TEXT PRIMARY KEY REFERENCES servers(id) ON DELETE CASCADE,
     excludedDirectories TEXT NOT NULL DEFAULT '[]'
@@ -46,7 +57,7 @@ export function createDb(file: string) {
     sessionId TEXT NOT NULL, name TEXT NOT NULL, cwd TEXT NOT NULL, archivedAt INTEGER NOT NULL,
     PRIMARY KEY (serverId, sessionId)
   )`);
-  return {
+  const store = {
     getVisibility(serverId: string): VisibilitySettings {
       const row = db.prepare('SELECT excludedDirectories FROM monitor_preferences WHERE serverId = ?').get(serverId) as
         { excludedDirectories: string } | undefined;
@@ -65,13 +76,13 @@ export function createDb(file: string) {
     restoreSession(serverId: string, id: string) {
       db.prepare('DELETE FROM session_archives WHERE serverId = ? AND sessionId = ?').run(serverId, id);
     },
-    listServers: () => db.prepare('SELECT * FROM servers ORDER BY createdAt DESC').all() as Server[],
-    getServer: (id: string) => db.prepare('SELECT * FROM servers WHERE id = ?').get(id) as Server | undefined,
+    listServers: () => (db.prepare('SELECT * FROM servers ORDER BY createdAt DESC').all() as Server[]).map(inheritSsh),
+    getServer(id: string) { const server = rawServer(id); return server && inheritSsh(server); },
     createServer(input: Omit<Server, 'id' | 'createdAt'>): Server {
       const server = { ...input, tool: input.tool || 'codex', executablePath: input.executablePath || input.codexPath,
         id: randomUUID(), createdAt: Date.now() };
-      db.prepare(`INSERT INTO servers (id, createdAt, ${fields.join(', ')}) VALUES (${Array(fields.length + 2).fill('?').join(', ')})`)
-        .run(server.id, server.createdAt, ...fields.map((f) => server[f] ?? null));
+      db.prepare(`INSERT INTO servers (id, createdAt, ${serverFields.join(', ')}) VALUES (${Array(serverFields.length + 2).fill('?').join(', ')})`)
+        .run(server.id, server.createdAt, ...serverFields.map((f) => server[f] ?? null));
       return server;
     },
     updateServer(id: string, input: Partial<Server>) {
@@ -81,5 +92,47 @@ export function createDb(file: string) {
     },
     deleteServer: (id: string) => { db.prepare('DELETE FROM servers WHERE id = ?').run(id); },
     close: () => { db.close(); },
+  };
+  return {
+    ...store,
+    saveSshAccount(
+      settings: ReturnType<typeof sshSettings>,
+      executables: Map<string, string>,
+      accountId?: string,
+      overrides = new Map<string, string>(),
+    ) {
+      return db.transaction(() => {
+        const sameAccount = (server: Server) => server.host.toLowerCase() === settings.host.toLowerCase() &&
+          server.port === settings.port && server.username === settings.username;
+        const servers = store.listServers();
+        if (accountId && rawServer(accountId)?.tool !== 'ssh') throw new Error('Server no longer exists');
+        if (servers.some((server) => server.tool === 'ssh' && server.id !== accountId && sameAccount(server))) {
+          throw new Error('This SSH account is already in Gate. Edit it from the sidebar.');
+        }
+        const account = accountId ? rawServer(accountId)! : store.createServer({ ...settings, tool: 'ssh' });
+        store.updateServer(account.id, settings);
+        // Adopt legacy connections only when their SSH credentials match exactly.
+        const legacy = accountId ? [] : servers.filter((server) => server.tool !== 'ssh' && !server.sshAccountId &&
+          sameAccount(server) && server.authType === settings.authType &&
+          (server.password || '') === (settings.password || '') && (server.privateKeyPath || '') === (settings.privateKeyPath || ''));
+        // Keep additional legacy connections for the same tool independently editable.
+        const reusedLegacy = [...new Map(legacy.map((server) => [server.tool, server])).values()];
+        const reusable = [...servers.filter((server) => server.sshAccountId === account.id), ...reusedLegacy];
+        for (const server of reusable) {
+          if (!server.sshAccountId) {
+            db.prepare("UPDATE servers SET sshAccountId = ?, password = '', privateKeyPath = '' WHERE id = ?").run(account.id, server.id);
+          }
+        }
+        for (const [tool, executablePath] of executables) {
+          const existing = reusable.find((server) => server.tool === tool);
+          if (!existing) store.createServer({ ...settings, password: '', privateKeyPath: '', tool, executablePath, sshAccountId: account.id });
+        }
+        for (const server of reusable) {
+          const path = overrides.get(server.id);
+          if (path !== undefined) store.updateServer(server.id, { executablePath: path });
+        }
+        return store.getServer(account.id)!;
+      })();
+    },
   };
 }

@@ -172,7 +172,10 @@ it('caches project metadata and keeps sessions visible when directory lookup fai
   await service.refresh(server.id); await service.refresh(server.id);
   expect(peer.projectPaths).toHaveBeenCalledTimes(1);
   expect(service.monitor().servers[0].sessions[0].projectPath).toBe('/repo-root');
-  service.sync([{ ...server, name: 'Changed connection' }]);
+  service.sync([{ ...server, name: 'Renamed server', sshAccountId: 'account' }]);
+  expect(service.monitor().servers[0]).toMatchObject({ name: 'Renamed server', state: 'connected' });
+  expect(peer.close).not.toHaveBeenCalled();
+  service.sync([{ ...server, executablePath: '/new/codex' }]);
   peer.projectPaths.mockRejectedValue(new Error('Git unavailable'));
   await service.refresh(server.id);
   expect(service.monitor().servers[0]).toMatchObject({ state: 'connected', sessions: [{ projectPath: '/repo' }] });
