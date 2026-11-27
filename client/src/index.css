@@ -298,7 +298,10 @@ button.monitor-summary:focus-visible { outline: 2px solid var(--ring); outline-o
   font-family: 'Gate Terminal';
   src: url('/fonts/jetbrains-mono-nerd/regular-v3.4.0.woff2') format('woff2');
 }
-.terminal-screen { position: relative; flex: 1; min-height: 0; overflow: hidden; padding: 0.375rem 0.5rem; }
+.terminal-screen {
+  position: relative; flex: 1; min-height: 0; overflow: hidden; padding: 0.375rem 0.5rem;
+  caret-color: transparent; /* Ghostty draws its cursor on the canvas. The host still receives keyboard and IME input. */
+}
 .file-sidebar-header { display: flex; align-items: center; gap: 0.5rem; min-height: 3rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
 .file-entry { display: flex; align-items: center; width: 100%; gap: 0.5rem; padding: 0.55rem 0.5rem; border-radius: 0.4rem; text-align: left; font-size: 0.75rem; }
 .file-entry:hover, .file-action:hover { background: var(--accent); }

@@ -30,6 +30,8 @@
   Gate; verify a real PTY through the authenticated browser, including folding and text entry.
   Load Nerd Font glyphs before measuring the terminal. Test canvas pixels and socket identity when switching themes
   because Ghostty Web 0.4 does not apply theme changes through its options after opening.
+  Hide the browser caret on Ghostty's editable host and keep the canvas cursor. Capture focused screenshots with
+  the browser caret enabled so screenshot defaults do not mask duplicate cursors.
 - Keep chat navigation, title, and status in one header row, including after attention jumps. Move metadata into the title
   popover and verify the conversation starts directly below the header at 320px, 390px, and desktop widths.
 - Auto-load history only on upward scrolling near the top, with a synchronous in-flight guard. Anchor the visible message

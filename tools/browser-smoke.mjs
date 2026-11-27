@@ -730,7 +730,13 @@ try {
   assert.equal(filesBox.width, terminalBox.width);
   assert.ok(filesBox.y + filesBox.height <= terminalBox.y);
   assert.equal((await chat.boundingBox()).height, chatHeight);
-  await terminalPanel.locator('canvas').click();
+  const terminalScreen = terminalPanel.locator('.terminal-screen');
+  await terminalScreen.click({ position: { x: 3, y: 3 } });
+  assert.deepEqual(await terminalScreen.evaluate((screen) => ({
+    focused: document.activeElement === screen,
+    editable: screen.isContentEditable,
+    caret: getComputedStyle(screen).caretColor,
+  })), { focused: true, editable: true, caret: 'rgba(0, 0, 0, 0)' });
   await page.keyboard.type('pwd');
   await page.keyboard.press('Enter');
   assert.equal(terminalConnections.at(-1).params.get('server'), server.id);
