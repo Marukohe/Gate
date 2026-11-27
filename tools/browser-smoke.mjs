@@ -78,7 +78,7 @@ terminalWss.on('connection', (socket, params) => {
   const connection = { socket, params, input: '', sizes: [] };
   terminalConnections.push(connection);
   socket.send(JSON.stringify({ type: 'ready', cwd: detail.session.cwd }));
-  socket.send(Buffer.from('gate fixture> '));
+  socket.send(Buffer.from('gate fixture> \uE0A0 \uE73C \x1b[41m \x1b[48;2;17;111;201m \x1b[0m'));
   socket.on('message', (data, binary) => {
     if (binary) connection.input += data.toString();
     else connection.sizes.push(JSON.parse(data.toString()));
@@ -690,7 +690,38 @@ try {
   const chatHeight = (await chat.boundingBox()).height;
   const terminalPanel = page.getByRole('complementary', { name: 'Session terminal', exact: true });
   await page.getByRole('button', { name: 'Open terminal', exact: true }).click();
-  await terminalPanel.locator('canvas').waitFor();
+  const terminalCanvas = terminalPanel.locator('canvas');
+  await terminalCanvas.waitFor();
+  const canvasNode = await terminalCanvas.elementHandle();
+  assert.ok(await page.evaluate(() => Array.from(document.fonts).some(
+    (face) => face.family === 'Gate Terminal' && face.status === 'loaded'
+  )), 'Terminal font must load before drawing');
+  const hasTerminalColors = ({ background, ansiRed }) => {
+    const canvas = document.querySelector('.terminal-screen canvas');
+    if (!canvas) return false;
+    const context = canvas.getContext('2d');
+    const empty = context.getImageData(canvas.width - 1, canvas.height - 1, 1, 1).data;
+    if (background.some((value, index) => value !== empty[index])) return false;
+    const pixels = context.getImageData(0, 0, canvas.width, 16).data;
+    const hasColor = ([r, g, b]) => {
+      for (let i = 0; i < pixels.length; i += 4) {
+        if (pixels[i] === r && pixels[i + 1] === g && pixels[i + 2] === b && pixels[i + 3] === 255) return true;
+      }
+      return false;
+    };
+    return hasColor(ansiRed) && hasColor([17, 111, 201]);
+  };
+  const darkCanvas = { background: [22, 24, 29], ansiRed: [228, 124, 135] };
+  const lightCanvas = { background: [250, 250, 252], ansiRed: [170, 39, 58] };
+  const wasDark = await page.locator('html').evaluate((html) => html.classList.contains('dark'));
+  const themeButton = sidebar.getByRole('button', { name: 'Toggle theme', exact: true });
+  await page.waitForFunction(hasTerminalColors, wasDark ? darkCanvas : lightCanvas);
+  await themeButton.click();
+  await page.waitForFunction(hasTerminalColors, wasDark ? lightCanvas : darkCanvas);
+  assert.ok(await terminalCanvas.evaluate((canvas, original) => canvas === original, canvasNode));
+  assert.equal(terminalConnections.length, 1, 'Theme switching must keep the live terminal connection');
+  await themeButton.click();
+  await page.waitForFunction(hasTerminalColors, wasDark ? darkCanvas : lightCanvas);
   const terminalHeight = (await terminalPanel.boundingBox()).height;
   await page.getByRole('button', { name: 'Open files', exact: true }).click();
   await filePanel.waitFor();

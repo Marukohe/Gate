@@ -143,6 +143,7 @@ Use the same remote OS user and Codex configuration as your terminal.
   the same resizable sidebar. On phones, use the arrow in the sidebar header to return to the conversation.
   Folding the terminal keeps the shell running in this tab. Use **End terminal** or `exit` to stop it. Reloading
   or closing the tab also ends it. For a session from another Gate, the SSH shell runs through that Gate.
+  The terminal follows Gate's light and dark themes and includes a Nerd Font for shell prompt icons.
 - **Shell:** send `!pwd`, `!git status`, or another `!command` to execute directly through SSH in the session's working
   directory, without model inference. Results show stdout, stderr, and exit status; they survive switching sessions but
   clear on page reload and are never added to model context. Each command uses a fresh, non-interactive shell, with a

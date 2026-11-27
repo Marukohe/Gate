@@ -2,10 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { RotateCw, Square, X } from 'lucide-react';
 import { FitAddon, Ghostty, Terminal } from 'ghostty-web';
 import { Button } from '@/components/ui/button';
+import { useUIStore } from '@/stores/ui-store';
+import { darkTheme, lightTheme, updateTerminalTheme } from './terminal-theme';
 
 export type TerminalTarget = { key: string; serverId: string; threadId: string; cwd: string };
 
 let emulator: Promise<Ghostty> | undefined;
+const fontFamily = '"Gate Terminal", ui-monospace, SFMono-Regular, Consolas, monospace';
 function loadEmulator() {
   return emulator ??= Ghostty.load().catch((error: unknown) => {
     emulator = undefined;
@@ -21,6 +24,7 @@ export default function TerminalPane({ target, open, onHide, onEnd }: {
   const [state, setState] = useState<'connecting' | 'ready' | 'closed'>('connecting');
   const [message, setMessage] = useState('');
   const [cwd, setCwd] = useState(target.cwd);
+  const dark = useUIStore((state) => state.darkMode);
   useEffect(() => {
     const element = mount.current!;
     let stopped = false;
@@ -28,21 +32,29 @@ export default function TerminalPane({ target, open, onHide, onEnd }: {
     let terminal: Terminal | undefined;
     let socket: WebSocket | undefined;
     let observer: ResizeObserver | undefined;
+    let unsubscribeTheme: (() => void) | undefined;
     const close = (message: string) => {
       if (stopped) return;
       setState('closed');
       setMessage((previous) => previous || message);
     };
-    void loadEmulator().then((ghostty) => {
+    // Load the font before Ghostty measures the cells or paints existing shell output.
+    const font = document.fonts.load('13px "Gate Terminal"').catch(() => undefined);
+    void Promise.all([loadEmulator(), font]).then(([ghostty]) => {
       if (stopped) return;
       terminal = new Terminal({
-        ghostty, fontSize: 13, fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace',
+        ghostty, fontSize: 13, fontFamily,
         cursorBlink: false, scrollback: 3000,
-        theme: { background: '#16181d', foreground: '#e6e8ee', cursor: '#b6cfff', selectionBackground: '#435477' },
+        theme: darkTheme,
       });
       const fit = new FitAddon();
       terminal.loadAddon(fit);
       terminal.open(element);
+      const applyTheme = updateTerminalTheme(terminal);
+      applyTheme?.(useUIStore.getState().darkMode);
+      unsubscribeTheme = useUIStore.subscribe((state, previous) => {
+        if (state.darkMode !== previous.darkMode) applyTheme?.(state.darkMode);
+      });
       const resize = () => {
         // A folded pane reports zero dimensions. Keep the last PTY size until it is visible again.
         if (element.clientWidth && element.clientHeight) fit.fit();
@@ -99,6 +111,7 @@ export default function TerminalPane({ target, open, onHide, onEnd }: {
     }).catch((error: Error) => close(error.message));
     return () => {
       stopped = true;
+      unsubscribeTheme?.();
       observer?.disconnect();
       socket?.close();
       terminal?.dispose();
@@ -118,6 +131,7 @@ export default function TerminalPane({ target, open, onHide, onEnd }: {
     {state !== 'ready' && <p role="status" className="shrink-0 border-b px-3 py-2 text-xs text-muted-foreground">
       {state === 'connecting' ? 'Connecting…' : message}
     </p>}
-    <div key={attempt} className="terminal-screen" ref={mount} aria-label="Terminal screen" />
+    <div key={attempt} className="terminal-screen" ref={mount} aria-label="Terminal screen"
+      style={{ background: (dark ? darkTheme : lightTheme).background }} />
   </section>;
 }

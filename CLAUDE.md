@@ -80,6 +80,8 @@ Do not add task/project workflows, a Gate remote runtime, transcript scanners, h
   input/output and PTY sizes. Start the shell on the owning SSH account in the native session cwd, via the owning Gate
   for peer sessions. The shell has its own SSH connection and remains mounted while folded. Closing the connection
   ends the shell without interrupting the tool backend.
+  Load the bundled terminal font before measuring cells. Apply Gate theme changes to the canvas and its existing
+  output while preserving the Ghostty buffer and SSH connection.
 - Scrolling upward near the chat top loads one native history page at a time. Prepending anchors the visible message
   before paint; manual loading/retry remains available. Initial bottom positioning must not drain history pages.
   Auto-load once per entry into the top zone; failed requests wait for explicit retry.
